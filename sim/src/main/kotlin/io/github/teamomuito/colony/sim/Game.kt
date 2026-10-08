@@ -92,6 +92,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
     var autosaveHook: (() -> Unit)? = null
     var debugHook: ((String) -> Unit)? = null
     var mentalBreaksEnabled = true
+    var hintBits = 0
     var graveyard = ArrayList<String>()
 
     init {

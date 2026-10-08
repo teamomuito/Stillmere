@@ -233,6 +233,7 @@ class MainActivity : Activity() {
             "Research" to { panels.toggle("research") },
             "People" to { panels.toggle("people") },
             "Animals" to { panels.toggle("animals") },
+            "Map" to { dialogs.overview() },
             "Trade" to { dialogs.trade() },
             "Log" to { panels.toggle("log") },
             "Menu" to { dialogs.menu() },

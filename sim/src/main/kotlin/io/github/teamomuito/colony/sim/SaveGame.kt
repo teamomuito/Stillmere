@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 6
+    private const val VERSION = 7
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -25,7 +25,7 @@ object SaveGame {
         o.writeFloat(g.tempOffset); o.writeLong(g.tempEventUntil); o.writeUTF(g.tempEventName)
         o.writeLong(g.solarFlareUntil); o.writeLong(g.toxicFalloutUntil); o.writeLong(g.eclipseUntil)
         o.writeInt(g.homeX); o.writeInt(g.homeY); o.writeFloat(g.windFactor)
-        o.writeInt(g.statsKilled); o.writeInt(g.silverEarned)
+        o.writeInt(g.statsKilled); o.writeInt(g.silverEarned); o.writeInt(g.hintBits)
         o.writeInt(g.graveyard.size); for (s in g.graveyard) o.writeUTF(s)
         o.writeInt(g.researchCurrent?.ordinal ?: -1)
         o.writeInt(g.researchDone.size); for (r in g.researchDone) o.writeInt(r.ordinal)
@@ -144,7 +144,7 @@ object SaveGame {
         val tempOffset = i.readFloat(); val tempUntil = i.readLong(); val tempName = i.readUTF()
         val flare = i.readLong(); val toxic = i.readLong(); val eclipse = i.readLong()
         val hx = i.readInt(); val hy = i.readInt(); val wind = i.readFloat()
-        val killed = i.readInt(); val earned = i.readInt()
+        val killed = i.readInt(); val earned = i.readInt(); val hints = i.readInt()
         val grave = List(i.readInt()) { i.readUTF() }
         val cur = i.readInt()
         val done = List(i.readInt()) { Research.entries[i.readInt()] }
@@ -223,7 +223,7 @@ object SaveGame {
         g.tempOffset = tempOffset; g.tempEventUntil = tempUntil; g.tempEventName = tempName
         g.solarFlareUntil = flare; g.toxicFalloutUntil = toxic; g.eclipseUntil = eclipse
         g.homeX = hx; g.homeY = hy; g.windFactor = wind
-        g.statsKilled = killed; g.silverEarned = earned
+        g.statsKilled = killed; g.silverEarned = earned; g.hintBits = hints
         g.graveyard.addAll(grave)
         g.researchCurrent = if (cur >= 0) Research.entries[cur] else null
         g.researchDone.addAll(done)

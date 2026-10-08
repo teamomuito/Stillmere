@@ -85,6 +85,19 @@ class Dialogs(private val a: MainActivity) {
         }, false)
     }
 
+    fun overview() {
+        val d = Dialog(a, android.R.style.Theme_Material_Dialog_NoActionBar)
+        val box = ui.column()
+        box.background = ui.bg(0xFF1E1B17.toInt(), 12, 0x44FFFFFF)
+        box.setPadding(ui.dp(8), ui.dp(6), ui.dp(8), ui.dp(8))
+        box.addView(ui.label("World map · green = colonists, red = enemies, yellow = tame animals", 11f, ui.dim))
+        val v = OverviewView(a, game) { x, y -> a.view.centerOn(x.toFloat(), y.toFloat()); d.dismiss() }
+        val side = (a.resources.displayMetrics.heightPixels * 0.78f).toInt()
+        box.addView(v, ui.lin(side, side))
+        d.setContentView(box)
+        d.show()
+    }
+
     fun settings() {
         dialog("Storyteller & difficulty", { body, d ->
             body.addView(ui.label("Storyteller", 13f, ui.accent, true))

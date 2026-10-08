@@ -22,7 +22,33 @@ fun Game.edgeCell(side: Int): Pair<Int, Int>? {
     return null
 }
 
+private fun Game.hint(bit: Int, text: String) {
+    if (hintBits and (1 shl bit) != 0) return
+    hintBits = hintBits or (1 shl bit)
+    say("Tip: $text", 0)
+}
+
+/** Contextual advice for the first days, in the spirit of RimWorld's learning helper. */
+fun Game.hintsTick() {
+    if (day > 14) return
+    val cols = colonists
+    if (cols.isEmpty()) return
+    if (day == 0 && hour >= 7) hint(0, "Tap a colonist to see their needs and health. Tap the ground to inspect it. Drag to look around, pinch to zoom.")
+    if (day == 0 && hour >= 8 && map.desig.none { it.toInt() == Desig.CUT || it.toInt() == Desig.MINE }) hint(1, "Colonists only work on what you mark. Open Architect → Orders, pick Chop trees and drag over some trees.")
+    if (day == 0 && hour >= 11 && bedCount() < cols.size) hint(2, "Build a bed for everyone (Architect → Furniture). Sleeping on the ground makes people miserable.")
+    if (day <= 2 && hour >= 13 && map.zones.values.none { it.kind == ZoneKind.GROWING }) hint(3, "Plan your food: Architect → Zones, pick a crop and drag over soil. Cook the harvest at a campfire or stove with a bill.")
+    if (day <= 3 && hour >= 15 && map.building.none { it != null && it.built && it.def.workbench && it.bills.isNotEmpty() } &&
+        map.building.any { it != null && it.built && (it.def == BuildDef.CAMPFIRE || it.def == BuildDef.STOVE_FUEL) }) hint(4, "Workbenches need bills. Tap your campfire, press Open, then add a cooking bill.")
+    if (map.building.any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH } && researchCurrent == null && researchDone.size < Research.entries.size) hint(5, "Your research bench is idle. Open the Research tab and start a project.")
+    if (day >= 5 && day < 12) hint(6, "Raiders will come. Tap a colonist and press Draft, then tap an enemy to attack or the ground to move. Walls, doors and sandbags help.")
+    if (day >= 2 && map.zones.values.none { it.kind == ZoneKind.STOCKPILE }) hint(7, "Items lie where they drop until you make a stockpile zone (Architect → Zones).")
+    if (Research.ELECTRICITY in researchDone && power.nets == 0) hint(8, "Electricity is researched. Build a generator, conduits and a battery to power lamps, heaters and stoves.")
+    if (day >= 3 && colonists.any { it.temp < it.comfyMin() - 6f }) hint(9, "Colonists are cold. Build a heated room (campfire or heater), and make parkas at a tailor bench.")
+    if (day >= 4 && colonists.any { it.joy < 0.25f }) hint(10, "Colonists are bored. Build recreation (horseshoes, chess table) and keep Joy hours in the Schedule.")
+}
+
 fun Game.hourlyEvents() {
+    hintsTick()
     // Raid wrap-up.
     if (raidActive) {
         val alive = pawns.count { it.faction == Faction.ENEMY && it.alive && it.raidId > 0 }
