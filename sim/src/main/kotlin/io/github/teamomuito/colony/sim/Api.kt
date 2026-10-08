@@ -16,12 +16,12 @@ fun Game.assignBed(bed: Building, p: Pawn?) {
 
 fun Game.dropWeapon(p: Pawn) {
     val w = p.weaponItem ?: return
-    map.drop(w, 1, p.x, p.y, p.weaponQuality)
+    map.drop(w, 1, p.x, p.y, p.weaponQuality, forbid = true)
     p.weaponItem = null
 }
 
 fun Game.stripApparel(p: Pawn, w: Worn) {
-    if (p.apparel.remove(w)) map.drop(w.type, 1, p.x, p.y, w.quality)
+    if (p.apparel.remove(w)) map.drop(w.type, 1, p.x, p.y, w.quality, forbid = true)
 }
 
 fun Game.releasePrisoner(p: Pawn) {

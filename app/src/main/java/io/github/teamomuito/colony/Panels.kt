@@ -133,6 +133,10 @@ class Panels(private val a: MainActivity) {
                     for (c in listOf(PlantType.RICE, PlantType.POTATO, PlantType.CORN, PlantType.STRAWBERRY, PlantType.COTTON, PlantType.HEALROOT, PlantType.SMOKELEAF, PlantType.PSYCHOID, PlantType.HAYGRASS))
                         add("Grow ${c.label.lowercase()}", null) { a.setTool(Tool.Growing(c)) }
                     add("Remove zone", null) { a.setTool(Tool.ClearZone) }
+                    for (k in 0 until 3) {
+                        add("Paint ${game.map.areaNames[k]}", null) { a.setTool(Tool.Area(k, true, game.map.areaNames[k])) }
+                        add("Erase ${game.map.areaNames[k]}", null) { a.setTool(Tool.Area(k, false, game.map.areaNames[k])) }
+                    }
                 }
                 else -> {
                     val defs = BuildDef.entries.filter { it.category == name }
@@ -471,6 +475,13 @@ class Panels(private val a: MainActivity) {
         barRow(body, "Food", p.food, 0xFFE0A030.toInt(), "${(p.food * 100).toInt()}%")
         body.addView(ui.label("Moves ${"%.0f".format(100f * p.cap[Cap.MOVING.ordinal])}%  ·  Bite ${p.race.weapon.damage.toInt()} dmg", 11f, ui.dim))
         if (p.race.product != null) body.addView(ui.label("Produces ${p.race.product!!.label.lowercase()}", 11f, ui.dim))
+        if (p.faction == Faction.PLAYER) {
+            body.addView(ui.label("Restrict to area", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 6, 0, 2))
+            val ar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            ar.addView(ui.button("Anywhere", 10.5f, selected = p.areaRestriction == 0) { p.areaRestriction = 0; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 3, 0))
+            for (k in 0 until 3) ar.addView(ui.button(game.map.areaNames[k], 10.5f, selected = p.areaRestriction == k + 1) { p.areaRestriction = k + 1; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 3, 0))
+            body.addView(ui.hscroll(ar))
+        }
         if (p.huntMark) body.addView(ui.label("Marked for hunting", 11f, ui.warn))
         if (p.tameMark) body.addView(ui.label("Marked for taming", 11f, ui.good))
         if (p.slaughterMark) body.addView(ui.label("Marked for slaughter", 11f, ui.bad))
@@ -622,6 +633,11 @@ class Panels(private val a: MainActivity) {
         val leg = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         for (k in 0..3) leg.addView(ui.chip(schedNames[k], schedColors[k], 9f), ui.lin(-2, -2, 0f, 0, 3, 3, 0))
         body.addView(ui.hscroll(leg))
+        body.addView(ui.label("Restrict to area", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 2))
+        val ar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        ar.addView(ui.button("Anywhere", 10.5f, selected = p.areaRestriction == 0) { p.areaRestriction = 0; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 3, 0))
+        for (k in 0 until 3) ar.addView(ui.button(game.map.areaNames[k], 10.5f, selected = p.areaRestriction == k + 1) { p.areaRestriction = k + 1; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 3, 0))
+        body.addView(ui.hscroll(ar))
         body.addView(ui.label("Beds", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 2))
         val bed = if (p.bedId >= 0) game.map.building[p.bedId] else null
         body.addView(ui.label(if (bed != null) "Sleeps in the ${bed.def.label.lowercase()} at (${bed.x},${bed.y})" else "No assigned bed", 11f, ui.dim))

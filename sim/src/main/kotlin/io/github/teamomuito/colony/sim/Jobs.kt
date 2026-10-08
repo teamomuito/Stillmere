@@ -40,10 +40,14 @@ internal fun Game.isBad(p: Pawn, k: Int): Boolean {
     return e > tick
 }
 
+fun Game.allowedFor(p: Pawn, cell: Int): Boolean = p.areaRestriction == 0 || map.areas[(p.areaRestriction - 1).coerceIn(0, 2)][cell]
+
 internal fun Game.nearestCell(p: Pawn, kind: Int, pred: (Int) -> Boolean): Int {
     var best = -1
     var bd = Int.MAX_VALUE
+    val restricted = p.areaRestriction != 0
     for (i in 0 until map.size) {
+        if (restricted && !allowedFor(p, i)) continue
         if (!pred(i)) continue
         val d = abs(map.xOf(i) - p.x) + abs(map.yOf(i) - p.y)
         if (d >= bd) continue
@@ -62,6 +66,7 @@ internal fun Game.nearestItem(p: Pawn, shared: Boolean = false, skip: Int = -1, 
         if (!pred(s)) continue
         val i = map.idx(s.x, s.y)
         if (i == skip) continue
+        if (p.areaRestriction != 0 && !allowedFor(p, i)) continue
         val d = abs(s.x - p.x) + abs(s.y - p.y)
         if (d >= bd) continue
         val k = key(i, K_ITEM)
@@ -81,6 +86,7 @@ fun Game.goTo(p: Pawn, tx: Int, ty: Int, adjacent: Boolean = false, breach: Bool
     if (p.moveCd > 0) { p.moveCd--; return 1 }
     if (goalReached(p, tx, ty, adjacent)) { p.clearPath(); return 0 }
     if (p.cap[Cap.MOVING.ordinal] <= 0.02f && !p.isAnimal) return -1
+    if (p.areaRestriction != 0 && !p.drafted && p.faction == Faction.PLAYER && !allowedFor(p, map.idx(tx, ty)) && p.job?.type.let { it != JobType.FLEE && it != JobType.MOVE && it != JobType.BREAK && it != JobType.ATTACK && it != JobType.LEAVE && it != JobType.RESCUE }) return -1
     val pk = map.idx(tx, ty) * 4 + (if (adjacent) 1 else 0) + (if (breach) 2 else 0)
     var path = p.path
     if (path == null || p.pathKey != pk || p.pathI >= path.size) {
@@ -337,8 +343,8 @@ internal fun Game.findGear(p: Pawn): Job? {
         return sc
     }
     val cur = weaponScore(p.weaponItem, p.weaponQuality)
-    val ws = nearestItem(p) { it.type.weapon != null && weaponScore(it.type, it.quality) > cur * 1.2f && (!it.type.weapon!!.ranged || Trait.BRAWLER !in p.traits) }
-    if (ws != null && map.zoneKind(map.idx(ws.x, ws.y)) != ZoneKind.NONE) {
+    val ws = nearestItem(p) { it.type.weapon != null && weaponScore(it.type, it.quality) > cur * 1.2f && (!it.type.weapon!!.ranged || Trait.BRAWLER !in p.traits) && abs(it.x - p.x) + abs(it.y - p.y) < 45 }
+    if (ws != null) {
         reserve(p, key(map.idx(ws.x, ws.y), K_ITEM))
         val j = Job(JobType.EQUIP, ws.x, ws.y); j.key = key(map.idx(ws.x, ws.y), K_ITEM)
         return j
@@ -351,7 +357,7 @@ internal fun Game.findGear(p: Pawn): Job? {
     for (s in map.items.values) {
         val a = s.type.apparel ?: continue
         if (s.forbidden || s.corpseOf != null) continue
-        if (map.zoneKind(map.idx(s.x, s.y)) == ZoneKind.NONE) continue
+        if (abs(s.x - p.x) + abs(s.y - p.y) > 45) continue
         val i = map.idx(s.x, s.y)
         if (!isFree(p, key(i, K_ITEM)) || isBad(p, key(i, K_ITEM))) continue
         // Conflicting layers: shirts under outer, same slot replaces.

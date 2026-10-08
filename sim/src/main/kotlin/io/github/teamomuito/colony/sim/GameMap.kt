@@ -81,6 +81,8 @@ class GameMap(val w: Int, val h: Int) {
     val fires = HashMap<Int, Fire>()
     val natRoof = BooleanArray(size)
     val conduit = BooleanArray(size)
+    val areas = Array(3) { BooleanArray(size) }
+    val areaNames = arrayOf("Home", "Area 2", "Area 3")
     fun conduitAt(i: Int) = conduit[i]
     val light = FloatArray(size)
     val snow = FloatArray(size)
@@ -260,7 +262,7 @@ class GameMap(val w: Int, val h: Int) {
     }
 
     /** Drops items on or near (x, y), merging with matching stacks. Returns what could not be placed. */
-    fun drop(type: ItemType, count: Int, x: Int, y: Int, quality: Quality = Quality.NORMAL, rot: Float = 0f): Int {
+    fun drop(type: ItemType, count: Int, x: Int, y: Int, quality: Quality = Quality.NORMAL, rot: Float = 0f, forbid: Boolean = false): Int {
         var left = count
         var radius = 0
         while (left > 0 && radius < 14) {
@@ -272,7 +274,7 @@ class GameMap(val w: Int, val h: Int) {
                 if (s == null) {
                     val n = min(left, type.stack)
                     val ns = ItemStack(nextId(), type, n, xx, yy)
-                    ns.quality = quality; ns.rot = rot
+                    ns.quality = quality; ns.rot = rot; ns.forbidden = forbid
                     items[i] = ns
                     left -= n
                 } else if (s.type == type && s.count < type.stack && s.quality == quality) {

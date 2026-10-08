@@ -468,3 +468,131 @@ class AdvancedTest {
         assertTrue(broke)
     }
 }
+
+
+class AreaTest {
+    @Test fun restrictedColonistsStayInsideTheirArea() {
+        val g = newGame(2); g.quiet()
+        val hx = g.homeX; val hy = g.homeY
+        for (x in hx - 3..hx + 3) for (y in hy - 3..hy + 3) g.map.areas[0][g.map.idx(x, y)] = true
+        val p = g.colonists[0]
+        p.areaRestriction = 1
+        // Work outside the area must be ignored.
+        val tree = g.map.plant.filterNotNull().first { it.type.isTree && (Math.abs(it.x - hx) > 10 || Math.abs(it.y - hy) > 10) }
+        g.designate(tree.x, tree.y, Desig.CUT)
+        for (c in g.colonists.drop(1)) c.priority[WorkType.PLANT_CUT.ordinal] = 0
+        g.run(6000)
+        assertNotNull(g.map.plant[g.map.idx(tree.x, tree.y)])
+        assertTrue(p.areaRestriction == 1)
+    }
+}
+
+
+class CraftingTest {
+    private fun bench(g: Game, def: BuildDef, dx: Int, dy: Int, recipe: Recipe, count: Int = 1): Building {
+        val b = Building(def, g.homeX + dx, g.homeY + dy, true)
+        val i = g.map.idx(b.x, b.y)
+        g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null
+        g.map.building[i] = b
+        if (def.fuelCap > 0f) b.fuel = def.fuelCap
+        if (def.consumesPower) {
+            // A solar panel and a bit of conduit next to it.
+            for (k in 1..2) { val ci = g.map.idx(g.homeX + dx + k, g.homeY + dy); g.map.terrain[ci] = Terrain.SOIL; g.map.plant[ci] = null; g.map.building[ci] = null }
+            g.map.conduit[g.map.idx(g.homeX + dx + 1, g.homeY + dy)] = true
+            g.map.building[g.map.idx(g.homeX + dx + 2, g.homeY + dy)] = Building(BuildDef.SOLAR_PANEL, g.homeX + dx + 2, g.homeY + dy, true)
+            g.map.conduit[g.map.idx(g.homeX + dx + 2, g.homeY + dy)] = true
+            g.tick = 8L * TICKS_PER_HOUR
+        }
+        val bill = Bill(recipe); bill.mode = BillMode.DO_X; bill.target = count
+        b.bills.add(bill)
+        return b
+    }
+
+    @Test fun tailorsMakeClothesAndColonistsWearThem() {
+        val g = newGame(12); g.quiet()
+        g.researchDone.addAll(Research.entries)
+        bench(g, BuildDef.TAILOR_BENCH, 4, -3, Recipe.MAKE_PARKA)
+        g.map.drop(ItemType.CLOTH, 200, g.homeX, g.homeY - 2)
+        for (c in g.colonists) c.skill[SkillType.CRAFTING.ordinal] = 8
+        for (c in g.colonists) c.priority[WorkType.TAILOR.ordinal] = 1
+        g.run(12000)
+        val parkas = g.map.items.values.count { it.type == ItemType.A_PARKA } + g.colonists.count { c -> c.apparel.any { it.type == ItemType.A_PARKA } }
+        assertTrue("parkas $parkas", parkas >= 1)
+        g.run(8000)
+        assertTrue("someone wears it", g.colonists.any { c -> c.apparel.any { it.type == ItemType.A_PARKA } })
+    }
+
+    @Test fun smithsCraftWeapons() {
+        val g = newGame(13); g.quiet()
+        g.researchDone.addAll(Research.entries)
+        bench(g, BuildDef.SMITHY, 4, -3, Recipe.MAKE_KNIFE, 2)
+        for (c in g.colonists) { c.skill[SkillType.CRAFTING.ordinal] = 10; c.priority[WorkType.SMITH.ordinal] = 1 }
+        g.run(15000)
+        val knives = g.map.items.values.count { it.type == ItemType.W_KNIFE } + g.pawns.count { it.weaponItem == ItemType.W_KNIFE }
+        assertTrue("knives $knives", knives >= 2)
+    }
+
+    @Test fun stonecuttersTurnChunksIntoBlocks() {
+        val g = newGame(14); g.quiet()
+        g.researchDone.addAll(Research.entries)
+        bench(g, BuildDef.STONECUTTER, 4, -3, Recipe.CUT_BLOCKS)
+        g.map.drop(ItemType.STONE_CHUNK, 1, g.homeX + 1, g.homeY - 2)
+        for (c in g.colonists) c.priority[WorkType.CRAFT.ordinal] = 1
+        g.run(6000)
+        assertTrue("blocks ${g.map.countItems(ItemType.STONE)}", g.map.countItems(ItemType.STONE) >= 20)
+    }
+
+    @Test fun drugLabBrewsBeer() {
+        val g = newGame(15); g.quiet()
+        g.researchDone.addAll(Research.entries)
+        bench(g, BuildDef.DRUG_LAB, 4, -3, Recipe.BREW_BEER)
+        g.map.drop(ItemType.CORN, 30, g.homeX + 1, g.homeY - 2)
+        for (c in g.colonists) c.priority[WorkType.CRAFT.ordinal] = 1
+        g.run(10000)
+        assertTrue("beer ${g.map.countItems(ItemType.BEER)}", g.map.countItems(ItemType.BEER) >= 5)
+    }
+
+    @Test fun hydroponicsGrowCropsIndoorsWithPower() {
+        val g = newGame(16); g.quiet()
+        g.researchDone.addAll(Research.entries)
+        val x = g.homeX + 8; val y = g.homeY - 8
+        val i = g.map.idx(x, y)
+        g.map.terrain[i] = Terrain.GRAVEL; g.map.plant[i] = null
+        val h = Building(BuildDef.HYDROPONICS, x, y, true); h.powered = true
+        g.map.building[i] = h
+        g.map.conduit[g.map.idx(x + 1, y)] = true
+        val solar = Building(BuildDef.SOLAR_PANEL, x + 2, y, true)
+        g.map.terrain[g.map.idx(x + 2, y)] = Terrain.SOIL; g.map.plant[g.map.idx(x + 2, y)] = null
+        g.map.building[g.map.idx(x + 2, y)] = solar
+        g.map.terrain[g.map.idx(x + 1, y)] = Terrain.SOIL; g.map.plant[g.map.idx(x + 1, y)] = null
+        g.setZone(x, y, ZoneKind.GROWING, PlantType.RICE)
+        assertNotNull(g.map.zoneAt(i))
+        g.tick = 7L * TICKS_PER_HOUR
+        g.run(24000 * 8)
+        val grown = g.map.plant[i]
+        assertTrue("planted or harvested", grown != null || g.map.countItems(ItemType.RICE) > 0)
+    }
+}
+
+
+class VictoryTest {
+    @Test fun buildingAndLaunchingTheShipWinsTheGame() {
+        val g = newGame(77); g.quiet()
+        g.researchDone.addAll(Research.entries)
+        // Plenty of everything and a power grid-free build site.
+        for (t in listOf(ItemType.STEEL, ItemType.PLASTEEL, ItemType.COMPONENT, ItemType.GOLD)) g.map.drop(t, 800, g.homeX, g.homeY - 2)
+        val spots = listOf(BuildDef.SHIP_COMPUTER, BuildDef.SHIP_ENGINE, BuildDef.SHIP_ENGINE, BuildDef.SHIP_REACTOR, BuildDef.SHIP_CASKET)
+        for ((k, d) in spots.withIndex()) {
+            val x = g.homeX + 6 + k * 2; val y = g.homeY - 7
+            val i = g.map.idx(x, y)
+            g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null; g.map.building[i] = null
+            assertTrue("place ${d.label}", g.placeBlueprint(d, x, y))
+        }
+        for (c in g.colonists) { c.skill[SkillType.CONSTRUCTION.ordinal] = 16; c.priority[WorkType.CONSTRUCT.ordinal] = 1 }
+        assertFalse(g.shipComplete())
+        g.run(TICKS_PER_DAY * 5)
+        assertTrue("ship complete", g.shipComplete())
+        assertTrue(g.launchShip())
+        assertTrue(g.won && g.gameOver)
+    }
+}

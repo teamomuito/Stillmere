@@ -507,6 +507,10 @@ class MainActivity : Activity() {
                     g.map.building[i]?.let { it.forbidden = anyAllowed; n++ }
                 }
             }
+            is Tool.Area -> {
+                for (y in y0..y1) for (x in x0..x1) if (g.map.inB(x, y)) g.map.areas[t.index][g.map.idx(x, y)] = t.add
+                n = 1
+            }
             else -> {
                 for (y in y0..y1) for (x in x0..x1) {
                     if (!g.map.inB(x, y)) continue

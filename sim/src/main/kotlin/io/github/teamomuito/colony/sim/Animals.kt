@@ -114,7 +114,7 @@ internal fun Game.animalTick(p: Pawn) {
         val x = (ax + rng.range(-rad, rad)).coerceIn(1, map.w - 2)
         val y = (ay + rng.range(-rad, rad)).coerceIn(1, map.h - 2)
         val c = map.idx(x, y)
-        if (map.walkable(c) && map.terrain[c] != Terrain.WATER_SHALLOW && (p.faction != Faction.PLAYER || distance(x, y, homeX, homeY) < 22f)) { j.tx = x; j.ty = y } else { j.tx = p.x; j.ty = p.y }
+        if (map.walkable(c) && map.terrain[c] != Terrain.WATER_SHALLOW && (p.faction != Faction.PLAYER || distance(x, y, homeX, homeY) < 22f) && allowedFor(p, c)) { j.tx = x; j.ty = y } else { j.tx = p.x; j.ty = p.y }
     }
 }
 

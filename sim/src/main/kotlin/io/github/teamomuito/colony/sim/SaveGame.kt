@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 5
+    private const val VERSION = 6
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -44,6 +44,7 @@ object SaveGame {
             o.writeInt(m.zoneId[i]); o.writeByte(m.desig[i].toInt()); o.writeByte(m.filth[i].toInt())
             o.writeBoolean(m.natRoof[i]); o.writeBoolean(m.conduit[i]); o.writeByte((m.snow[i] * 100).toInt())
         }
+        for (a in 0 until 3) { o.writeUTF(m.areaNames[a]); for (c in 0 until m.size) o.writeBoolean(m.areas[a][c]) }
         o.writeInt(m.peekNextZone())
         o.writeInt(m.zones.size)
         for (z in m.zones.values) {
@@ -127,7 +128,7 @@ object SaveGame {
         o.writeInt(p.raidId); o.writeInt(p.raidMode); o.writeInt(p.campX); o.writeInt(p.campY); o.writeBoolean(p.retreating)
         o.writeLong(p.escapeTick); o.writeBoolean(p.wanderer); o.writeLong(p.lastSocial)
         o.writeInt(p.herdLeader)
-        o.writeBoolean(p.refugee)
+        o.writeBoolean(p.refugee); o.writeInt(p.areaRestriction)
         o.writeInt(p.implants.size); for ((k, v) in p.implants) { o.writeInt(k); o.writeInt(v.ordinal) }
     }
 
@@ -168,6 +169,7 @@ object SaveGame {
             map.zoneId[c] = i.readInt(); map.desig[c] = i.readByte(); map.filth[c] = i.readByte()
             map.natRoof[c] = i.readBoolean(); map.conduit[c] = i.readBoolean(); map.snow[c] = i.readByte() / 100f
         }
+        for (a in 0 until 3) { map.areaNames[a] = i.readUTF(); for (c in 0 until map.size) map.areas[a][c] = i.readBoolean() }
         map.setNextZone(i.readInt())
         repeat(i.readInt()) {
             val z = Zone(i.readInt(), i.readInt())
@@ -275,7 +277,7 @@ object SaveGame {
         p.raidId = i.readInt(); p.raidMode = i.readInt(); p.campX = i.readInt(); p.campY = i.readInt(); p.retreating = i.readBoolean()
         p.escapeTick = i.readLong(); p.wanderer = i.readBoolean(); p.lastSocial = i.readLong()
         p.herdLeader = i.readInt()
-        p.refugee = i.readBoolean()
+        p.refugee = i.readBoolean(); p.areaRestriction = i.readInt()
         repeat(i.readInt()) { p.implants[i.readInt()] = Implant.entries[i.readInt()] }
         return p
     }

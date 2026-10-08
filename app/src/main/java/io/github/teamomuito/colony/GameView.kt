@@ -45,6 +45,7 @@ sealed class Tool(val label: String, val paints: Boolean) {
     class Growing(val crop: PlantType) : Tool("Growing zone: ${crop.label}", true)
     object ClearZone : Tool("Remove zone", true)
     class Build(val def: BuildDef) : Tool("Build: ${def.label}", true)
+    class Area(val index: Int, val add: Boolean, name: String) : Tool("${if (add) "Paint" else "Erase"} $name", true)
 }
 
 class GameView(context: Context) : View(context) {
@@ -409,6 +410,11 @@ class GameView(context: Context) : View(context) {
             c.drawCircle((bl.x + 0.5f - camX) * s, (bl.y + 0.5f - camY) * s, bl.radius * s * (1.2f - left * 0.4f), fill)
         }
 
+        val at = tool
+        if (at is Tool.Area) {
+            fill.color = 0x553A7ACC
+            for (y in y0..y1) for (x in x0..x1) if (m.areas[at.index][m.idx(x, y)]) c.drawRect((x - camX) * s, (y - camY) * s, (x + 1 - camX) * s, (y + 1 - camY) * s, fill)
+        }
         drawLighting(c, g, x0, y0, x1, y1, s)
         drawWeather(c, g)
 
