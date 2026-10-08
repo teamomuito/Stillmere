@@ -32,4 +32,9 @@ enum class Race(
     ;
 
     val insect get() = body === Bodies.BUG
+
+    /** Days until a young animal is grown, and how long a mother carries. */
+    val matureDays get() = (5f + size * 4f).toInt()
+    val gestationDays get() = (6f + size * 4f).toInt()
+    val litter get() = if (size < 0.8f) 3 else if (size < 1.3f) 2 else 1
 }

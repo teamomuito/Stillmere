@@ -55,8 +55,8 @@ fun Game.recomputeHealth(p: Pawn) {
     val hands = p.avgEff(PartTag.HAND)
     val arms = p.avgEff(PartTag.ARM)
     var manip = if (p.hasTag(PartTag.HAND)) hands * 0.7f + arms * 0.3f else 1f
-    val sight = if (p.hasTag(PartTag.EYE)) p.avgEff(PartTag.EYE) else 1f
-    val hearing = if (p.hasTag(PartTag.EAR)) p.avgEff(PartTag.EAR) else 1f
+    var sight = if (p.hasTag(PartTag.EYE)) p.avgEff(PartTag.EYE) else 1f
+    var hearing = if (p.hasTag(PartTag.EAR)) p.avgEff(PartTag.EAR) else 1f
     val jaw = if (p.hasTag(PartTag.JAW)) p.avgEff(PartTag.JAW) else 1f
     val breathing = if (p.hasTag(PartTag.LUNG)) min(1f, p.avgEff(PartTag.LUNG) * 1.4f) else 1f
     val pumping = if (p.hasTag(PartTag.HEART)) p.avgEff(PartTag.HEART) else 1f
@@ -77,8 +77,11 @@ fun Game.recomputeHealth(p: Pawn) {
         moving *= (1f - h.kind.move * s)
         manip *= (1f - h.kind.manip * s)
         eating *= (1f - h.kind.eat * s)
+        sight *= (1f - h.kind.sight * s)
+        hearing *= (1f - h.kind.hearing * s)
         if (h.kind == HediffKind.ANESTHESIA) cons = 0f
     }
+    if (p.pregnantUntil > 0L && p.race == Race.HUMAN) moving *= 0.88f
     // Pain and sickness slow people down a bit.
     moving *= (1f - p.pain * 0.2f)
     manip *= (1f - p.pain * 0.2f)
@@ -334,6 +337,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
                 if (h.duration <= 0) { hi.remove(); p.healthDirty = true }
             }
             3 -> { /* tolerance and addiction handled by drug logic */ }
+            5 -> { /* chronic: stays for life */ }
         }
     }
     if (p.healthDirty) recomputeHealth(p)

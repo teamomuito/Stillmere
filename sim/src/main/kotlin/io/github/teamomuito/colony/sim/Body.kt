@@ -103,6 +103,7 @@ enum class HediffKind(
     val label: String, val category: Int, val progressPerDay: Float, val immunityPerDay: Float,
     val lethal: Boolean, val cons: Float = 0f, val move: Float = 0f, val manip: Float = 0f, val eat: Float = 0f,
     val pain: Float = 0f, val mood: Float = 0f, val needsTend: Boolean = false, val contagious: Boolean = false,
+    val sight: Float = 0f, val hearing: Float = 0f,
 ) {
     // category: 0 illness, 1 environment, 2 drug high, 3 drug tolerance/addiction, 4 other
     FLU("Flu", 0, 0.9f, 0.8f, true, cons = 0.25f, move = 0.2f, manip = 0.15f, eat = 0.3f, pain = 0.15f, needsTend = true, contagious = true),
@@ -125,6 +126,12 @@ enum class HediffKind(
     SMOKELEAF_ADDICTION("Smokeleaf addiction", 3, 0f, 0f, false),
     PSYCHITE_ADDICTION("Psychite addiction", 3, 0f, 0f, false),
     WITHDRAWAL("Withdrawal", 3, 0f, 0f, false, cons = 0.15f, move = 0.1f, manip = 0.15f, pain = 0.1f),
+    // category 5: chronic conditions of age, permanent
+    BAD_BACK("Bad back", 5, 0f, 0f, false, move = 0.18f, pain = 0.12f),
+    ARTHRITIS("Arthritis", 5, 0f, 0f, false, manip = 0.16f, move = 0.06f, pain = 0.18f),
+    CATARACT("Cataract", 5, 0f, 0f, false, sight = 0.45f),
+    HEARING_LOSS("Hearing loss", 5, 0f, 0f, false, hearing = 0.5f),
+    DEMENTIA("Dementia", 5, 0f, 0f, false, cons = 0.28f),
     ANESTHESIA("Anesthetic", 4, 0f, 0f, false, cons = 1f),
 }
 

@@ -49,7 +49,7 @@ internal fun Game.animalTick(p: Pawn) {
     if (canGraze(p) && p.food < 0.95f && tick % 4 == 0L) p.food = min(1f, p.food + 0.0016f * (if (p.faction == Faction.PLAYER) 1f else 1.4f))
     if (p.faction == Faction.PLAYER) {
         val prod = p.race.product
-        if (prod != null) {
+        if (prod != null && p.stage == LifeStage.ADULT) {
             p.animalProductTimer++
             if (prod == ItemType.EGGS && p.animalProductTimer >= (TICKS_PER_DAY / p.race.productPerDay).toInt() && p.female) {
                 p.animalProductTimer = 0

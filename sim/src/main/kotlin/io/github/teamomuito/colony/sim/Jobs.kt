@@ -155,6 +155,7 @@ fun Game.think(p: Pawn) {
     // Needs.
     val act = p.schedule[hour]
     if (p.food < 0.3f && startEat(p)) return
+    findFeedBaby(p)?.let { p.job = it; return }
     if (p.surgeries.isNotEmpty() && map.building[map.idx(p.x, p.y)]?.def?.sleeps != true && startRest(p)) return
     if (p.needsMedical && p.priority[WorkType.PATIENT.ordinal] > 0 && patientShouldRest(p) && startRest(p)) return
     val sleepy = p.rest < 0.25f || (act == 3 && p.rest < 0.92f) || (Trait.NIGHT_OWL in p.traits && false)
@@ -164,7 +165,7 @@ fun Game.think(p: Pawn) {
     if (act == 2 && p.joy < 0.95f) startJoy(p)?.let { p.job = it; return }
     val workHour = act == 1 || act == 0 || act == 3 && p.rest >= 0.92f
     if (workHour) {
-        val order = WorkType.entries.filter { p.priority[it.ordinal] > 0 && p.incapable and (1 shl it.ordinal) == 0 }
+        val order = WorkType.entries.filter { p.priority[it.ordinal] > 0 && !p.workBlocked(it) }
             .sortedBy { p.priority[it.ordinal] * 100 + it.ordinal }
         for (w in order) {
             val j = tryWork(p, w) ?: continue

@@ -489,7 +489,7 @@ class Panels(private val a: MainActivity) {
     }
 
     private fun fillNeeds(body: LinearLayout, p: Pawn) {
-        body.addView(ui.label("${p.age} · ${if (p.female) "female" else "male"}${if (p.prisoner) " · prisoner" else if (p.faction == Faction.VISITOR) " · visitor" else ""}", 11f, ui.dim))
+        body.addView(ui.label("${p.age} (${p.stage.label.lowercase()}) · ${if (p.female) "female" else "male"}${if (p.pregnantUntil > 0L) " · pregnant (${(100 - (p.pregnantUntil - game.tick) * 100 / (30L * io.github.teamomuito.colony.sim.TICKS_PER_DAY)).coerceIn(0, 100)}%)" else ""}${if (p.mother >= 0) game.pawnById(p.mother)?.let { " · child of ${it.name.substringBefore(' ')}" } ?: "" else ""}${if (p.prisoner) " · prisoner" else if (p.faction == Faction.VISITOR) " · visitor" else ""}", 11f, ui.dim))
         if (p.backstory.isNotEmpty()) body.addView(ui.label(p.backstory, 11f, ui.dim))
         body.addView(ui.label("Doing: ${activity(p)}", 11.5f), ui.lin(-2, -2, 0f, 0, 3, 0, 3))
         barRow(body, "Health", p.hp / 100f, ui.good, "${p.hp.toInt()}")

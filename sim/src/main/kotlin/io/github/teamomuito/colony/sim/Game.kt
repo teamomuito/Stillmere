@@ -173,6 +173,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val p = Pawn(nextPawnId++, "$first ${rng.pick(Names.last)}", Race.HUMAN, faction)
         p.female = first in Names.female
         p.age = rng.range(19, 55)
+        p.birthday = rng.int(DAYS_PER_YEAR)
         val child = rng.pick(Backstories.childhood)
         val adult = rng.pick(Backstories.adulthood)
         p.backstory = "${child.title}, ${adult.title.lowercase()}"
@@ -220,7 +221,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         return p
     }
 
-    private fun conflicts(a: Trait, b: Trait): Boolean {
+    fun conflicts(a: Trait, b: Trait): Boolean {
         val pairs = listOf(
             Trait.HARD_WORKER to Trait.LAZY, Trait.OPTIMIST to Trait.PESSIMIST, Trait.NIMBLE to Trait.SLOW_WALKER,
             Trait.TOUGH to Trait.WIMP, Trait.FAST_LEARNER to Trait.SLOW_LEARNER, Trait.KIND to Trait.ABRASIVE,
@@ -603,7 +604,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val sleeping = p.job?.type == JobType.SLEEP && p.job?.stage == 1
         if (p.race.mech) { p.food = 1f; p.rest = 1f }
         // Needs.
-        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { Math.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else 0.7f * (if (Trait.GOURMAND in p.traits) 1.3f else 1f)
+        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { Math.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else 0.7f * (if (Trait.GOURMAND in p.traits) 1.3f else 1f) * (if (p.pregnantUntil > 0L) 1.25f else 1f) * (if (p.age < 13) 0.6f else 1f)
         p.food = max(0f, p.food - foodRate / TICKS_PER_DAY * (if (sleeping) 0.7f else 1f))
         if (!p.isAnimal) {
             if (!sleeping) p.rest = max(0f, p.rest - 0.95f / TICKS_PER_DAY)
@@ -625,6 +626,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             if (p.faction == Faction.ENEMY && !p.prisoner) enemyDownedTick(p)
             return
         }
+        if (p.isBaby) { babyTick(p); return }
         if (p.attackCd > 0) p.attackCd--
         if (map.fires.isNotEmpty() && tick % 3 == (p.id % 3).toLong() && p.moveCd <= 0) stepOutOfFire(p)
         if (p.isAnimal) { animalTick(p); return }
@@ -650,7 +652,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         worldSlowTick()
         if (caravans.isNotEmpty()) caravansTick()
         for (p in pawns) if (p.alive) {
-            if (p.colonist || p.prisoner) moodUpdate(p)
+            if ((p.colonist || p.prisoner) && !p.isBaby) moodUpdate(p)
             comfortTick(p)
         }
     }
@@ -659,7 +661,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     private fun hourlyTick() {
         hourlyEvents()
         alliesHourly()
-        if (hour == 0) factionsDaily()
+        if (hour == 0) { factionsDaily(); lifeDaily() }
         autosaveHook?.invoke()
     }
 

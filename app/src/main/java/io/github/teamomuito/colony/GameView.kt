@@ -660,7 +660,7 @@ class GameView(context: Context) : View(context) {
         facing[p.id] = ang
         if (p.isAnimal) {
             val size = p.race.size.coerceIn(0.5f, 2.2f)
-            sprites.animal(c, p, cx, cy, s, ang, moving, frame)
+            sprites.animal(c, p, cx, cy, s * p.bodyScale(), ang, moving, frame)
             if (p.downed) {
                 stroke.color = 0xCC000000.toInt(); stroke.strokeWidth = 3f
                 c.drawLine(cx - s * 0.2f, cy - s * 0.15f, cx + s * 0.2f, cy + s * 0.15f, stroke); c.drawLine(cx - s * 0.2f, cy + s * 0.15f, cx + s * 0.2f, cy - s * 0.15f, stroke)
@@ -674,8 +674,8 @@ class GameView(context: Context) : View(context) {
         val outer = p.apparel.lastOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.OUTER }
             ?: p.apparel.firstOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.SHIRT }
         val body = if (outer != null) apparelColor(outer.type) else sprites.shade(sprites.skinOf(p), 0.9f)
-        if (p.downed) {
-            sprites.downedHuman(c, p, cx, cy, s, body)
+        if (p.downed || p.isBaby) {
+            sprites.downedHuman(c, p, cx, cy, s * p.bodyScale(), body)
         } else {
             val hat = p.apparel.firstOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.HEAD }
             val ring = when {
@@ -686,7 +686,7 @@ class GameView(context: Context) : View(context) {
                 else -> 0
             }
             val carry = if (p.carryCount > 0) itemColor(p.carryType ?: ItemType.WOOD) else if (p.job?.stack != null) 0xFF777777.toInt() else null
-            sprites.human(c, p, cx, cy, s, ang, body, hat?.let { apparelColor(it.type) }, ring, if (ring != 0) max(2.5f, s * 0.07f) else 0f, moving, frame, carry, false)
+            sprites.human(c, p, cx, cy, s * p.bodyScale(), ang, body, hat?.let { apparelColor(it.type) }, ring, if (ring != 0) max(2.5f, s * 0.07f) else 0f, moving, frame, carry, false)
         }
         if (p.hp < 99f) hpBar(c, cx, cy, s, p)
         if (p.breakUntil > 0) { text.textSize = s * 0.5f; text.color = 0xFFFF6B4A.toInt(); c.drawText("!", cx, cy - s * 0.55f, text) }

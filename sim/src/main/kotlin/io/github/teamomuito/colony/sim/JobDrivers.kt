@@ -65,6 +65,7 @@ fun Game.driveJob(p: Pawn) {
         JobType.WARDEN -> driveWarden(p, j)
         JobType.FEED_PRISONER -> driveFeedPrisoner(p, j)
         JobType.FEED_ANIMAL -> driveFeedAnimal(p, j)
+        JobType.FEED_BABY -> driveFeedBaby(p, j)
         JobType.SHEAR -> driveGather(p, j)
         JobType.HUNT -> driveHunt(p, j)
         JobType.TAME -> driveTame(p, j)

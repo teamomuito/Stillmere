@@ -243,8 +243,9 @@ class ColonyTest {
         val g = newGame(); g.quiet()
         assertFalse(g.canBuildAt(BuildDef.STEEL_WALL, g.homeX + 6, g.homeY - 6))
         g.placeBlueprint(BuildDef.RESEARCH_BENCH, g.homeX + 3, g.homeY + 4)
-        for (c in g.colonists.drop(1)) c.priority[WorkType.RESEARCH.ordinal] = 0
-        g.colonists[0].priority[WorkType.RESEARCH.ordinal] = 1
+        val scholar = g.colonists.first { !it.workBlocked(WorkType.RESEARCH) }
+        for (c in g.colonists) c.priority[WorkType.RESEARCH.ordinal] = 0
+        scholar.priority[WorkType.RESEARCH.ordinal] = 1
         g.startResearch(Research.SMITHING)
         g.run(TICKS_PER_DAY / 2)
         assertTrue("not instant", Research.SMITHING !in g.researchDone)
@@ -806,5 +807,65 @@ class SettleTest {
         val saved = SaveGame.read(SaveGame.write(ng))
         assertEquals(goal, saved.world.homeTile)
         assertEquals(g.world.settlements.map { it.name }, saved.world.settlements.map { it.name })
+    }
+}
+
+class LifeTest {
+    @Test fun couplesConceiveAndBabiesAreBornAndFed() {
+        val g = newGame(31, Scenario.LOST_TRIBE); g.quiet()
+        val f = g.colonists.first { it.female }; val m = g.colonists.first { !it.female }
+        f.age = 25; m.age = 27; f.spouse = m.id; m.spouse = f.id
+        g.map.drop(ItemType.MILK, 40, g.homeX, g.homeY)
+        g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY + 3, ZoneKind.STOCKPILE)
+        g.map.drop(ItemType.MILK, 40, g.homeX, g.homeY)
+        var guard = 0
+        f.food = 0.9f; m.food = 0.9f
+        while (f.pregnantUntil == 0L && guard++ < 400) g.lifeDaily()
+        assertTrue("conceived", f.pregnantUntil > 0L)
+        val before = g.pawns.count { !it.isAnimal }
+        f.pregnantUntil = g.tick + 10
+        g.run(TICKS_PER_DAY * 2)
+        val baby = g.pawns.firstOrNull { it.isBaby }
+        assertNotNull(baby)
+        assertEquals(before + 1, g.pawns.count { !it.isAnimal })
+        assertEquals(f.id, baby!!.mother)
+        baby.food = 0.2f
+        g.run(TICKS_PER_DAY / 2)
+        assertTrue("baby fed", baby.food > 0.3f)
+        val l = SaveGame.read(SaveGame.write(g))
+        assertTrue(l.pawns.any { it.isBaby && it.mother == f.id })
+    }
+
+    @Test fun childrenGrowUpAndDoOnlyLightWork() {
+        val g = newGame(32); g.quiet()
+        val k = g.newHuman(g.homeX, g.homeY); k.age = 8; k.birthday = (g.day + 1) % DAYS_PER_YEAR
+        assertTrue(k.workBlocked(WorkType.CONSTRUCT)); assertFalse(k.workBlocked(WorkType.HAUL))
+        g.run(TICKS_PER_DAY * 2)
+        assertEquals(9, k.age)
+        k.age = 12; k.birthday = (g.day + 1) % DAYS_PER_YEAR
+        g.run(TICKS_PER_DAY * 2)
+        assertEquals(13, k.age)
+        assertFalse(k.workBlocked(WorkType.CONSTRUCT))
+    }
+
+    @Test fun oldPeopleGetConditions() {
+        val g = newGame(33); g.quiet()
+        val p = g.colonists.first(); p.age = 74; p.birthday = (g.day + 1) % DAYS_PER_YEAR
+        var got = 0
+        repeat(40) { p.age = 74; p.hediffs.clear(); p.birthday = (g.day + 1) % DAYS_PER_YEAR; g.run(TICKS_PER_DAY * 2); got += p.hediffs.count { it.kind.category == 5 } }
+        assertTrue(got > 5)
+    }
+
+    @Test fun animalsBreedAndYoungGrowUp() {
+        val g = newGame(34); g.quiet()
+        val a = g.newAnimal(Race.COW, g.homeX, g.homeY + 4, Faction.PLAYER); a.female = true; a.ageDays = 100
+        val b = g.newAnimal(Race.COW, g.homeX + 1, g.homeY + 4, Faction.PLAYER); b.female = false; b.ageDays = 100
+        var guard = 0
+        while (g.pawns.none { it.race == Race.COW && it.stage == LifeStage.JUVENILE } && guard++ < 600) g.run(TICKS_PER_DAY)
+        val calf = g.pawns.firstOrNull { it.race == Race.COW && it.stage == LifeStage.JUVENILE }
+        assertNotNull(calf)
+        assertTrue(calf!!.bodyScale() < 0.7f)
+        repeat(Race.COW.matureDays + 1) { g.run(TICKS_PER_DAY) }
+        assertEquals(LifeStage.ADULT, calf.stage)
     }
 }

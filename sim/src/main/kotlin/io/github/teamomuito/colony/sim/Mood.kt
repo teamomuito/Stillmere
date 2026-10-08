@@ -202,7 +202,7 @@ fun Game.moodUpdate(p: Pawn) {
     for (t in p.situ) m += t.mood
     m = m.coerceIn(0f, 1f)
     p.mood = (p.mood * 0.5f + m * 0.5f).coerceIn(0f, 1f)
-    if (p.prisoner || p.faction == Faction.VISITOR) return
+    if (p.prisoner || p.faction == Faction.VISITOR || p.age < 13) return
     breaksTick(p)
 }
 
@@ -284,6 +284,7 @@ fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
     when {
         p.faction == Faction.PLAYER && !p.isAnimal && !p.prisoner -> {
             say("${p.name} has died ($cause).", 3)
+            for (par in listOf(p.mother, p.father)) pawnById(par)?.let { if (it.alive) it.addThought("Child died: ${p.name.substringBefore(' ')}", -0.4f, tick, 12 * TICKS_PER_DAY) }
             graveyard.add("${p.name} - $cause (day ${day + 1})")
             if (p.age > 0) for (o in colonists) {
                 if (Trait.PSYCHOPATH in o.traits) continue

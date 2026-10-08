@@ -365,7 +365,7 @@ internal fun Game.findHandle(p: Pawn): Job? {
         }
         // Gather wool and milk.
         val prod = a.race.product
-        if (prod != null && (prod == ItemType.WOOL || prod == ItemType.MILK) && a.animalProductTimer > TICKS_PER_DAY * 0.7f && a.tame) {
+        if (prod != null && (prod == ItemType.WOOL || prod == ItemType.MILK) && a.animalProductTimer > TICKS_PER_DAY * 0.7f && a.tame && a.stage == LifeStage.ADULT) {
             reserve(p, k)
             val j = Job(JobType.SHEAR, a.x, a.y); j.targetPawn = a.id; j.key = k
             return j

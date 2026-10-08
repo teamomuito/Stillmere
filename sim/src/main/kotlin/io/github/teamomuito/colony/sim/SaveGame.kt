@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 10
+    private const val VERSION = 11
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -150,7 +150,7 @@ object SaveGame {
         o.writeBoolean(p.huntMark); o.writeBoolean(p.tameMark); o.writeBoolean(p.slaughterMark)
         o.writeFloat(p.resistance); o.writeBoolean(p.escaping); o.writeInt(p.recruitMode)
         o.writeInt(p.raidId); o.writeInt(p.raidMode); o.writeInt(p.campX); o.writeInt(p.campY); o.writeBoolean(p.retreating)
-        o.writeLong(p.escapeTick); o.writeBoolean(p.wanderer); o.writeLong(p.lastSocial); o.writeInt(p.wfaction); o.writeBoolean(p.ally)
+        o.writeLong(p.escapeTick); o.writeBoolean(p.wanderer); o.writeLong(p.lastSocial); o.writeInt(p.wfaction); o.writeBoolean(p.ally); o.writeInt(p.birthday); o.writeInt(p.ageDays); o.writeInt(p.mother); o.writeInt(p.father); o.writeLong(p.pregnantUntil); o.writeInt(p.pregnantBy)
         o.writeInt(p.herdLeader)
         o.writeBoolean(p.refugee); o.writeInt(p.areaRestriction)
         o.writeInt(p.implants.size); for ((k, v) in p.implants) { o.writeInt(k); o.writeInt(v.ordinal) }
@@ -325,7 +325,7 @@ object SaveGame {
         p.huntMark = i.readBoolean(); p.tameMark = i.readBoolean(); p.slaughterMark = i.readBoolean()
         p.resistance = i.readFloat(); p.escaping = i.readBoolean(); p.recruitMode = i.readInt()
         p.raidId = i.readInt(); p.raidMode = i.readInt(); p.campX = i.readInt(); p.campY = i.readInt(); p.retreating = i.readBoolean()
-        p.escapeTick = i.readLong(); p.wanderer = i.readBoolean(); p.lastSocial = i.readLong(); p.wfaction = i.readInt(); p.ally = i.readBoolean()
+        p.escapeTick = i.readLong(); p.wanderer = i.readBoolean(); p.lastSocial = i.readLong(); p.wfaction = i.readInt(); p.ally = i.readBoolean(); p.birthday = i.readInt(); p.ageDays = i.readInt(); p.mother = i.readInt(); p.father = i.readInt(); p.pregnantUntil = i.readLong(); p.pregnantBy = i.readInt()
         p.herdLeader = i.readInt()
         p.refugee = i.readBoolean(); p.areaRestriction = i.readInt()
         repeat(i.readInt()) { p.implants[i.readInt()] = Implant.entries[i.readInt()] }

@@ -12,7 +12,7 @@ enum class JobType(val label: String) {
     FLEE("Fleeing"), ATTACK("Fighting"), BREAK("Mental break"), RAID("Raiding"), LEAVE("Leaving"),
     WEAR("Changing clothes"), EQUIP("Equipping"), BUTCHER("Butchering"), HUNT("Hunting"), TAME("Taming"),
     SLAUGHTER("Slaughtering"), RESCUE("Rescuing"), CAPTURE("Capturing"), WARDEN("Talking to prisoner"),
-    FEED_PRISONER("Feeding prisoner"), FEED_ANIMAL("Feeding animal"), SHEAR("Gathering from animal"),
+    FEED_PRISONER("Feeding prisoner"), FEED_ANIMAL("Feeding animal"), SHEAR("Gathering from animal"), FEED_BABY("Feeding a baby"),
     CLEAN("Cleaning"), FIREFIGHT("Fighting fire"), JOY("Relaxing"), REST("Resting"), SURGERY("Operating"),
     SOCIAL("Chatting"), GRAZE("Grazing"), WAIT("Waiting"), TRADE("Trading"), CHASE("Chasing"), HUNT_PREY("Hunting"),
     EXTINGUISH("Putting out fire"), DELIVER("Delivering"), BURY("Burying"), SMOKE("Taking a drug"),
@@ -158,6 +158,11 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var predatorTarget = -1
     var grazeTimer = 0
     var birthday = 0
+    var ageDays = 0
+    var mother = -1
+    var father = -1
+    var pregnantUntil = 0L
+    var pregnantBy = -1
     var wild get() = faction == Faction.WILD
         set(_) {}
 
@@ -191,6 +196,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
 
     fun workSpeed(s: SkillType?): Float {
         var f = if (s == null) 1f else 0.4f + 0.075f * skill[s.ordinal]
+        if (!isAnimal && age < 18) f *= if (age < 13) 0.6f else 0.85f
         if (Trait.HARD_WORKER in traits) f *= 1.25f
         if (Trait.LAZY in traits) f *= 0.75f
         if (rest < 0.2f) f *= 0.85f
@@ -226,6 +232,26 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
             return
         }
         thoughts.add(Thought(label, mood, now + duration))
+    }
+
+    /** Years for humans, mature-adult test for animals. */
+    val stage: LifeStage get() = when {
+        isAnimal -> if (ageDays < race.matureDays) LifeStage.JUVENILE else LifeStage.ADULT
+        age < 3 -> LifeStage.BABY
+        age < 13 -> LifeStage.CHILD
+        age < 18 -> LifeStage.TEEN
+        else -> LifeStage.ADULT
+    }
+    val isBaby get() = !isAnimal && age < 3
+    val isChild get() = !isAnimal && age < 13
+
+    /** Visual and physical size relative to a grown pawn. */
+    fun bodyScale(): Float = when (stage) {
+        LifeStage.BABY -> 0.45f
+        LifeStage.CHILD -> 0.6f + (age - 3) * 0.03f
+        LifeStage.TEEN -> 0.9f + (age - 13) * 0.02f
+        LifeStage.JUVENILE -> 0.55f + 0.45f * (ageDays.toFloat() / race.matureDays)
+        LifeStage.ADULT -> 1f
     }
 
     fun clearPath() { path = null; pathI = 0 }
