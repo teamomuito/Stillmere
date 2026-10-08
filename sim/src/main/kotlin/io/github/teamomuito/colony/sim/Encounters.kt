@@ -55,8 +55,8 @@ internal fun Game.runBattle(c: Caravan, kind: Int, points: Float, fortified: Boo
     val rid = 1
     val fx = if (fortified) 31 else 38
     if (fortified) {
-        for (y in 15..29) { val i = m.idx(28, y); if (m.walkable(i)) m.building[i] = Building(BuildDef.SANDBAGS, 28, y, true) }
-        for (y in 17..27 step 5) for (x in 30..31) { val i = m.idx(x, y); if (m.walkable(i)) m.building[i] = Building(BuildDef.SANDBAGS, x, y, true) }
+        for (y in 15..29) { val i = m.idx(28, y); if (m.walkable(i)) m.setBuilding(Building(BuildDef.SANDBAGS, 28, y, true)) }
+        for (y in 17..27 step 5) for (x in 30..31) { val i = m.idx(x, y); if (m.walkable(i)) m.setBuilding(Building(BuildDef.SANDBAGS, x, y, true)) }
     }
     if (kind == 1) {
         val race = when (biome) {

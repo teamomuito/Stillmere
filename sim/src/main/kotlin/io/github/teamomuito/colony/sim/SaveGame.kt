@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 11
+    private const val VERSION = 12
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -52,10 +52,10 @@ object SaveGame {
             o.writeBoolean(z.sow); o.writeInt(z.minQuality.ordinal); o.writeInt(z.cells)
             for (b in z.allowed) o.writeBoolean(b)
         }
-        val builds = m.building.filterNotNull()
+        val builds = m.buildings()
         o.writeInt(builds.size)
         for (b in builds) {
-            o.writeInt(b.def.ordinal); o.writeShort(b.x); o.writeShort(b.y); o.writeBoolean(b.built)
+            o.writeInt(b.def.ordinal); o.writeShort(b.x); o.writeShort(b.y); o.writeBoolean(b.built); o.writeBoolean(b.rot)
             for (d in b.delivered) o.writeInt(d)
             o.writeFloat(b.progress); o.writeFloat(b.hp); o.writeInt(b.ownerId); o.writeFloat(b.fuel)
             o.writeByte(b.quality.ordinal); o.writeBoolean(b.forbidden); o.writeFloat(b.charge); o.writeInt(b.shells)
@@ -206,6 +206,7 @@ object SaveGame {
             val def = BuildDef.entries[i.readInt()]
             val x = i.readShort().toInt(); val y = i.readShort().toInt()
             val b = Building(def, x, y, i.readBoolean())
+            b.rot = i.readBoolean()
             for (k in b.delivered.indices) b.delivered[k] = i.readInt()
             b.progress = i.readFloat(); b.hp = i.readFloat(); b.ownerId = i.readInt(); b.fuel = i.readFloat()
             b.quality = Quality.entries[i.readByte().toInt()]; b.forbidden = i.readBoolean(); b.charge = i.readFloat(); b.shells = i.readInt()
@@ -217,7 +218,7 @@ object SaveGame {
                 if (i.readBoolean()) { val set = HashSet<ItemType>(); repeat(i.readInt()) { set.add(ItemType.entries[i.readInt()]) }; bill.allowedItems = set }
                 b.bills.add(bill)
             }
-            map.building[map.idx(x, y)] = b
+            map.setBuilding(b)
         }
         repeat(i.readInt()) {
             val t = PlantType.entries[i.readInt()]

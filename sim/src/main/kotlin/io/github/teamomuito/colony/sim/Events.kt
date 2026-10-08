@@ -37,9 +37,9 @@ fun Game.hintsTick() {
     if (day == 0 && hour >= 8 && map.desig.none { it.toInt() == Desig.CUT || it.toInt() == Desig.MINE }) hint(1, "Colonists only work on what you mark. Open Architect → Orders, pick Chop trees and drag over some trees.")
     if (day == 0 && hour >= 11 && bedCount() < cols.size) hint(2, "Build a bed for everyone (Architect → Furniture). Sleeping on the ground makes people miserable.")
     if (day <= 2 && hour >= 13 && map.zones.values.none { it.kind == ZoneKind.GROWING }) hint(3, "Plan your food: Architect → Zones, pick a crop and drag over soil. Cook the harvest at a campfire or stove with a bill.")
-    if (day <= 3 && hour >= 15 && map.building.none { it != null && it.built && it.def.workbench && it.bills.isNotEmpty() } &&
-        map.building.any { it != null && it.built && (it.def == BuildDef.CAMPFIRE || it.def == BuildDef.STOVE_FUEL) }) hint(4, "Workbenches need bills. Tap your campfire, press Open, then add a cooking bill.")
-    if (map.building.any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH } && researchCurrent == null && researchDone.size < Research.entries.size) hint(5, "Your research bench is idle. Open the Research tab and start a project.")
+    if (day <= 3 && hour >= 15 && map.buildings().none { it != null && it.built && it.def.workbench && it.bills.isNotEmpty() } &&
+        map.buildings().any { it != null && it.built && (it.def == BuildDef.CAMPFIRE || it.def == BuildDef.STOVE_FUEL) }) hint(4, "Workbenches need bills. Tap your campfire, press Open, then add a cooking bill.")
+    if (map.buildings().any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH } && researchCurrent == null && researchDone.size < Research.entries.size) hint(5, "Your research bench is idle. Open the Research tab and start a project.")
     if (day >= 5 && day < 12) hint(6, "Raiders will come. Tap a colonist and press Draft, then tap an enemy to attack or the ground to move. Walls, doors and sandbags help.")
     if (day >= 2 && map.zones.values.none { it.kind == ZoneKind.STOCKPILE }) hint(7, "Items lie where they drop until you make a stockpile zone (Architect → Zones).")
     if (Research.ELECTRICITY in researchDone && power.nets == 0) hint(8, "Electricity is researched. Build a generator, conduits and a battery to power lamps, heaters and stoves.")
@@ -131,7 +131,7 @@ private fun Game.miscEvent() {
     weights += 3 to (if (power.nets > 0) 1.5f else 0f) // solar flare
     weights += 4 to 1f   // eclipse
     weights += 5 to (if (day > 10) 1f else 0f) // toxic fallout
-    weights += 6 to (if (map.building.any { it != null && it.def == BuildDef.BATTERY && it.built }) 1.5f else 0f) // short circuit
+    weights += 6 to (if (map.buildings().any { it != null && it.def == BuildDef.BATTERY && it.built }) 1.5f else 0f) // short circuit
     weights += 7 to 1f   // blight
     weights += 8 to 1.2f // animal joins
     weights += 9 to (if (day > 8) 0.5f else 0f)  // thrumbo
@@ -180,7 +180,7 @@ internal fun tribalTier(day: Int): List<Pair<ItemType?, Float>> = when {
 
 private fun Game.pickRaidKind(): Int {
     // 0 assault, 1 sapper, 2 siege, 3 drop pods
-    val hasWalls = map.building.count { it != null && it.built && it.def.isWall } > 12
+    val hasWalls = map.buildings().count { it != null && it.built && it.def.isWall } > 12
     val opts = ArrayList<Int>()
     opts += 0; opts += 0; opts += 0
     if (day >= 14 && hasWalls) { opts += 1; opts += 1 }
@@ -332,12 +332,12 @@ private fun Game.outbreak() {
 }
 
 private fun Game.shortCircuit() {
-    val bats = map.building.filterNotNull().filter { it.def == BuildDef.BATTERY && it.built && it.charge > 150f }
+    val bats = map.buildings().filter { it.def == BuildDef.BATTERY && it.built && it.charge > 150f }
     if (bats.isEmpty()) return
     val b = rng.pick(bats)
     say("A short circuit! A battery exploded.", 3)
     explode(b.x, b.y, 3.2f, 28f, null, true)
-    map.building[map.idx(b.x, b.y)] = null
+    map.removeBuilding(b)
 }
 
 private fun Game.blight() {

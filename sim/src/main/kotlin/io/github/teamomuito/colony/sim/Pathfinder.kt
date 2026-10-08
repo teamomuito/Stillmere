@@ -98,8 +98,12 @@ class Pathfinder(private val m: GameMap) {
         return out
     }
 
-    private fun isGoal(x: Int, y: Int, tx: Int, ty: Int, adjacent: Boolean): Boolean =
-        if (adjacent) max(abs(x - tx), abs(y - ty)) <= 1 && (x != tx || y != ty) else x == tx && y == ty
+    private fun isGoal(x: Int, y: Int, tx: Int, ty: Int, adjacent: Boolean): Boolean {
+        if (!adjacent) return x == tx && y == ty
+        val b = m.building[m.idx(tx, ty)]
+        if (b != null && (b.fw > 1 || b.fh > 1)) return x >= b.x - 1 && x <= b.x + b.fw && y >= b.y - 1 && y <= b.y + b.fh && !b.covers(x, y)
+        return max(abs(x - tx), abs(y - ty)) <= 1 && (x != tx || y != ty)
+    }
 
     private fun h(x: Int, y: Int, tx: Int, ty: Int): Int {
         val dx = abs(x - tx); val dy = abs(y - ty)

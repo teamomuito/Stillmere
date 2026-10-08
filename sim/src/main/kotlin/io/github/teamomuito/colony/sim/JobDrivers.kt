@@ -123,7 +123,7 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
                 if (b == null) { j.stage = 0; return }
                 if (goTo(p, j.tx, j.ty, adjacent = true) == 0) {
                     b.hp -= 5f
-                    if (b.hp <= 0f) { map.building[map.idx(j.tx, j.ty)] = null; map.roomDirty = true; j.stage = 0; say("${p.name} destroyed a ${b.def.label.lowercase()}.", 2) }
+                    if (b.hp <= 0f) { map.removeBuilding(b); j.stage = 0; say("${p.name} destroyed a ${b.def.label.lowercase()}.", 2) }
                 }
             } else if (j.stage == 9) wanderStep(p, j)
         }
@@ -623,10 +623,10 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                 if (b.def.isFloor) {
                     map.floor[i] = b.def
                     map.floorQuality[i] = q
-                    map.building[i] = null
+                    map.removeBuilding(b)
                 } else if (b.def == BuildDef.CONDUIT) {
                     map.conduit[i] = true
-                    map.building[i] = null
+                    map.removeBuilding(b)
                 } else {
                     b.built = true
                     b.hp = b.def.hp
@@ -658,7 +658,7 @@ private fun Game.driveDecon(p: Pawn, j: Job) {
     val def = b?.def ?: fl ?: BuildDef.CONDUIT
     if (doWork(p, j, SkillType.CONSTRUCTION, def.work * 0.5f)) {
         for ((t, n) in def.cost) map.drop(t, max(1, n / 2), p.x, p.y)
-        if (b != null) map.building[i] = null else if (fl != null) map.floor[i] = null else map.conduit[i] = false
+        if (b != null) map.removeBuilding(b) else if (fl != null) map.floor[i] = null else map.conduit[i] = false
         map.desig[i] = 0
         map.roomDirty = true
         endJob(p)

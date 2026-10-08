@@ -56,7 +56,7 @@ fun Game.totalFoodNutrition(): Float {
     return n
 }
 
-fun Game.bedCount(): Int = map.building.count { it != null && it.built && it.def.sleeps && !it.prisonerBed }
+fun Game.bedCount(): Int = map.buildings().count { it != null && it.built && it.def.sleeps && !it.prisonerBed }
 
 fun Game.categoryCount(cat: ItemCat): Int = map.countItems { it.cat == cat }
 

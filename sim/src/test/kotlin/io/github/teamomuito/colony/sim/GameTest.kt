@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -584,9 +585,8 @@ class VictoryTest {
         for (t in listOf(ItemType.STEEL, ItemType.PLASTEEL, ItemType.COMPONENT, ItemType.GOLD)) g.map.drop(t, 800, g.homeX, g.homeY - 2)
         val spots = listOf(BuildDef.SHIP_COMPUTER, BuildDef.SHIP_ENGINE, BuildDef.SHIP_ENGINE, BuildDef.SHIP_REACTOR, BuildDef.SHIP_CASKET)
         for ((k, d) in spots.withIndex()) {
-            val x = g.homeX + 6 + k * 2; val y = g.homeY - 7
-            val i = g.map.idx(x, y)
-            g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null; g.map.building[i] = null
+            val x = g.homeX + 6 + k * 4; val y = g.homeY - 7
+            for (yy in y until y + 4) for (xx in x until x + 4) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null; g.map.building[i] = null }
             assertTrue("place ${d.label}", g.placeBlueprint(d, x, y))
         }
         for (c in g.colonists) { c.skill[SkillType.CONSTRUCTION.ordinal] = 16; c.priority[WorkType.CONSTRUCT.ordinal] = 1 }
@@ -867,5 +867,49 @@ class LifeTest {
         assertTrue(calf!!.bodyScale() < 0.7f)
         repeat(Race.COW.matureDays + 1) { g.run(TICKS_PER_DAY) }
         assertEquals(LifeStage.ADULT, calf.stage)
+    }
+}
+
+class MultiTileTest {
+    @Test fun footprintsBlockAndRotate() {
+        val g = newGame(41); g.quiet()
+        val x = g.homeX + 5; val y = g.homeY + 5
+        for (yy in y - 1..y + 4) for (xx in x - 1..x + 4) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
+        assertTrue(g.canBuildAt(BuildDef.STOVE_FUEL, x, y))
+        assertTrue(g.placeBlueprint(BuildDef.STOVE_FUEL, x, y))
+        val b = g.map.building[g.map.idx(x, y)]!!
+        assertSame(b, g.map.building[g.map.idx(x + 2, y)])
+        assertFalse(g.canBuildAt(BuildDef.TABLE, x + 1, y))
+        assertTrue(g.placeBlueprint(BuildDef.BED, x, y + 2, rot = true))
+        val bed = g.map.building[g.map.idx(x, y + 2)]!!
+        assertEquals(2, bed.fw); assertEquals(1, bed.fh)
+        assertSame(bed, g.map.building[g.map.idx(x + 1, y + 2)])
+        assertEquals(2, g.map.buildings().size)
+        val l = SaveGame.read(SaveGame.write(g))
+        assertEquals(2, l.map.buildings().size)
+        assertTrue(l.map.buildings().any { it.def == BuildDef.BED && it.rot })
+        assertSame(l.map.building[l.map.idx(x + 2, y)], l.map.building[l.map.idx(x, y)])
+        g.map.removeBuilding(b)
+        assertNull(g.map.building[g.map.idx(x + 2, y)])
+    }
+
+    @Test fun colonistsBuildAndCookAtAWideStove() {
+        val g = newGame(42); g.quiet()
+        val x = g.homeX + 4; val y = g.homeY - 4
+        for (yy in y - 1..y + 2) for (xx in x - 1..x + 5) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
+        g.map.drop(ItemType.STEEL, 200, g.homeX, g.homeY - 2)
+        g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 1, g.homeY, ZoneKind.STOCKPILE)
+        g.map.drop(ItemType.STEEL, 200, g.homeX, g.homeY - 2)
+        g.map.drop(ItemType.RICE, 60, g.homeX, g.homeY - 1)
+        assertTrue(g.placeBlueprint(BuildDef.STOVE_FUEL, x, y))
+        for (c in g.colonists) { c.skill[SkillType.CONSTRUCTION.ordinal] = 12; c.priority[WorkType.CONSTRUCT.ordinal] = 1; c.priority[WorkType.COOK.ordinal] = 1 }
+        g.run(TICKS_PER_DAY)
+        val stove = g.map.building[g.map.idx(x + 1, y)]!!
+        assertTrue("stove built", stove.built)
+        stove.fuel = 12f
+        val bill = Bill(Recipe.COOK_SIMPLE); bill.mode = BillMode.DO_X; bill.target = 2
+        stove.bills.add(bill)
+        g.run(TICKS_PER_DAY)
+        assertTrue("cooked", bill.done >= 1)
     }
 }

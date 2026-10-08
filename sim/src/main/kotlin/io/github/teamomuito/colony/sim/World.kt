@@ -51,7 +51,7 @@ fun Game.fireTick() {
             if (b != null && b.def.flam > 0f) {
                 b.hp -= 4f * f.intensity * b.def.flam
                 if (b.hp <= 0f) {
-                    map.building[i] = null; map.roomDirty = true
+                    map.removeBuilding(b)
                     say("A ${b.def.label.lowercase()} burned down.", 2)
                 }
             }
@@ -92,7 +92,7 @@ fun Game.explode(x: Int, y: Int, radius: Float, damage: Float, source: Pawn? = n
         val fall = 1f - d / (radius + 0.5f)
         if (b != null && b.built) {
             b.hp -= damage * 3f * fall
-            if (b.hp <= 0f) { map.building[i] = null; map.roomDirty = true }
+            if (b.hp <= 0f) { map.removeBuilding(b) }
         }
         if (map.terrain[i] == Terrain.ROCK && damage > 30f && rng.chance(0.1f * fall)) { /* craters do not mine rock */ }
         if (fire) igniteCell(i, 0.4f * fall)
@@ -139,7 +139,7 @@ fun Game.powerTick() {
     }
     ps.nets = n
     if (n == 0) {
-        for (b in m.building) if (b != null && b.def.isPowered) b.powered = false
+        for (b in m.buildings()) if (b != null && b.def.isPowered) b.powered = false
         return
     }
     // Union-find over components that share a device.
@@ -147,7 +147,7 @@ fun Game.powerTick() {
     fun find(a: Int): Int { var x = a; while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x] }; return x }
     val devices = ArrayList<Building>()
     val attach = ArrayList<IntArray>()
-    for (b in m.building) {
+    for (b in m.buildings()) {
         if (b == null || !b.built) continue
         val d = b.def
         if (!d.isPowered && d != BuildDef.BATTERY) continue
@@ -199,7 +199,7 @@ fun Game.powerTick() {
     // Anything not on a net is off.
     val onNet = HashSet<Building>()
     for (net in nets.values) { onNet.addAll(net.consumers); onNet.addAll(net.batteries) }
-    for (b in m.building) if (b != null && b.def.consumesPower && b !in onNet) b.powered = false
+    for (b in m.buildings()) if (b != null && b.def.consumesPower && b !in onNet) b.powered = false
 }
 
 // ----------------------------------------------------------------------------------- slow world tick
@@ -280,7 +280,7 @@ private fun Game.lightTick() {
     for (i in 0 until m.size) {
         m.light[i] = if (m.natRoof[i]) 0f else if (m.roomIndoorAt(i)) day * 0.85f else day
     }
-    for (b in m.building) {
+    for (b in m.buildings()) {
         if (b == null || !b.built || b.def.light <= 0f) continue
         val active = (b.def.fuelCap > 0f && b.fuel > 0f) || (b.def.power < 0f && b.powered) || (b.def.fuelCap <= 0f && b.def.power == 0f)
         if (!active) continue
@@ -309,7 +309,7 @@ private fun Game.lightTick() {
 private fun Game.roomClimate(out: Float) {
     val m = map
     val heat = FloatArray(m.roomTemp.size)
-    for (b in m.building) {
+    for (b in m.buildings()) {
         if (b == null || !b.built) continue
         val d = b.def
         if (d.heat == 0f) continue
@@ -446,7 +446,7 @@ private fun Game.roomStats() {
         val fl = m.floor[i]
         b += fl?.beauty ?: -0.2f
         val bd = m.building[i]
-        if (bd != null && bd.built) {
+        if (bd != null && bd.built && bd.x == i % m.w && bd.y == i / m.w) {
             b += bd.def.beauty * bd.quality.mult
             wealth[r] += bd.def.totalCost
             when {
@@ -518,7 +518,7 @@ fun impressMood(score: Float): Float = when {
 // ----------------------------------------------------------------------------------- traps and turrets
 
 fun Game.turretsTick() {
-    for (b in map.building) {
+    for (b in map.buildings()) {
         if (b == null || !b.built) continue
         if (b.def != BuildDef.TURRET && b.def != BuildDef.MORTAR) continue
         if (b.cooldown > 0) { b.cooldown -= 10; continue }
@@ -560,7 +560,7 @@ private fun Game.mortarFire(b: Building) {
 }
 
 fun Game.trapsTick() {
-    for (b in map.building.toList()) {
+    for (b in map.buildings()) {
         if (b == null || !b.built || !b.def.trap) continue
         for (h in pawns) {
             if (!h.alive || h.downed || h.x != b.x || h.y != b.y) continue
@@ -573,7 +573,7 @@ fun Game.trapsTick() {
                 dealDamage(h, DamageKind.CRUSH, 34f)
             }
             say("A ${b.def.label.lowercase()} caught ${h.name}.", if (h.hostile) 1 else 2)
-            if (rng.chance(0.5f)) { map.building[map.idx(b.x, b.y)] = null }
+            if (rng.chance(0.5f)) { map.removeBuilding(b) }
             break
         }
     }

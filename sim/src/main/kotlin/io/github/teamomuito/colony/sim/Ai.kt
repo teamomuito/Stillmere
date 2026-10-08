@@ -142,7 +142,7 @@ private fun Game.pickTurretTarget(p: Pawn): Building? {
     var best: Building? = null
     var bd = p.weapon.range * p.weapon.range
     if (!p.weapon.ranged) return null
-    for (b in map.building) {
+    for (b in map.buildings()) {
         if (b == null || !b.built || (b.def != BuildDef.TURRET && b.def != BuildDef.MORTAR)) continue
         val d = ((b.x - p.x) * (b.x - p.x) + (b.y - p.y) * (b.y - p.y)).toFloat()
         if (d < bd && map.lineOfSight(p.x, p.y, b.x, b.y)) { best = b; bd = d }
@@ -186,7 +186,7 @@ internal fun Game.hostileAI(p: Pawn) {
             p.attackCd = w.cooldown
             turret.hp -= w.damage * w.burst * 0.6f
             shots.add(Shot(p.x.toFloat(), p.y.toFloat(), turret.x.toFloat(), turret.y.toFloat(), tick + 5, true))
-            if (turret.hp <= 0f) { map.building[map.idx(turret.x, turret.y)] = null; map.roomDirty = true; say("A ${turret.def.label.lowercase()} was destroyed!", 3) }
+            if (turret.hp <= 0f) { map.removeBuilding(turret); map.roomDirty = true; say("A ${turret.def.label.lowercase()} was destroyed!", 3) }
         } else p.warmup++
         return
     }

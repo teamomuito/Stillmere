@@ -421,7 +421,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     private fun cell(x: Int, y: Int) = if (map.inB(x, y)) map.idx(x, y) else -1
 
     fun designate(x: Int, y: Int, kind: Int): Boolean {
-        val i = cell(x, y); if (i < 0) return false
+        var i = cell(x, y); if (i < 0) return false
+        if (kind == Desig.DECON || kind == Desig.REPAIR) map.building[i]?.let { i = map.idx(it.x, it.y) }
         when (kind) {
             Desig.MINE -> if (map.terrain[i] == Terrain.ROCK) map.desig[i] = kind.toByte() else return false
             Desig.CUT -> if (map.plant[i] != null && !(map.plant[i]!!.type.crop && map.zoneKind(i) == ZoneKind.GROWING)) map.desig[i] = kind.toByte() else return false
@@ -440,7 +441,14 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     fun clearDesignation(x: Int, y: Int) { val i = cell(x, y); if (i >= 0) map.desig[i] = 0 }
 
-    fun canBuildAt(def: BuildDef, x: Int, y: Int): Boolean {
+    /** Whether the whole footprint (rotated or not) is buildable. */
+    fun canBuildAt(def: BuildDef, x: Int, y: Int, rot: Boolean = false): Boolean {
+        val fw = if (rot) def.h else def.w; val fh = if (rot) def.w else def.h
+        for (yy in y until y + fh) for (xx in x until x + fw) if (!canBuildCell(def, xx, yy)) return false
+        return true
+    }
+
+    private fun canBuildCell(def: BuildDef, x: Int, y: Int): Boolean {
         val i = cell(x, y); if (i < 0) return false
         val t = map.terrain[i]
         if (!t.passable || t == Terrain.WATER_SHALLOW) return false
@@ -449,25 +457,28 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (map.building[i] != null) return false
         if (def.isFloor) return map.floor[i] != def
         if (def == BuildDef.HYDROPONICS && map.plant[i] != null) return false
-        if (def.isShip && def == BuildDef.SHIP_COMPUTER && map.building.any { it != null && it.def == BuildDef.SHIP_COMPUTER }) return false
+        if (def.isShip && def == BuildDef.SHIP_COMPUTER && map.buildings().any { it != null && it.def == BuildDef.SHIP_COMPUTER }) return false
         if (def.workbench && def != BuildDef.CAMPFIRE && def != BuildDef.CRAFTING_SPOT && map.plant[i]?.type?.isTree == true) return false
         return true
     }
 
-    fun placeBlueprint(def: BuildDef, x: Int, y: Int): Boolean {
-        if (!canBuildAt(def, x, y)) return false
-        val i = map.idx(x, y)
-        val pl = map.plant[i]
-        if (pl != null) map.plant[i] = null
-        map.building[i] = Building(def, x, y, false)
-        map.desig[i] = 0
+    fun placeBlueprint(def: BuildDef, x: Int, y: Int, rot: Boolean = false): Boolean {
+        if (!canBuildAt(def, x, y, rot)) return false
+        val b = Building(def, x, y, false)
+        b.rot = rot
+        for (yy in y until y + b.fh) for (xx in x until x + b.fw) {
+            val i = map.idx(xx, yy)
+            if (map.plant[i] != null) map.plant[i] = null
+            map.desig[i] = 0
+        }
+        map.setBuilding(b)
         return true
     }
 
     private fun removeBlueprint(i: Int) {
         val b = map.building[i] ?: return
         if (!b.built) for ((k, c) in b.def.cost.withIndex()) if (b.delivered[k] > 0) map.drop(c.first, b.delivered[k], b.x, b.y)
-        map.building[i] = null
+        map.removeBuilding(b)
     }
 
     fun setZone(x: Int, y: Int, kind: Int, crop: PlantType = PlantType.RICE, zone: Zone? = null): Zone? {
@@ -553,7 +564,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     fun shipComplete(): Boolean {
         var core = 0; var engines = 0; var reactor = 0; var casket = 0
-        for (b in map.building) {
+        for (b in map.buildings()) {
             if (b == null || !b.built) continue
             when (b.def) {
                 BuildDef.SHIP_COMPUTER -> core++

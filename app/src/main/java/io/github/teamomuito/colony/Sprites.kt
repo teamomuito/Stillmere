@@ -215,6 +215,18 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         for (k in 0 until 3) { val py = sy + s * (0.2f + 0.3f * k); line(c, sx, py, sx + s, py, 0x44201408, lw); line(c, sx, py + lw, sx + s, py + lw, 0x22D8B880, max(1f, lw * 0.4f)) }
     }
 
+    /** Base colour of the slab under long workbenches. */
+    fun slabColor(def: BuildDef): Int = when (def) {
+        BuildDef.STOVE_FUEL, BuildDef.STOVE_ELEC -> 0xFF4A4C52.toInt()
+        BuildDef.BUTCHER_TABLE -> 0xFFA88A6A.toInt()
+        BuildDef.TAILOR_BENCH -> 0xFF8A6A4A.toInt()
+        BuildDef.SMITHY, BuildDef.MACHINING, BuildDef.FAB_BENCH -> 0xFF3A3D44.toInt()
+        BuildDef.RESEARCH_BENCH -> 0xFF6B5A44.toInt()
+        BuildDef.HI_TECH_BENCH -> 0xFF2E4A5E.toInt()
+        BuildDef.DRUG_LAB -> 0xFF6AAE88.toInt()
+        else -> 0xFF8E8E92.toInt()
+    }
+
     // ------------------------------------------------------------------ walls
     private fun wallish(m: GameMap, x: Int, y: Int): Boolean {
         if (!m.inB(x, y)) return false

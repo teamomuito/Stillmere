@@ -280,7 +280,7 @@ fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
     p.weaponItem?.let { if (p.faction != Faction.WILD) map.drop(it, 1, cx, cy, p.weaponQuality) }
     for (w in p.apparel) if (w.hp > 20f) map.drop(w.type, 1, cx, cy, w.quality)
     p.apparel.clear()
-    for (b in map.building) if (b != null && b.ownerId == p.id) b.ownerId = -1
+    for (b in map.buildings()) if (b != null && b.ownerId == p.id) b.ownerId = -1
     when {
         p.faction == Faction.PLAYER && !p.isAnimal && !p.prisoner -> {
             say("${p.name} has died ($cause).", 3)

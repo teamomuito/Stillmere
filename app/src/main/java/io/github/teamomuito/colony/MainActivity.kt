@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     private lateinit var resources2: TextView
     private lateinit var banner: TextView
     private lateinit var toolChip: TextView
+    private lateinit var rotChip: TextView
     lateinit var tileCard: LinearLayout
     private lateinit var tileText: TextView
     private lateinit var tileActions: LinearLayout
@@ -227,6 +228,8 @@ class MainActivity : Activity() {
         }
         toolChip = ui.button("", 12f) { setTool(Tool.Select) }.apply { visibility = View.GONE; setTextColor(ui.accent) }
         bar.addView(toolChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
+        rotChip = ui.button("Rotate ⟳", 12f) { view.buildRot = !view.buildRot; view.invalidate() }.apply { visibility = View.GONE }
+        bar.addView(rotChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
         val items = listOf<Pair<String, () -> Unit>>(
             "Architect" to { panels.toggle("architect") },
             "Work" to { panels.toggle("work") },
@@ -342,7 +345,7 @@ class MainActivity : Activity() {
         if (hot != null) out += Alert("${hot.name.substringBefore(' ')} is overheating", 2, hot.x, hot.y)
         if (g.bedCount() < cols.size) out += Alert("Need ${cols.size - g.bedCount()} more bed(s)", 1)
         if (g.map.zones.values.none { it.kind == ZoneKind.STOCKPILE }) out += Alert("No stockpile zone", 1)
-        if (g.researchCurrent == null && g.map.building.any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH }) out += Alert("No research selected", 1)
+        if (g.researchCurrent == null && g.map.buildings().any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH }) out += Alert("No research selected", 1)
         if (g.power.nets > 0 && g.power.consumed > g.power.produced + 1f && g.power.stored <= 0f) out += Alert("Power shortage", 2)
         if (g.solarFlareUntil > g.tick) out += Alert("Solar flare", 2)
         if (g.toxicFalloutUntil > g.tick) out += Alert("Toxic fallout", 3)
@@ -401,6 +404,7 @@ class MainActivity : Activity() {
         view.tool = t
         toolChip.visibility = if (t === Tool.Select) View.GONE else View.VISIBLE
         toolChip.text = "${t.label}  ✕"
+        rotChip.visibility = if (t is Tool.Build && t.def.w != t.def.h) View.VISIBLE else View.GONE
         tileCard.visibility = View.GONE
         view.selectedCell = -1
         view.invalidate()
@@ -517,7 +521,9 @@ class MainActivity : Activity() {
                 n = 1
             }
             else -> {
-                for (y in y0..y1) for (x in x0..x1) {
+                val stepX = (t as? Tool.Build)?.let { if (view.buildRot) it.def.h else it.def.w } ?: 1
+                val stepY = (t as? Tool.Build)?.let { if (view.buildRot) it.def.w else it.def.h } ?: 1
+                for (y in y0..y1 step stepY) for (x in x0..x1 step stepX) {
                     if (!g.map.inB(x, y)) continue
                     val ok = when (t) {
                         Tool.Mine -> g.designate(x, y, Desig.MINE)
@@ -530,7 +536,7 @@ class MainActivity : Activity() {
                             if (g.map.building[g.map.idx(x, y)]?.built == false) g.designate(x, y, Desig.DECON) else true
                         }
                         Tool.ClearZone -> { g.setZone(x, y, ZoneKind.NONE); true }
-                        is Tool.Build -> g.placeBlueprint(t.def, x, y)
+                        is Tool.Build -> g.placeBlueprint(t.def, x, y, view.buildRot)
                         else -> false
                     }
                     if (ok) n++

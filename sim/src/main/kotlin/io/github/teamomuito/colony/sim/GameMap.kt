@@ -29,6 +29,10 @@ class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
     var prisonerBed = false
     var occupant = -1
     var variant = 0
+    var rot = false
+    val fw get() = if (rot) def.h else def.w
+    val fh get() = if (rot) def.w else def.h
+    fun covers(px: Int, py: Int) = px >= x && px < x + fw && py >= y && py < y + fh
     val lit get() = built && fuel > 0f && def.fuelCap > 0f
     fun materialsComplete(): Boolean {
         for (i in def.cost.indices) if (delivered[i] < def.cost[i].second) return false
@@ -72,6 +76,32 @@ class GameMap(val w: Int, val h: Int) {
     val floor = arrayOfNulls<BuildDef>(size)
     val floorQuality = Array(size) { Quality.NORMAL }
     val building = arrayOfNulls<Building>(size)
+    private var bVersion = 0
+    private var bCache: List<Building> = emptyList()
+    private var bCacheVersion = -1
+
+    /** Put a building on every cell of its footprint. */
+    fun setBuilding(b: Building) {
+        for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy)) building[idx(xx, yy)] = b
+        roomDirty = true; bVersion++
+    }
+
+    fun removeBuilding(b: Building) {
+        for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy) && building[idx(xx, yy)] === b) building[idx(xx, yy)] = null
+        roomDirty = true; bVersion++
+    }
+
+    /** Each building once, even if it covers several cells. */
+    fun buildings(): List<Building> {
+        if (bCacheVersion == bVersion) return bCache
+        val out = ArrayList<Building>()
+        for (y in 0 until h) for (x in 0 until w) {
+            val b = building[y * w + x]
+            if (b != null && b.x == x && b.y == y) out.add(b)
+        }
+        bCache = out; bCacheVersion = bVersion
+        return out
+    }
     val plant = arrayOfNulls<Plant>(size)
     val items = HashMap<Int, ItemStack>()
     val zoneId = IntArray(size)
@@ -314,7 +344,7 @@ class GameMap(val w: Int, val h: Int) {
     fun wealth(): Float {
         var v = 0f
         for (s in items.values) v += s.type.value * s.count * (if (s.type.isGear) s.quality.mult else 1f)
-        for (b in building) if (b != null && b.built) v += b.def.totalCost * b.quality.mult
+        for (b in buildings()) if (b.built) v += b.def.totalCost * b.quality.mult
         return v
     }
 

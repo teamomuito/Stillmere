@@ -53,6 +53,7 @@ class GameView(context: Context) : View(context) {
     var tool: Tool = Tool.Select
     var selectedId: Int = -1
     var selectedCell: Int = -1
+    var buildRot = false
 
     var onTileTap: ((Int, Int) -> Unit)? = null
     var onArea: ((Int, Int, Int, Int) -> Unit)? = null
@@ -312,11 +313,11 @@ class GameView(context: Context) : View(context) {
             val sy = (y - camY) * s
             val pl = m.plant[i]
             if (pl != null) sprites.plant(c, pl.type, pl.growth, pl.mature, x, y, sx, sy, s, frame)
-            val b = m.building[i]
+            val b = m.building[i]?.takeIf { it.x == x && it.y == y }
             if (b != null) {
                 val a = if (b.built) 255 else 110
                 if (!b.def.isFloor && !b.def.isDoor && b.def != BuildDef.WOOD_WALL && b.def != BuildDef.STONE_WALL && b.def != BuildDef.STEEL_WALL && b.def != BuildDef.CONDUIT && b.def != BuildDef.TRAP_SPIKE && b.def != BuildDef.TRAP_DEADFALL && a > 200) sprites.furnitureShadow(c, sx, sy, s)
-                drawBuilding(c, m, x, y, b.def, sx, sy, s, a, b.lit || (b.powered && b.def.light > 0f), b.built, b.fuel > 0f, b.def.fuelCap)
+                drawBig(c, m, b, sx, sy, s, a)
                 if (!b.built && s >= 26f) {
                     var done = 0; var tot = 0
                     for (k in b.def.cost.indices) { done += b.delivered[k]; tot += b.def.cost[k].second }
@@ -325,7 +326,7 @@ class GameView(context: Context) : View(context) {
                 if (b.built && b.hp < b.def.hp * 0.99f && b.def.hp > 10f) {
                     fill.color = 0xFFCC3333.toInt(); c.drawRect(sx, sy + s - 3, sx + s * (b.hp / b.def.hp), sy + s, fill)
                 }
-                if (b.forbidden) { fill.color = 0x88B02020.toInt(); c.drawRect(sx, sy, sx + s, sy + s, fill) }
+                if (b.forbidden) { fill.color = 0x88B02020.toInt(); c.drawRect(sx, sy, sx + s * b.fw, sy + s * b.fh, fill) }
                 if (b.built && b.def.consumesPower && !b.powered && s >= 22f) {
                     text.textSize = s * 0.3f; text.color = 0xFFFFD27A.toInt(); c.drawText("⚡", sx + s * 0.78f, sy + s * 0.3f, text)
                 }
@@ -424,14 +425,16 @@ class GameView(context: Context) : View(context) {
             val lx = min(a0[0], a1[0]); val hx = max(a0[0], a1[0])
             val ly = min(a0[1], a1[1]); val hy = max(a0[1], a1[1])
             val tl = tool
-            for (y in ly..hy) for (x in lx..hx) {
+            val fwp = if (tl is Tool.Build) (if (buildRot) tl.def.h else tl.def.w) else 1
+            val fhp = if (tl is Tool.Build) (if (buildRot) tl.def.w else tl.def.h) else 1
+            for (y in ly..hy step fhp) for (x in lx..hx step fwp) {
                 if (!m.inB(x, y)) continue
                 val ok = when (tl) {
-                    is Tool.Build -> g.canBuildAt(tl.def, x, y)
+                    is Tool.Build -> g.canBuildAt(tl.def, x, y, buildRot)
                     else -> true
                 }
                 fill.color = if (ok) 0x5560E0A0 else 0x55E05050
-                c.drawRect((x - camX) * s, (y - camY) * s, (x + 1 - camX) * s, (y + 1 - camY) * s, fill)
+                c.drawRect((x - camX) * s, (y - camY) * s, (x + fwp - camX) * s, (y + fhp - camY) * s, fill)
             }
             stroke.color = Color.WHITE; stroke.strokeWidth = 2f
             c.drawRect((lx - camX) * s, (ly - camY) * s, (hx + 1 - camX) * s, (hy + 1 - camY) * s, stroke)
@@ -521,6 +524,29 @@ class GameView(context: Context) : View(context) {
         if (animal) { rect.set(sx + s * 0.15f, sy + s * 0.3f, sx + s * 0.85f, sy + s * 0.7f); c.drawOval(rect, fill) }
         else { rect.set(sx + s * 0.12f, sy + s * 0.38f, sx + s * 0.88f, sy + s * 0.62f); c.drawRoundRect(rect, s * 0.1f, s * 0.1f, fill); c.drawCircle(sx + s * 0.2f, sy + s * 0.5f, s * 0.12f, fill) }
         if (rot > 0.4f) { fill.color = Color.argb((rot * 140).toInt(), 90, 110, 30); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.36f, fill) }
+    }
+
+    /** Draws a building over its whole footprint: stretched for furniture, cell by cell on a slab for long workbenches. */
+    private fun drawBig(c: Canvas, m: io.github.teamomuito.colony.sim.GameMap, b: io.github.teamomuito.colony.sim.Building, sx: Float, sy: Float, s: Float, alpha: Int) {
+        val def = b.def
+        val lit = b.lit || (b.powered && def.light > 0f)
+        val fw = b.fw; val fh = b.fh
+        if (fw == 1 && fh == 1) { drawBuilding(c, m, b.x, b.y, def, sx, sy, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap); return }
+        // Shadow under the whole piece.
+        if (alpha > 200) { fill.color = 0x33000000; rect.set(sx + s * 0.1f, sy + s * 0.12f, sx + s * (fw - 0.02f), sy + s * (fh - 0.02f)); c.drawRoundRect(rect, s * 0.12f, s * 0.12f, fill) }
+        val perCell = def.workbench && maxOf(fw, fh) >= 3
+        if (perCell) {
+            fill.color = (sprites.slabColor(def) and 0x00FFFFFF) or (alpha shl 24)
+            rect.set(sx + s * 0.04f, sy + s * 0.08f, sx + s * (fw - 0.04f), sy + s * (fh - 0.08f)); c.drawRoundRect(rect, s * 0.1f, s * 0.1f, fill)
+            for (iy in 0 until fh) for (ix in 0 until fw) drawBuilding(c, m, b.x, b.y, def, sx + ix * s, sy + iy * s, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap)
+        } else {
+            c.save()
+            c.translate(sx + s * fw / 2f, sy + s * fh / 2f)
+            if (b.rot) c.rotate(90f)
+            c.scale(def.w.toFloat(), def.h.toFloat())
+            drawBuilding(c, m, b.x, b.y, def, -s / 2f, -s / 2f, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap)
+            c.restore()
+        }
     }
 
     private fun rr(x0: Float, y0: Float, x1: Float, y1: Float, r: Float, color: Int) { fill.color = color; rect.set(x0, y0, x1, y1); canvasRef?.drawRoundRect(rect, r, r, fill) }

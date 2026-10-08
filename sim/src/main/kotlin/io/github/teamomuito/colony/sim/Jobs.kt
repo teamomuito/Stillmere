@@ -78,8 +78,12 @@ internal fun Game.nearestItem(p: Pawn, shared: Boolean = false, skip: Int = -1, 
 
 // ---------------------------------------------------------------- movement
 
-internal fun Game.goalReached(p: Pawn, tx: Int, ty: Int, adjacent: Boolean): Boolean =
-    if (adjacent) max(abs(p.x - tx), abs(p.y - ty)) <= 1 && (p.x != tx || p.y != ty) else p.x == tx && p.y == ty
+internal fun Game.goalReached(p: Pawn, tx: Int, ty: Int, adjacent: Boolean): Boolean {
+    if (!adjacent) return p.x == tx && p.y == ty
+    val b = if (map.inB(tx, ty)) map.building[map.idx(tx, ty)] else null
+    if (b != null && (b.fw > 1 || b.fh > 1)) return p.x >= b.x - 1 && p.x <= b.x + b.fw && p.y >= b.y - 1 && p.y <= b.y + b.fh && !b.covers(p.x, p.y)
+    return max(abs(p.x - tx), abs(p.y - ty)) <= 1 && (p.x != tx || p.y != ty)
+}
 
 /** @return 1 while moving, 0 on arrival, -1 if there is no way there. */
 fun Game.goTo(p: Pawn, tx: Int, ty: Int, adjacent: Boolean = false, breach: Boolean = false): Int {
@@ -121,7 +125,7 @@ internal fun Game.attackBuilding(p: Pawn, b: Building) {
     val dmg = if (p.weapon.ranged) 6f else p.weapon.damage * 1.2f
     b.hp -= dmg
     if (b.hp <= 0f) {
-        map.building[map.idx(b.x, b.y)] = null
+        map.removeBuilding(b)
         map.roomDirty = true
         say("A ${b.def.label.lowercase()} was destroyed!", 2)
     }
@@ -724,7 +728,7 @@ internal fun Game.billRunnable(b: Building, bill: Bill, p: Pawn): Boolean {
 internal fun Game.findBill(p: Pawn, wt: WorkType): Job? {
     var best: Job? = null
     var bd = Int.MAX_VALUE
-    for (b in map.building) {
+    for (b in map.buildings()) {
         if (b == null || !b.built || !b.def.workbench || b.bills.isEmpty() || b.forbidden) continue
         if (b.def.consumesPower && !b.powered) continue
         val i = map.idx(b.x, b.y)

@@ -143,7 +143,7 @@ class Panels(private val a: MainActivity) {
                     for (d in defs) {
                         val locked = d.research?.takeIf { it !in game.researchDone }?.label
                         val cost = if (d.cost.isEmpty()) "free" else d.cost.joinToString(", ") { "${it.second} ${shortName(it.first)}" }
-                        add("${d.label}\n$cost", locked) { a.setTool(Tool.Build(d)) }
+                        add("${d.label}${if (d.w * d.h > 1) " ${d.w}×${d.h}" else ""}\n$cost", locked) { a.setTool(Tool.Build(d)) }
                     }
                     if (defs.isEmpty()) row.addView(ui.label("Nothing here yet.", 12f, ui.dim))
                 }
@@ -249,7 +249,7 @@ class Panels(private val a: MainActivity) {
         if (!force && s == sig) return
         sig = s
         rebuild(body) { host ->
-            val benches = g.map.building.filterNotNull().filter { it.built && (it.def == BuildDef.RESEARCH_BENCH || it.def == BuildDef.HI_TECH_BENCH) }
+            val benches = g.map.buildings().filter { it.built && (it.def == BuildDef.RESEARCH_BENCH || it.def == BuildDef.HI_TECH_BENCH) }
             host.addView(ui.label(if (benches.isEmpty()) "Build a research bench to start researching" else "Research · ${g.researchDone.size}/${Research.entries.size} complete", 12f, ui.accent, true))
             val order = Research.entries.sortedWith(compareBy({ it.tier }, { it.cost }))
             for (r in order) {
