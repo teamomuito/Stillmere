@@ -82,6 +82,9 @@ fun Game.pickRaiders(): WorldFaction {
 /** Silver the faction wants for peace talks. */
 fun Game.peaceCost(f: WorldFaction): Int = if (f.permanentEnemy) -1 else 100 + max(0, -world.goodwill[f.id]) * 6
 
+fun Game.hasComms(): Boolean = map.buildings().any { it.built && it.def == BuildDef.COMMS_CONSOLE && it.powered }
+fun Game.hasBeacon(): Boolean = map.buildings().any { it.built && it.def == BuildDef.TRADE_BEACON }
+
 fun Game.silverInStockpiles(): Int = map.countItems(ItemType.SILVER)
 
 fun Game.takeSilver(n: Int): Boolean {
@@ -93,6 +96,7 @@ fun Game.takeSilver(n: Int): Boolean {
 
 /** Pay for peace talks: goodwill rises, and a hostile faction becomes merely wary. */
 fun Game.peaceTalks(f: WorldFaction): String? {
+    if (!hasComms()) return "You need a powered comms console."
     val cost = peaceCost(f)
     if (cost < 0) return "${f.name} will not negotiate."
     if (world.goodwill[f.id] > -10) return "Relations are already fine."
@@ -103,6 +107,7 @@ fun Game.peaceTalks(f: WorldFaction): String? {
 
 /** Ask a friendly faction to send a trade caravan to your colony. */
 fun Game.requestTraders(f: WorldFaction): String? {
+    if (!hasComms()) return "You need a powered comms console."
     if (!f.trades) return "${f.name} doesn't trade."
     if (standing(f) == Standing.HOSTILE) return "${f.name} won't deal with you."
     if (traders.isNotEmpty()) return "A trader is already here."
@@ -113,6 +118,7 @@ fun Game.requestTraders(f: WorldFaction): String? {
 
 /** Ask an allied faction for fighters: they arrive at your map edge and fight on your side. */
 fun Game.requestAid(f: WorldFaction): String? {
+    if (!hasComms()) return "You need a powered comms console."
     if (standing(f) != Standing.ALLY) return "Only allies will send soldiers."
     if (world.goodwill[f.id] < 80) return "They need goodwill 80 or more."
     adjustGoodwill(f, -25, false)
@@ -133,4 +139,23 @@ fun Game.requestAid(f: WorldFaction): String? {
 /** Allies go home when their time is up. */
 fun Game.alliesHourly() {
     for (p in pawns) if (p.ally && p.alive && tick > p.escapeTick && !p.retreating) { p.retreating = true; p.drafted = false; endJob(p) }
+}
+
+/** Call an orbital trade ship: lands at a trade beacon with exotic goods. */
+fun Game.requestOrbitalTrader(): String? {
+    if (!hasComms()) return "You need a powered comms console."
+    val beacon = map.buildings().firstOrNull { it.built && it.def == BuildDef.TRADE_BEACON } ?: return "Build a trade beacon first."
+    if (traders.isNotEmpty()) return "A trader is already here."
+    if (!takeSilver(120)) return "The ship costs 120 silver."
+    spawnTrader(null, orbitalAt = beacon.x to beacon.y)
+    return null
+}
+
+/** Stacks the colony can sell: stockpiles, plus anything lying near a trade beacon. */
+fun Game.sellableStacks(): List<Map.Entry<Int, ItemStack>> {
+    val beacons = map.buildings().filter { it.built && it.def == BuildDef.TRADE_BEACON }
+    return map.items.entries.filter { e ->
+        val s = e.value
+        s.corpseOf == null && !s.forbidden && (map.zoneKind(e.key) != ZoneKind.NONE || beacons.any { Math.abs(it.x - s.x) <= 6 && Math.abs(it.y - s.y) <= 6 })
+    }
 }

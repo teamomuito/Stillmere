@@ -130,7 +130,7 @@ class Panels(private val a: MainActivity) {
                 "Zones" -> {
                     add("Stockpile", null) { a.setTool(Tool.Stockpile) }
                     add("Dumping", null) { a.setTool(Tool.Dumping) }
-                    for (c in listOf(PlantType.RICE, PlantType.POTATO, PlantType.CORN, PlantType.STRAWBERRY, PlantType.COTTON, PlantType.HEALROOT, PlantType.SMOKELEAF, PlantType.PSYCHOID, PlantType.HAYGRASS))
+                    for (c in listOf(PlantType.RICE, PlantType.POTATO, PlantType.CORN, PlantType.STRAWBERRY, PlantType.COTTON, PlantType.HEALROOT, PlantType.SMOKELEAF, PlantType.PSYCHOID, PlantType.HAYGRASS, PlantType.DEVILSTRAND_CROP).filter { it.research == null || it.research in game.researchDone })
                         add("Grow ${c.label.lowercase()}", null) { a.setTool(Tool.Growing(c)) }
                     add("Remove zone", null) { a.setTool(Tool.ClearZone) }
                     for (k in 0 until 3) {

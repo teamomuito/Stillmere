@@ -7,12 +7,12 @@ import kotlin.math.min
 fun Game.populateWildlife() {
     val b = map.biome
     val herds = when (b) {
-        Biome.TEMPERATE -> listOf(Race.DEER to 4, Race.MUFFALO to 3, Race.BOAR to 2, Race.HARE to 4, Race.TURKEY to 3, Race.WOLF to 4, Race.BEAR to 1, Race.RAT to 2)
-        Biome.BOREAL -> listOf(Race.DEER to 4, Race.HARE to 4, Race.WOLF to 5, Race.BEAR to 2, Race.MUFFALO to 2)
-        Biome.TUNDRA -> listOf(Race.HARE to 5, Race.WOLF to 4, Race.BEAR to 1, Race.MUFFALO to 3)
-        Biome.DESERT -> listOf(Race.HARE to 3, Race.TURKEY to 3, Race.BOAR to 2, Race.RAT to 2)
-        Biome.ARID -> listOf(Race.HARE to 4, Race.TURKEY to 3, Race.DEER to 3, Race.BOAR to 2, Race.WOLF to 2)
-        Biome.TROPICAL -> listOf(Race.BOAR to 4, Race.TURKEY to 4, Race.DEER to 3, Race.HARE to 3, Race.RAT to 3)
+        Biome.TEMPERATE -> listOf(Race.DEER to 4, Race.MUFFALO to 3, Race.BOAR to 2, Race.HARE to 4, Race.TURKEY to 3, Race.WOLF to 4, Race.BEAR to 1, Race.RAT to 2, Race.ELK to 2, Race.FOX to 2, Race.COUGAR to 1, Race.GOOSE to 2, Race.BOOMRAT to 1)
+        Biome.BOREAL -> listOf(Race.DEER to 3, Race.HARE to 4, Race.WOLF to 5, Race.BEAR to 2, Race.MUFFALO to 2, Race.CARIBOU to 3, Race.ELK to 2, Race.FOX to 2, Race.COUGAR to 1)
+        Biome.TUNDRA -> listOf(Race.HARE to 5, Race.WOLF to 4, Race.BEAR to 1, Race.MUFFALO to 3, Race.CARIBOU to 4, Race.FOX to 3, Race.BISON to 1)
+        Biome.DESERT -> listOf(Race.HARE to 3, Race.TURKEY to 2, Race.BOAR to 2, Race.RAT to 2, Race.DROMEDARY to 3, Race.FOX to 2, Race.OSTRICH to 2, Race.BOOMRAT to 2)
+        Biome.ARID -> listOf(Race.HARE to 4, Race.TURKEY to 3, Race.DEER to 2, Race.BOAR to 2, Race.WOLF to 2, Race.DROMEDARY to 2, Race.OSTRICH to 2, Race.BISON to 2, Race.COUGAR to 1, Race.BOOMALOPE to 1)
+        Biome.TROPICAL -> listOf(Race.BOAR to 4, Race.TURKEY to 4, Race.DEER to 2, Race.HARE to 3, Race.RAT to 3, Race.MONKEY to 3, Race.CAPYBARA to 3, Race.ELEPHANT to 1, Race.RHINO to 1, Race.BOOMALOPE to 2, Race.BOOMRAT to 2)
     }
     for ((race, groups) in herds) {
         repeat(groups) {

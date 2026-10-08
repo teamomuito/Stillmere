@@ -305,7 +305,7 @@ internal fun Game.startSleep(p: Pawn): Boolean {
 internal fun Game.startJoy(p: Pawn): Job? {
     // Drugs, when allowed.
     if (p.allowDrugs && p.joy < 0.6f && p.hediff(HediffKind.ALCOHOL_HIGH) == null) {
-        val s = nearestItem(p) { it.type == ItemType.BEER || it.type == ItemType.JOINT || it.type == ItemType.PSYCHITE_TEA && rng.chance(0.3f) }
+        val s = nearestItem(p) { it.type == ItemType.BEER || it.type == ItemType.JOINT || (it.type == ItemType.FLAKE || it.type == ItemType.YAYO) && rng.chance(0.4f) || it.type == ItemType.PSYCHITE_TEA && rng.chance(0.3f) }
         if (s != null) {
             val j = Job(JobType.SMOKE, s.x, s.y); j.key = key(map.idx(s.x, s.y), K_ITEM); reserve(p, j.key); j.item = s.type
             return j

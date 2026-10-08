@@ -557,8 +557,8 @@ class GameView(context: Context) : View(context) {
         fun col(argb: Int): Int = (argb and 0x00FFFFFF) or (alpha shl 24)
         canvasRef = c
         when (def) {
-            BuildDef.WOOD_WALL, BuildDef.STONE_WALL, BuildDef.STEEL_WALL -> sprites.wall(c, m, bx, by, def, sx, sy, s, alpha)
-            BuildDef.DOOR -> sprites.door(c, m, bx, by, sx, sy, s, alpha)
+            BuildDef.WOOD_WALL, BuildDef.STONE_WALL, BuildDef.STEEL_WALL, BuildDef.PLASTEEL_WALL -> sprites.wall(c, m, bx, by, def, sx, sy, s, alpha)
+            BuildDef.DOOR, BuildDef.STEEL_DOOR, BuildDef.AUTODOOR -> sprites.door(c, m, bx, by, sx, sy, s, alpha, def)
             BuildDef.SANDBAGS -> { fill.color = col(0xFFBFA878.toInt()); rect.set(sx + s * 0.05f, sy + s * 0.25f, sx + s * 0.95f, sy + s * 0.75f); c.drawRoundRect(rect, s * 0.2f, s * 0.2f, fill) }
             BuildDef.WOOD_FLOOR, BuildDef.STONE_FLOOR, BuildDef.STEEL_FLOOR, BuildDef.CARPET -> sprites.floor(c, def, bx, by, sx, sy, s)
             BuildDef.CONDUIT -> { stroke.color = col(0xFFD28F3A.toInt()); stroke.strokeWidth = max(2f, s * 0.1f); c.drawLine(sx + s * 0.2f, sy + s * 0.5f, sx + s * 0.8f, sy + s * 0.5f, stroke) }
@@ -649,6 +649,31 @@ class GameView(context: Context) : View(context) {
             BuildDef.MORTAR -> { fill.color = col(0xFF4A4F3A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.4f, fill); fill.color = col(0xFF22241A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.16f, fill) }
             BuildDef.TRAP_SPIKE -> { stroke.color = col(0xFFB0B4B8.toInt()); stroke.strokeWidth = 2.5f; for (k in 0 until 4) c.drawLine(sx + s * (0.2f + 0.2f * k), sy + s * 0.8f, sx + s * (0.2f + 0.2f * k), sy + s * 0.3f, stroke) }
             BuildDef.TRAP_DEADFALL -> { fill.color = col(0xFF7A7A7E.toInt()); c.drawRect(sx + s * 0.15f, sy + s * 0.15f, sx + s * 0.85f, sy + s * 0.85f, fill) }
+            BuildDef.ARMCHAIR -> {
+                rr(sx + s * 0.12f, sy + s * 0.12f, sx + s * 0.88f, sy + s * 0.88f, s * 0.16f, col(0xFF6A4A8A.toInt()))
+                rr(sx + s * 0.2f, sy + s * 0.3f, sx + s * 0.8f, sy + s * 0.82f, s * 0.12f, col(0xFF8A6AAA.toInt()))
+                rr(sx + s * 0.1f, sy + s * 0.1f, sx + s * 0.9f, sy + s * 0.28f, s * 0.1f, col(0xFF5A3E78.toInt()))
+            }
+            BuildDef.DRESSER -> {
+                rr(sx + s * 0.08f, sy + s * 0.18f, sx + s * 0.92f, sy + s * 0.88f, s * 0.05f, col(0xFF7A5230.toInt()))
+                stroke.color = col(0x55201008); stroke.strokeWidth = max(1f, s * 0.03f); c.drawLine(sx + s * 0.1f, sy + s * 0.53f, sx + s * 0.9f, sy + s * 0.53f, stroke); c.drawLine(sx + s * 0.5f, sy + s * 0.2f, sx + s * 0.5f, sy + s * 0.86f, stroke)
+                fill.color = col(0xFFE6C878.toInt()); for (k in 0 until 4) c.drawCircle(sx + s * (0.3f + 0.4f * (k % 2)), sy + s * (0.36f + 0.34f * (k / 2)), s * 0.03f, fill)
+            }
+            BuildDef.END_TABLE -> { rr(sx + s * 0.2f, sy + s * 0.2f, sx + s * 0.8f, sy + s * 0.8f, s * 0.08f, col(0xFF8B5E34.toInt())); fill.color = col(0xFFE8E0C8.toInt()); c.drawCircle(sx + s * 0.5f, sy + s * 0.5f, s * 0.12f, fill) }
+            BuildDef.COMMS_CONSOLE -> {
+                rr(sx + s * 0.06f, sy + s * 0.14f, sx + s * 0.94f, sy + s * 0.86f, s * 0.06f, col(0xFF3A4048.toInt()))
+                fill.color = col(0xFF1E2A32.toInt()); c.drawRect(sx + s * 0.16f, sy + s * 0.22f, sx + s * 0.84f, sy + s * 0.55f, fill)
+                fill.color = col(if (built) 0xFF7ADCEA.toInt() else 0xFF3A4A52.toInt()); c.drawRect(sx + s * 0.2f, sy + s * 0.26f, sx + s * 0.8f, sy + s * 0.5f, fill)
+                fill.color = col(0xFF9AA2AC.toInt()); c.drawRect(sx + s * 0.2f, sy + s * 0.62f, sx + s * 0.8f, sy + s * 0.76f, fill)
+            }
+            BuildDef.TRADE_BEACON -> {
+                fill.color = col(0xFF4A4E56.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.32f, fill)
+                stroke.color = col(0xFFE8B04A.toInt()); stroke.strokeWidth = max(2f, s * 0.06f); c.drawCircle(sx + s / 2, sy + s / 2, s * (0.2f + 0.05f * sin(frame * 0.2f)), stroke)
+                fill.color = col(0xFFFF6A3A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.07f, fill)
+            }
+            BuildDef.PASSIVE_COOLER -> { rr(sx + s * 0.1f, sy + s * 0.1f, sx + s * 0.9f, sy + s * 0.9f, s * 0.08f, col(0xFF7A8EA0.toInt())); stroke.color = col(0xFFC8DCEC.toInt()); stroke.strokeWidth = max(1.5f, s * 0.05f); for (k in 1..3) c.drawLine(sx + s * 0.18f, sy + s * (0.1f + 0.2f * k), sx + s * 0.82f, sy + s * (0.1f + 0.2f * k), stroke) }
+            BuildDef.SUN_LAMP -> { rr(sx + s * 0.1f, sy + s * 0.1f, sx + s * 0.9f, sy + s * 0.9f, s * 0.1f, col(0xFF4A4E56.toInt())); fill.color = col(if (lit) 0xFFFFF0A0.toInt() else 0xFF8A8A70.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.32f, fill); fill.color = col(if (lit) 0xFFFFFFFF.toInt() else 0xFFA0A088.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.16f, fill) }
+            BuildDef.FOAM_POPPER -> { rr(sx + s * 0.25f, sy + s * 0.25f, sx + s * 0.75f, sy + s * 0.75f, s * 0.08f, col(0xFFB03030.toInt())); fill.color = col(0xFFE8E8E8.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.1f, fill) }
             BuildDef.GRAVE -> {
                 oval(sx + s * 0.18f, sy + s * 0.1f, sx + s * 0.82f, sy + s * 0.92f, col(0xFF6E5A42.toInt()))
                 oval(sx + s * 0.26f, sy + s * 0.18f, sx + s * 0.7f, sy + s * 0.74f, col(0xFF86704F.toInt()))
@@ -659,6 +684,7 @@ class GameView(context: Context) : View(context) {
                 rect.set(sx + s * 0.06f, sy + s * 0.06f, sx + s * 0.94f, sy + s * 0.94f); c.drawRoundRect(rect, s * 0.2f, s * 0.2f, fill)
                 fill.color = col(0xFF4F82AD.toInt()); c.drawCircle(sx + s / 2, sy + s * 0.5f, s * 0.14f, fill)
             }
+            else -> {}
         }
         if (def.fuelCap > 0f && built && s >= 26f && def != BuildDef.CAMPFIRE && def != BuildDef.TORCH_LAMP) {
             // Small fuel marker for fuelled workbenches.

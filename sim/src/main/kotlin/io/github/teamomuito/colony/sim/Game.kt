@@ -192,6 +192,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             val clash = p.traits.any { o -> conflicts(o, t) || o == t }
             if (!clash) p.traits.add(t)
         }
+        if (p.traits.none { it == Trait.GAY || it == Trait.BISEXUAL || it == Trait.ASEXUAL } && rng.chance(0.16f)) p.traits.add(rng.pick(listOf(Trait.GAY, Trait.BISEXUAL, Trait.ASEXUAL, Trait.BISEXUAL)))
         if (Trait.BRAWLER in p.traits) p.passion[SkillType.MELEE.ordinal] = 2
         if (Trait.NUDIST in p.traits) { /* will undress when the schedule allows */ }
         p.x = x; p.y = y; p.fromX = x; p.fromY = y
@@ -227,6 +228,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             Trait.TOUGH to Trait.WIMP, Trait.FAST_LEARNER to Trait.SLOW_LEARNER, Trait.KIND to Trait.ABRASIVE,
             Trait.SANGUINE to Trait.DEPRESSIVE, Trait.BEAUTIFUL to Trait.UGLY, Trait.TOO_SMART to Trait.SLOW_LEARNER,
             Trait.BRAWLER to Trait.TRIGGER_HAPPY, Trait.PSYCHOPATH to Trait.KIND,
+            Trait.GAY to Trait.BISEXUAL, Trait.GAY to Trait.ASEXUAL, Trait.BISEXUAL to Trait.ASEXUAL, Trait.IRON_WILLED to Trait.VOLATILE,
+            Trait.JOGGER to Trait.SLOW_WALKER, Trait.GREEDY to Trait.ASCETIC, Trait.CAREFUL_SHOOTER to Trait.TRIGGER_HAPPY,
         )
         return pairs.any { (x, y) -> (a == x && b == y) || (a == y && b == x) }
     }
@@ -615,7 +618,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val sleeping = p.job?.type == JobType.SLEEP && p.job?.stage == 1
         if (p.race.mech) { p.food = 1f; p.rest = 1f }
         // Needs.
-        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { Math.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else 0.7f * (if (Trait.GOURMAND in p.traits) 1.3f else 1f) * (if (p.pregnantUntil > 0L) 1.25f else 1f) * (if (p.age < 13) 0.6f else 1f)
+        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { Math.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else 0.7f * (if (Trait.GOURMAND in p.traits) 1.3f else if (Trait.ASCETIC in p.traits) 0.9f else 1f) * (if (p.pregnantUntil > 0L) 1.25f else 1f) * (if (p.age < 13) 0.6f else 1f)
         p.food = max(0f, p.food - foodRate / TICKS_PER_DAY * (if (sleeping) 0.7f else 1f))
         if (!p.isAnimal) {
             if (!sleeping) p.rest = max(0f, p.rest - 0.95f / TICKS_PER_DAY)
@@ -637,6 +640,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             if (p.faction == Faction.ENEMY && !p.prisoner) enemyDownedTick(p)
             return
         }
+        if (p.dormant) { dormantTick(p); return }
         if (p.isBaby) { babyTick(p); return }
         if (p.attackCd > 0) p.attackCd--
         if (map.fires.isNotEmpty() && tick % 3 == (p.id % 3).toLong() && p.moveCd <= 0) stepOutOfFire(p)

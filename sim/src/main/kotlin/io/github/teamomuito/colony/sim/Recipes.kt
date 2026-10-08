@@ -33,7 +33,16 @@ enum class Recipe(
 
     COMPONENTS("Make components", listOf(BuildDef.MACHINING, BuildDef.FAB_BENCH), listOf(ing(ItemType.STEEL, 20)), ItemType.COMPONENT, 1, 1100, WorkType.SMITH, 6, Research.MACHINING),
 
+    COOK_LAVISH("Cook lavish meal", listOf(BuildDef.STOVE_FUEL, BuildDef.STOVE_ELEC),
+        listOf(anyOf("Meat", 5, *RAW_MEAT), anyOf("Vegetables", 5, *RAW_VEG), anyOf("Milk or eggs", 2, ItemType.MILK, ItemType.EGGS)), ItemType.MEAL_LAVISH, 1, 700, WorkType.COOK, 8, Research.LAVISH_COOKING),
+    MAKE_FLAKE("Make flake", listOf(BuildDef.DRUG_LAB), listOf(ing(ItemType.PSYCHOID, 4)), ItemType.FLAKE, 1, 400, WorkType.CRAFT, 3, Research.FLAKE_YAYO),
+    MAKE_YAYO("Make yayo", listOf(BuildDef.DRUG_LAB), listOf(ing(ItemType.PSYCHOID, 6)), ItemType.YAYO, 1, 500, WorkType.CRAFT, 4, Research.FLAKE_YAYO),
+    MAKE_WAKEUP("Make wake-up", listOf(BuildDef.DRUG_LAB), listOf(ing(ItemType.PSYCHOID, 2), ing(ItemType.COMPONENT, 1)), ItemType.WAKE_UP, 1, 450, WorkType.CRAFT, 3, Research.FLAKE_YAYO),
+    MAKE_GOJUICE("Make go-juice", listOf(BuildDef.DRUG_LAB), listOf(ing(ItemType.PSYCHOID, 5), ing(ItemType.MEDS_HERBAL, 1)), ItemType.GO_JUICE, 1, 700, WorkType.CRAFT, 6, Research.GO_JUICE),
+
     // Tailor
+    MAKE_JACKET("Make jacket", listOf(BuildDef.TAILOR_BENCH), listOf(anyOf("Cloth or leather", 60, ItemType.CLOTH, ItemType.LEATHER, ItemType.DEVILSTRAND)), ItemType.A_JACKET, 1, 1100, WorkType.TAILOR, 3, Research.COMPLEX_CLOTHING),
+    MAKE_HEADDRESS("Make tribal headdress", listOf(BuildDef.TAILOR_BENCH), listOf(ing(ItemType.LEATHER, 30)), ItemType.A_HEADDRESS, 1, 700, WorkType.TAILOR, 4, Research.COMPLEX_CLOTHING),
     MAKE_TSHIRT("Make T-shirt", listOf(BuildDef.TAILOR_BENCH), listOf(ing(ItemType.CLOTH, 40)), ItemType.A_TSHIRT, 1, 500, WorkType.TAILOR),
     MAKE_BUTTONDOWN("Make button-down shirt", listOf(BuildDef.TAILOR_BENCH), listOf(ing(ItemType.CLOTH, 60)), ItemType.A_BUTTONDOWN, 1, 700, WorkType.TAILOR, 3),
     MAKE_PANTS("Make pants", listOf(BuildDef.TAILOR_BENCH), listOf(ing(ItemType.CLOTH, 40)), ItemType.A_PANTS, 1, 500, WorkType.TAILOR),
@@ -56,6 +65,23 @@ enum class Recipe(
     MAKE_GREATBOW("Make greatbow", listOf(BuildDef.SMITHY), listOf(ing(ItemType.WOOD, 80), ing(ItemType.STEEL, 10)), ItemType.W_GREATBOW, 1, 1300, WorkType.SMITH, 4, Research.BOWS),
     MAKE_HELMET("Make simple helmet", listOf(BuildDef.SMITHY), listOf(ing(ItemType.STEEL, 30)), ItemType.A_HELMET, 1, 1300, WorkType.SMITH, 4, Research.FLAK_ARMOR),
     MAKE_PLATE("Make plate armor", listOf(BuildDef.SMITHY), listOf(ing(ItemType.STEEL, 160)), ItemType.A_ARMOR, 1, 4000, WorkType.SMITH, 8, Research.PLATE_ARMOR),
+
+    MAKE_GLADIUS("Make gladius", listOf(BuildDef.SMITHY), listOf(ing(ItemType.STEEL, 50)), ItemType.W_GLADIUS, 1, 1300, WorkType.SMITH, 5, Research.BASIC_MELEE),
+    MAKE_RECURVE("Make recurve bow", listOf(BuildDef.SMITHY, BuildDef.CRAFTING_SPOT), listOf(ing(ItemType.WOOD, 60), ing(ItemType.STEEL, 10)), ItemType.W_RECURVE, 1, 1100, WorkType.CRAFT, 4, Research.RECURVE),
+    MAKE_PLASTEEL_SWORD("Make plasteel sword", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.PLASTEEL, 40), ing(ItemType.STEEL, 20)), ItemType.W_PLASTEEL_SWORD, 1, 3000, WorkType.SMITH, 9, Research.PLASTEEL_MELEE),
+    MAKE_LEVER("Make lever-action rifle", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 55), ing(ItemType.COMPONENT, 2)), ItemType.W_LEVER, 1, 2400, WorkType.SMITH, 5, Research.ADV_FIREARMS),
+    MAKE_CHAIN_SHOTGUN("Make chain shotgun", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 70), ing(ItemType.COMPONENT, 3)), ItemType.W_CHAIN_SHOTGUN, 1, 3000, WorkType.SMITH, 7, Research.ADV_FIREARMS),
+    MAKE_HEAVY_SMG("Make heavy SMG", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 65), ing(ItemType.COMPONENT, 4)), ItemType.W_HEAVY_SMG, 1, 3000, WorkType.SMITH, 7, Research.ADV_FIREARMS),
+    MAKE_MINIGUN("Make minigun", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.STEEL, 150), ing(ItemType.COMPONENT, 10)), ItemType.W_MINIGUN, 1, 5000, WorkType.SMITH, 10, Research.HEAVY_WEAPONS),
+    MAKE_CHARGE_RIFLE("Make charge rifle", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.STEEL, 80), ing(ItemType.PLASTEEL, 20), ing(ItemType.COMPONENT, 8)), ItemType.W_CHARGE_RIFLE, 1, 4500, WorkType.SMITH, 10, Research.CHARGE_WEAPONS),
+    MAKE_FRAG("Make frag grenades", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 25), ing(ItemType.COMPONENT, 1)), ItemType.W_FRAG, 1, 1400, WorkType.SMITH, 4, Research.EXPLOSIVES),
+    MAKE_INCENDIARY("Make incendiary launcher", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 60), ing(ItemType.COMPONENT, 3)), ItemType.W_INCENDIARY, 1, 2600, WorkType.SMITH, 6, Research.EXPLOSIVES),
+    MAKE_DOOMSDAY("Make doomsday launcher", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.STEEL, 120), ing(ItemType.PLASTEEL, 40), ing(ItemType.COMPONENT, 12)), ItemType.W_DOOMSDAY, 1, 6000, WorkType.SMITH, 11, Research.ROCKETS),
+    MAKE_MARINE("Make marine armor", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.PLASTEEL, 50), ing(ItemType.STEEL, 40), ing(ItemType.COMPONENT, 4)), ItemType.A_MARINE, 1, 5000, WorkType.SMITH, 9, Research.MARINE_ARMOR),
+    MAKE_MARINE_HELM("Make marine helmet", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.PLASTEEL, 25), ing(ItemType.COMPONENT, 2)), ItemType.A_MARINE_HELM, 1, 2400, WorkType.SMITH, 8, Research.MARINE_ARMOR),
+    MAKE_RECON_HELM("Make recon helmet", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.PLASTEEL, 25), ing(ItemType.COMPONENT, 2)), ItemType.A_RECON_HELM, 1, 2200, WorkType.SMITH, 8, Research.ADV_ARMOR),
+    MAKE_POWER_ARMOR("Make powered armor", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.PLASTEEL, 120), ing(ItemType.GOLD, 10), ing(ItemType.COMPONENT, 12)), ItemType.A_POWER_ARMOR, 1, 8000, WorkType.SMITH, 11, Research.POWER_ARMOR),
+    MAKE_POWER_HELM("Make powered helmet", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.PLASTEEL, 50), ing(ItemType.COMPONENT, 5)), ItemType.A_POWER_HELM, 1, 4000, WorkType.SMITH, 10, Research.POWER_ARMOR),
 
     // Machining
     MAKE_REVOLVER("Make revolver", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 30), ing(ItemType.COMPONENT, 1)), ItemType.W_REVOLVER, 1, 1800, WorkType.SMITH, 4, Research.FIREARMS),

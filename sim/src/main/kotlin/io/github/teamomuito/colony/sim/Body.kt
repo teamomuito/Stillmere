@@ -125,6 +125,13 @@ enum class HediffKind(
     ALCOHOL_ADDICTION("Alcohol addiction", 3, 0f, 0f, false),
     SMOKELEAF_ADDICTION("Smokeleaf addiction", 3, 0f, 0f, false),
     PSYCHITE_ADDICTION("Psychite addiction", 3, 0f, 0f, false),
+    FLAKE_HIGH("Flake rush", 2, 0f, 0f, false, manip = -0.1f),
+    YAYO_HIGH("Yayo rush", 2, 0f, 0f, false, pain = -0.2f, manip = -0.1f),
+    GOJUICE_HIGH("Go-juice", 2, 0f, 0f, false, move = -0.5f, manip = -0.25f, pain = -0.4f),
+    WAKEUP_HIGH("Wake-up", 2, 0f, 0f, false, cons = -0.1f),
+    FLAKE_ADDICTION("Flake addiction", 3, 0f, 0f, false),
+    YAYO_ADDICTION("Yayo addiction", 3, 0f, 0f, false),
+    GOJUICE_ADDICTION("Go-juice addiction", 3, 0f, 0f, false),
     WITHDRAWAL("Withdrawal", 3, 0f, 0f, false, cons = 0.15f, move = 0.1f, manip = 0.15f, pain = 0.1f),
     // category 5: chronic conditions of age, permanent
     BAD_BACK("Bad back", 5, 0f, 0f, false, move = 0.18f, pain = 0.12f),

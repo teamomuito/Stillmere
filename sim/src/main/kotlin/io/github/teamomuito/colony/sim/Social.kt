@@ -5,9 +5,16 @@ import kotlin.math.min
 
 fun Game.opinionOf(a: Pawn, b: Pawn): Int = a.opinion[b.id] ?: 0
 
+fun attractedTo(a: Pawn, b: Pawn): Boolean = when {
+    Trait.ASEXUAL in a.traits -> false
+    Trait.BISEXUAL in a.traits -> true
+    Trait.GAY in a.traits -> a.female == b.female
+    else -> a.female != b.female
+}
+
 fun Game.socialInteract(a: Pawn, b: Pawn) {
     if (!a.alive || !b.alive) return
-    val soc = a.level(SkillType.SOCIAL)
+    val soc = a.level(SkillType.SOCIAL) + (if (Trait.SOCIABLE in a.traits) 3 else 0)
     val op = opinionOf(b, a)
     val roll = rng.float()
     var kind = "chitchat"
@@ -15,7 +22,7 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
         // Rude people pick fights, and unhappy people snap.
         (Trait.ABRASIVE in a.traits && roll < 0.35f) || (a.mood < 0.3f && roll < 0.35f) || (op < -20 && roll < 0.25f) -> kind = "insult"
         roll < 0.15f + soc * 0.01f && opinionOf(b, a) > 25 -> kind = "deep"
-        roll < 0.25f && a.spouse < 0 && a.lover < 0 && b.spouse < 0 && b.lover < 0 && a.female != b.female && opinionOf(b, a) > 35 && opinionOf(a, b) > 35 && a.age >= 18 && b.age >= 18 -> kind = "romance"
+        roll < 0.25f && a.spouse < 0 && a.lover < 0 && b.spouse < 0 && b.lover < 0 && attractedTo(a, b) && attractedTo(b, a) && opinionOf(b, a) > 35 && opinionOf(a, b) > 35 && a.age >= 18 && b.age >= 18 -> kind = "romance"
         roll < 0.3f -> kind = "kind"
     }
     when (kind) {

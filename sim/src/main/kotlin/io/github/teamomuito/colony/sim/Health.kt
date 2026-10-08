@@ -47,7 +47,7 @@ fun Game.recomputeHealth(p: Pawn) {
     if (Trait.TOUGH in p.traits) pain *= 0.7f
     // Painkilling drugs.
     if (p.hediffs.any { it.kind == HediffKind.ALCOHOL_HIGH }) pain *= 0.8f
-    p.pain = min(1f, pain)
+    p.pain = pain.coerceIn(0f, 1f)
 
     val legs = p.avgEff(PartTag.LEG)
     val feet = p.avgEff(PartTag.FOOT)
@@ -317,7 +317,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
             0 -> {
                 if (h.tended && h.age % 15000 < dt) h.tended = false
                 val per = dt / TICKS_PER_DAY.toFloat()
-                var imm = h.kind.immunityPerDay * per
+                var imm = h.kind.immunityPerDay * per * (if (Trait.SUPER_IMMUNE in p.traits) 1.4f else 1f)
                 if (h.tended) imm *= 1f + 0.5f * h.tendQuality
                 if (resting) imm *= 1.25f
                 h.immunity += imm

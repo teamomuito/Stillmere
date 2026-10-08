@@ -138,6 +138,11 @@ private fun Game.miscEvent() {
     weights += 10 to (if (prisoners.isNotEmpty()) 0.8f else 0f) // prison break handled hourly
     weights += 11 to 1.0f // heat/cold done elsewhere: lightning storm
     weights += 12 to (if (day > 9) 1.2f else 0f) // refugee
+    weights += 13 to 1.0f // meteorite
+    weights += 14 to (if (map.biome == Biome.TUNDRA || map.biome == Biome.BOREAL) 1.2f else 0.3f) // aurora
+    weights += 15 to (if (day > 6) 0.9f else 0f) // psychic drone / soothe
+    weights += 16 to (if (day > 24) 0.9f else 0f) // mechanoid ship crash
+    weights += 17 to (if (day > 16 && tempEventUntil == 0L) 0.6f else 0f) // volcanic winter
     val total = weights.sumOf { it.second.toDouble() }.toFloat()
     var r = rng.float() * total
     var pick = 0
@@ -154,6 +159,11 @@ private fun Game.miscEvent() {
         8 -> animalJoins()
         9 -> thrumboPasses()
         12 -> refugees()
+        13 -> meteorite()
+        14 -> { for (c in colonists) c.addThought("Beautiful aurora", 0.1f, tick, 2 * TICKS_PER_DAY); say("An aurora lights the night sky. Everyone is moved.", 1) }
+        15 -> psychicWave()
+        16 -> mechCrash()
+        17 -> { tempOffset = -13f; tempEventName = "volcanic winter"; tempEventUntil = tick + 6 * TICKS_PER_DAY; say("Volcanic ash darkens the sky: a volcanic winter begins.", 3) }
         11 -> { weather = Weather.THUNDER; weatherUntil = tick + 5000; lightning(); say("A violent thunderstorm hits.", 2) }
         else -> {}
     }
@@ -390,4 +400,46 @@ private fun Game.refugees() {
     }
     raidActive = true; raidStartCount = n; raidStartedAt = tick; raidEnds = tick + TICKS_PER_DAY
     say("${ref.name} staggers in from the ${arrayOf("west", "east", "north", "south")[side]}, wounded and chased by raiders. Rescue them to gain a colonist.", 2)
+}
+
+private fun Game.meteorite() {
+    val x = rng.range(8, map.w - 9); val y = rng.range(8, map.h - 9)
+    val steel = rng.range(60, 140)
+    map.drop(ItemType.STEEL, steel, x, y)
+    if (rng.chance(0.5f)) map.drop(ItemType.SILVER, rng.range(30, 90), x, y)
+    if (rng.chance(0.3f)) map.drop(ItemType.COMPONENT, rng.range(1, 3), x, y)
+    blasts.add(Blast(x, y, 1.5f, tick + 14))
+    say("A meteorite crashes into the ground nearby, scattering metal.", 1)
+}
+
+private fun Game.psychicWave() {
+    val female = rng.chance(0.5f)
+    val drone = rng.chance(0.6f)
+    var n = 0
+    for (c in colonists) if (c.female == female && c.age >= 3) {
+        c.addThought(if (drone) "Psychic drone" else "Psychic soothe", if (drone) -0.12f else 0.1f, tick, 3 * TICKS_PER_DAY); n++
+    }
+    say(if (drone) "A psychic drone assaults the minds of ${if (female) "women" else "men"} in the colony." else "A psychic soothe calms the ${if (female) "women" else "men"} of the colony.", if (drone) 2 else 1)
+}
+
+private fun Game.mechCrash() {
+    var cx = 0; var cy = 0
+    var tries = 0
+    do {
+        cx = rng.range(8, map.w - 9); cy = rng.range(8, map.h - 9)
+    } while (tries++ < 40 && (!map.walkable(map.idx(cx, cy)) || distance(cx, cy, homeX, homeY) < 28f))
+    if (!map.walkable(map.idx(cx, cy))) return
+    val raidId = ++raidCounter
+    val n = 3 + rng.int(3) + day / 30
+    repeat(n) {
+        val x = (cx + rng.range(-2, 2)).coerceIn(1, map.w - 2); val y = (cy + rng.range(-2, 2)).coerceIn(1, map.h - 2)
+        if (!map.walkable(map.idx(x, y))) return@repeat
+        val race = if (rng.chance(0.15f) && day > 40) Race.CENTIPEDE else if (rng.chance(0.5f)) Race.SCYTHER else Race.LANCER
+        val m = newMech(race, x, y, raidId)
+        m.dormant = true; m.raidId = -raidId
+    }
+    map.drop(ItemType.STEEL, rng.range(80, 160), cx, cy)
+    map.drop(ItemType.COMPONENT, rng.range(2, 5), cx, cy)
+    blasts.add(Blast(cx, cy, 2.5f, tick + 20))
+    say("A mechanoid ship has crashed to the ${if (cx < homeX) "west" else "east"}. Its cluster lies dormant... for now.", 2)
 }

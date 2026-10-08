@@ -66,6 +66,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var wanderer = false
     var wfaction = -1
     var ally = false
+    var dormant = false
     var pathKey = -1
     var attackCd = 0
     var burstLeft = 0
@@ -168,7 +169,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
 
     val colonist get() = faction == Faction.PLAYER && !race.isAnimal && !prisoner && !ally
     val isAnimal get() = race.isAnimal
-    val hostile get() = hostileFlag || faction == Faction.ENEMY || manhunter
+    val hostile get() = (hostileFlag || faction == Faction.ENEMY || manhunter) && !dormant
     val alive get() = !dead
     val moving get() = path != null && pathI < (path?.size ?: 0)
     val capacity get() = cap
@@ -209,6 +210,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     fun moveSpeedTicks(): Int {
         var t = race.moveTicks.toFloat()
         if (Trait.NIMBLE in traits) t -= 2f
+        if (Trait.JOGGER in traits) t -= 3f
         if (Trait.SLOW_WALKER in traits) t += 2f
         t /= max(0.2f, cap[Cap.MOVING.ordinal])
         if (carryCount > 0) t += 1f
@@ -308,6 +310,11 @@ object Backstories {
         Story("Urchin", mapOf(SkillType.SOCIAL to 3, SkillType.CRAFTING to 2)),
         Story("Medical student", mapOf(SkillType.MEDICINE to 5, SkillType.INTELLECTUAL to 3)),
         Story("Tribal child", mapOf(SkillType.ANIMALS to 4, SkillType.CRAFTING to 4, SkillType.MELEE to 2)),
+        Story("Orphan", mapOf(SkillType.SOCIAL to 2, SkillType.COOKING to 3, SkillType.SHOOTING to 2)),
+        Story("Wasteland scavenger", mapOf(SkillType.MINING to 3, SkillType.CONSTRUCTION to 3, SkillType.SHOOTING to 3)),
+        Story("Pit fighter", mapOf(SkillType.MELEE to 6, SkillType.MEDICINE to 2)),
+        Story("Cargo ship brat", mapOf(SkillType.CONSTRUCTION to 3, SkillType.INTELLECTUAL to 3, SkillType.SOCIAL to 3)),
+        Story("Herder's child", mapOf(SkillType.ANIMALS to 6, SkillType.PLANTS to 3)),
         Story("Space-born tinker", mapOf(SkillType.CONSTRUCTION to 4, SkillType.INTELLECTUAL to 4)),
     )
     val adulthood = listOf(
@@ -323,5 +330,15 @@ object Backstories {
         Story("Smith", mapOf(SkillType.CRAFTING to 9, SkillType.MELEE to 4)),
         Story("Drifter", mapOf(SkillType.SHOOTING to 3, SkillType.SOCIAL to 3, SkillType.COOKING to 3)),
         Story("Beast tamer", mapOf(SkillType.ANIMALS to 10, SkillType.MELEE to 3)),
+        Story("Pirate deckhand", mapOf(SkillType.SHOOTING to 6, SkillType.MELEE to 6, SkillType.SOCIAL to 2), listOf(WorkType.RESEARCH)),
+        Story("Trader", mapOf(SkillType.SOCIAL to 10, SkillType.INTELLECTUAL to 4), listOf(WorkType.MINE)),
+        Story("Surgeon", mapOf(SkillType.MEDICINE to 11, SkillType.INTELLECTUAL to 5)),
+        Story("Bartender", mapOf(SkillType.COOKING to 6, SkillType.SOCIAL to 8, SkillType.CRAFTING to 2)),
+        Story("Carpenter", mapOf(SkillType.CONSTRUCTION to 10, SkillType.CRAFTING to 6), listOf(WorkType.ART)),
+        Story("Mercenary", mapOf(SkillType.SHOOTING to 9, SkillType.MELEE to 7)),
+        Story("Prospector", mapOf(SkillType.MINING to 8, SkillType.SHOOTING to 3, SkillType.CONSTRUCTION to 3)),
+        Story("Gardener", mapOf(SkillType.PLANTS to 10, SkillType.ARTISTIC to 4)),
+        Story("Tailor", mapOf(SkillType.CRAFTING to 9, SkillType.ARTISTIC to 4)),
+        Story("Warden", mapOf(SkillType.SOCIAL to 8, SkillType.MELEE to 5)),
     )
 }

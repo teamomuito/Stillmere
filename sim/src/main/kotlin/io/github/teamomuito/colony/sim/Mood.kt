@@ -80,7 +80,7 @@ fun Game.comfortTick(p: Pawn) {
     }
     // Drug effects wear off; withdrawal.
     for (h in p.hediffs.toList()) {
-        if (h.kind == HediffKind.ALCOHOL_ADDICTION || h.kind == HediffKind.SMOKELEAF_ADDICTION || h.kind == HediffKind.PSYCHITE_ADDICTION) {
+        if (h.kind.category == 3 && h.kind.name.endsWith("_ADDICTION")) {
             h.severity -= 0.45f / 96f
             if (h.severity <= 0f) {
                 h.severity = 0f
@@ -174,6 +174,8 @@ fun Game.moodUpdate(p: Pawn) {
     if (Trait.SANGUINE in p.traits) add("Cheerful", 0.12f)
     if (Trait.DEPRESSIVE in p.traits) add("Gloomy", -0.12f)
     if (Trait.OPTIMIST in p.traits) add("Optimist", 0.1f)
+    if (Trait.ASCETIC in p.traits) add("Content with little", 0.07f)
+    if (Trait.GREEDY in p.traits) { val wl = map.wealth(); if (wl > 9000f) add("Rich colony", 0.1f) else if (wl < 3000f) add("Poor colony", -0.07f) }
     if (Trait.PESSIMIST in p.traits) add("Pessimist", -0.1f)
     // Corpses lying around.
     var seen = 0f
@@ -223,7 +225,7 @@ private fun Game.breaksTick(p: Pawn) {
         mood < 0.20f -> 0.012f
         mood < 0.30f -> 0.0045f
         else -> 0f
-    } * (if (Trait.PSYCHOPATH in p.traits) 0.8f else 1f)
+    } * (if (Trait.PSYCHOPATH in p.traits) 0.8f else 1f) * (if (Trait.IRON_WILLED in p.traits) 0.35f else 1f) * (if (Trait.VOLATILE in p.traits) 1.8f else 1f)
     if (chance <= 0f || rng.float() > chance) return
     val sev = if (mood < 0.10f) 2 else if (mood < 0.20f) 1 else 0
     val options = ArrayList<Int>()
@@ -251,6 +253,10 @@ fun Game.startBreak(p: Pawn, kind: Int) {
 }
 
 fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
+    if (!encounter && (p.race == Race.BOOMRAT || p.race == Race.BOOMALOPE) && map.inB(p.x, p.y)) {
+        explode(p.x, p.y, if (p.race == Race.BOOMRAT) 1.8f else 2.8f, if (p.race == Race.BOOMRAT) 22f else 38f, null, true)
+        say("A ${p.race.label.lowercase()} exploded!", 2)
+    }
     if (caravanDeath(p, cause)) return
     if (p.race.mech) {
         map.drop(ItemType.STEEL, rng.range(20, 60), p.x, p.y)

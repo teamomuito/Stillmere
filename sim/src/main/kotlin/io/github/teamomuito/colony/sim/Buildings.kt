@@ -16,6 +16,9 @@ enum class BuildDef(
     WOOD_WALL("Wooden wall", listOf(c(ItemType.WOOD, 5)), 160, 150f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 1f, beauty = -1f),
     STONE_WALL("Stone wall", listOf(c(ItemType.STONE, 5)), 280, 300f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = null),
     STEEL_WALL("Steel wall", listOf(c(ItemType.STEEL, 5)), 200, 400f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = Research.SMITHING),
+    STEEL_DOOR("Steel door", listOf(c(ItemType.STEEL, 25)), 260, 250f, "Structure", isDoor = true, flam = 0f, research = Research.SMITHING),
+    AUTODOOR("Autodoor", listOf(c(ItemType.STEEL, 40), c(ItemType.COMPONENT, 1)), 320, 220f, "Structure", isDoor = true, flam = 0f, power = -50f, research = Research.AUTODOORS),
+    PLASTEEL_WALL("Plasteel wall", listOf(c(ItemType.PLASTEEL, 5)), 320, 500f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = Research.FABRICATION),
     DOOR("Wooden door", listOf(c(ItemType.WOOD, 15)), 220, 120f, "Structure", isDoor = true, flam = 1f),
     SANDBAGS("Sandbags", listOf(c(ItemType.CLOTH, 5)), 80, 60f, "Security", cover = 0.55f, flam = 0.3f),
     WOOD_FLOOR("Wood floor", listOf(c(ItemType.WOOD, 3)), 70, 1f, "Floors", isFloor = true, beauty = 0.3f, flam = 1f),
@@ -28,6 +31,9 @@ enum class BuildDef(
     BED("Bed", listOf(c(ItemType.WOOD, 40)), 500, 100f, "Furniture", sleeps = true, comfort = 0.7f, beauty = 0.5f, flam = 1f, w = 1, h = 2),
     HOSPITAL_BED("Hospital bed", listOf(c(ItemType.STEEL, 70), c(ItemType.COMPONENT, 2)), 700, 120f, "Furniture", sleeps = true, comfort = 0.75f, medical = true, research = Research.SURGERY, flam = 0.2f, beauty = 0.3f, w = 1, h = 2),
     TABLE("Table", listOf(c(ItemType.WOOD, 60)), 350, 100f, "Furniture", blocksMove = true, comfort = 0.0f, beauty = 0.4f, flam = 1f, w = 2, h = 2),
+    ARMCHAIR("Armchair", listOf(c(ItemType.WOOD, 30), c(ItemType.CLOTH, 30)), 320, 70f, "Furniture", comfort = 0.8f, beauty = 0.7f, research = Research.COMPLEX_FURNITURE, flam = 1f),
+    DRESSER("Dresser", listOf(c(ItemType.WOOD, 50)), 300, 80f, "Furniture", blocksMove = true, beauty = 0.9f, research = Research.COMPLEX_FURNITURE, flam = 1f, w = 2, h = 1),
+    END_TABLE("End table", listOf(c(ItemType.WOOD, 20)), 150, 40f, "Furniture", beauty = 0.5f, research = Research.COMPLEX_FURNITURE, flam = 1f),
     STOOL("Stool", listOf(c(ItemType.WOOD, 8)), 120, 40f, "Furniture", comfort = 0.45f, research = Research.COMPLEX_FURNITURE, flam = 1f),
     CHAIR("Chair", listOf(c(ItemType.WOOD, 14)), 200, 60f, "Furniture", comfort = 0.7f, beauty = 0.3f, research = Research.COMPLEX_FURNITURE, flam = 1f),
     PLANT_POT("Plant pot", listOf(c(ItemType.WOOD, 14)), 150, 30f, "Furniture", beauty = 2.2f, research = Research.COMPLEX_FURNITURE, flam = 0.8f),
@@ -62,6 +68,13 @@ enum class BuildDef(
     SOLAR_PANEL("Solar generator", listOf(c(ItemType.STEEL, 100), c(ItemType.COMPONENT, 3)), 600, 80f, "Power", blocksMove = true, power = 1700f, research = Research.SOLAR_POWER, w = 3, h = 3),
     WIND_TURBINE("Wind turbine", listOf(c(ItemType.STEEL, 80), c(ItemType.COMPONENT, 2)), 600, 100f, "Power", blocksMove = true, power = 1500f, research = Research.WIND_POWER, w = 2, h = 2),
     BATTERY("Battery", listOf(c(ItemType.STEEL, 40), c(ItemType.COMPONENT, 2)), 300, 70f, "Power", blocksMove = true, research = Research.BATTERIES, w = 1, h = 2),
+
+    // Communications and trade
+    COMMS_CONSOLE("Comms console", listOf(c(ItemType.STEEL, 70), c(ItemType.COMPONENT, 3)), 500, 90f, "Misc", blocksMove = true, power = -200f, research = Research.COMMS, w = 2, h = 1),
+    TRADE_BEACON("Trade beacon", listOf(c(ItemType.STEEL, 20), c(ItemType.COMPONENT, 1)), 200, 60f, "Misc", research = Research.COMMS),
+    PASSIVE_COOLER("Passive cooler", listOf(c(ItemType.STEEL, 30), c(ItemType.STONE, 20)), 250, 80f, "Temperature", blocksMove = true, heat = -9f, research = Research.PASSIVE_COOLING, flam = 0f),
+    SUN_LAMP("Sun lamp", listOf(c(ItemType.STEEL, 40), c(ItemType.COMPONENT, 2)), 400, 70f, "Production", blocksMove = true, power = -400f, light = 13f, research = Research.SUN_LAMPS, w = 2, h = 2),
+    FOAM_POPPER("Firefoam popper", listOf(c(ItemType.STEEL, 20), c(ItemType.COMPONENT, 1)), 200, 30f, "Security", research = Research.VENTILATION, flam = 0f),
 
     // Temperature
     HEATER("Heater", listOf(c(ItemType.STEEL, 30), c(ItemType.COMPONENT, 1)), 250, 50f, "Temperature", blocksMove = true, power = -200f, heat = 14f, research = Research.ELECTRICITY),

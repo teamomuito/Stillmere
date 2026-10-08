@@ -35,6 +35,7 @@ import io.github.teamomuito.colony.sim.queueSurgery
 import io.github.teamomuito.colony.sim.buyItem
 import io.github.teamomuito.colony.sim.buyPrice
 import io.github.teamomuito.colony.sim.sellItem
+import io.github.teamomuito.colony.sim.sellableStacks
 import io.github.teamomuito.colony.sim.sellPrice
 import io.github.teamomuito.colony.sim.setPrisonerBed
 import io.github.teamomuito.colony.sim.trader
@@ -425,7 +426,7 @@ class Dialogs(val a: MainActivity) {
                 val mySilver = game.map.countItems(ItemType.SILVER)
                 body.addView(ui.label("Your silver: $mySilver   ·   Trader's silver: ${t.silver}", 12.5f, ui.accent, true))
                 body.addView(ui.label("Sell (from your stockpiles)", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 10, 0, 2))
-                val mine = game.map.items.entries.filter { it.value.corpseOf == null && !it.value.forbidden && game.map.zoneKind(it.key) != ZoneKind.NONE && it.value.type != ItemType.SILVER }
+                val mine = game.sellableStacks().filter { it.value.type != ItemType.SILVER }
                     .groupBy { it.value.type }.mapValues { e -> e.value.sumOf { it.value.count } }.toList().sortedBy { it.first.cat.ordinal }
                 if (mine.isEmpty()) body.addView(ui.label("Nothing to sell. Items must be in a stockpile.", 11.5f, ui.dim))
                 for ((type, n) in mine) {

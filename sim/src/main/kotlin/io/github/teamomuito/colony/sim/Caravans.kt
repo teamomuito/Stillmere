@@ -44,7 +44,8 @@ fun Pawn.carryCapacity(): Float = when {
     !alive -> 0f
     race == Race.HUMAN -> 35f
     isAnimal && faction == Faction.PLAYER -> when (race) {
-        Race.MUFFALO, Race.COW -> 70f; Race.THRUMBO -> 140f; Race.DEER -> 40f; Race.HUSKY -> 25f; else -> 0f
+        Race.MUFFALO, Race.COW, Race.DROMEDARY -> 70f; Race.HORSE -> 80f; Race.DONKEY -> 55f; Race.ELEPHANT, Race.THRUMBO -> 140f; Race.RHINO -> 90f; Race.BISON -> 60f
+        Race.DEER, Race.ELK, Race.CARIBOU -> 40f; Race.ALPACA, Race.GOAT, Race.PIG, Race.OSTRICH -> 30f; Race.HUSKY, Race.LABRADOR -> 25f; else -> 0f
     }
     else -> 0f
 }

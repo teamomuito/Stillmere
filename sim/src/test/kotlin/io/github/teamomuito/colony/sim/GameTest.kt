@@ -14,6 +14,7 @@ private fun newGame(seed: Long = 7, sc: Scenario = Scenario.CRASHLANDED): Game {
     return g
 }
 
+private fun Game.addComms() { val b = Building(BuildDef.COMMS_CONSOLE, homeX + 8, homeY + 8, true); b.powered = true; map.setBuilding(b) }
 private fun Game.run(ticks: Int) { repeat(ticks) { step() } }
 private fun Game.quiet() { mentalBreaksEnabled = false; pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }; nextRaid = Long.MAX_VALUE; nextMisc = Long.MAX_VALUE; nextWanderer = Long.MAX_VALUE; nextTrader = Long.MAX_VALUE }
 
@@ -696,6 +697,7 @@ class FactionTest {
         val f = g.world.factions.first { it.kind == 1 }
         g.world.goodwill[f.id] = -80
         assertNotNull(g.peaceTalks(f))
+        g.addComms()
         g.map.drop(ItemType.SILVER, 2000, g.homeX, g.homeY)
         g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY + 3, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.SILVER, 2000, g.homeX, g.homeY)
@@ -707,6 +709,7 @@ class FactionTest {
         val g = newGame(); g.quiet()
         val f = g.world.factions.first { it.kind == 1 }
         g.world.goodwill[f.id] = 95
+        g.addComms()
         assertNull(g.requestAid(f))
         assertTrue(g.pawns.count { it.ally } >= 4)
         assertTrue(g.colonists.none { it.ally })
@@ -865,7 +868,7 @@ class LifeTest {
         val calf = g.pawns.firstOrNull { it.race == Race.COW && it.stage == LifeStage.JUVENILE }
         assertNotNull(calf)
         assertTrue(calf!!.bodyScale() < 0.7f)
-        repeat(Race.COW.matureDays + 1) { g.run(TICKS_PER_DAY) }
+        repeat(Race.COW.matureDays + 1) { g.lifeDaily() }
         assertEquals(LifeStage.ADULT, calf.stage)
     }
 }
@@ -911,5 +914,72 @@ class MultiTileTest {
         stove.bills.add(bill)
         g.run(TICKS_PER_DAY)
         assertTrue("cooked", bill.done >= 1)
+    }
+}
+
+class ContentTest {
+    @Test fun everyRecipeHasABenchAndOutputAndResearchChains() {
+        for (r in Recipe.entries) {
+            assertTrue("${r.label} bench", r.benches.isNotEmpty())
+            for (b in r.benches) assertTrue("${r.label} bench ${b.label} is a workbench", b.workbench)
+            r.research?.let { assertTrue("${r.label} research reachable", Research.entries.contains(it)) }
+        }
+        // No research loops: every need chain terminates.
+        fun depth(r: Research, seen: Set<Research> = emptySet()): Int { assertFalse("loop at $r", r in seen); return 1 + (r.needs.maxOfOrNull { depth(it, seen + r) } ?: 0) }
+        for (r in Research.entries) depth(r)
+        assertTrue(Research.entries.size >= 50)
+    }
+
+    @Test fun newBuildingsAreUnlockedByResearch() {
+        for (d in BuildDef.entries) d.research?.let { assertTrue(it in Research.entries) }
+        val g = newGame(51); g.quiet()
+        assertFalse(g.canBuildAt(BuildDef.COMMS_CONSOLE, g.homeX + 6, g.homeY - 6))
+        g.researchDone.add(Research.COMMS)
+        for (yy in g.homeY - 7..g.homeY - 5) for (xx in g.homeX + 5..g.homeX + 9) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
+        assertTrue(g.canBuildAt(BuildDef.COMMS_CONSOLE, g.homeX + 6, g.homeY - 6))
+    }
+
+    @Test fun orbitalTradersLandAtBeacons() {
+        val g = newGame(52); g.quiet()
+        g.addComms()
+        assertNotNull(g.requestOrbitalTrader())   // no beacon yet
+        g.map.setBuilding(Building(BuildDef.TRADE_BEACON, g.homeX + 3, g.homeY + 3, true))
+        g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY, ZoneKind.STOCKPILE)
+        g.map.drop(ItemType.SILVER, 500, g.homeX, g.homeY - 1)
+        g.map.drop(ItemType.STEEL, 30, g.homeX + 4, g.homeY + 3)   // near the beacon, outside any stockpile
+        assertNull(g.requestOrbitalTrader())
+        val t = g.trader()
+        assertNotNull(t)
+        assertTrue(g.sellableStacks().any { it.value.type == ItemType.STEEL && g.map.zoneKind(it.key) == ZoneKind.NONE })
+        assertTrue(g.sellItem(t!!, ItemType.STEEL, 10) > 0)
+    }
+
+    @Test fun orientationsGateRomance() {
+        val g = newGame(53)
+        val a = g.newHuman(0, 0); val b = g.newHuman(0, 0)
+        a.traits.clear(); b.traits.clear(); a.female = true; b.female = true
+        assertFalse(attractedTo(a, b))
+        a.traits.add(Trait.GAY); b.traits.add(Trait.GAY)
+        assertTrue(attractedTo(a, b) && attractedTo(b, a))
+        a.traits.clear(); a.traits.add(Trait.ASEXUAL)
+        assertFalse(attractedTo(a, b))
+    }
+
+    @Test fun dormantMechsWakeNearColonists() {
+        val g = newGame(54); g.quiet()
+        val far = g.newMech(Race.SCYTHER, g.homeX + 40, g.homeY + 40, -9)
+        far.dormant = true
+        g.run(200)
+        assertTrue(far.dormant)
+        g.colonists[0].x = far.x - 3; g.colonists[0].y = far.y
+        g.run(200)
+        assertFalse(far.dormant)
+    }
+
+    @Test fun savesKeepNewFields() {
+        val g = newGame(55); g.quiet()
+        val m = g.newMech(Race.LANCER, g.homeX + 30, g.homeY, -3); m.dormant = true
+        val l = SaveGame.read(SaveGame.write(g))
+        assertTrue(l.pawns.any { it.race == Race.LANCER && it.dormant })
     }
 }

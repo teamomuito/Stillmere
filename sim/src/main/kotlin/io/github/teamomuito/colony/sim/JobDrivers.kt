@@ -370,14 +370,20 @@ fun Game.applyDrug(p: Pawn, t: ItemType) {
         ItemType.BEER -> HediffKind.ALCOHOL_HIGH to HediffKind.ALCOHOL_ADDICTION
         ItemType.JOINT -> HediffKind.SMOKELEAF_HIGH to HediffKind.SMOKELEAF_ADDICTION
         ItemType.PSYCHITE_TEA -> HediffKind.PSYCHITE_HIGH to HediffKind.PSYCHITE_ADDICTION
+        ItemType.FLAKE -> HediffKind.FLAKE_HIGH to HediffKind.FLAKE_ADDICTION
+        ItemType.YAYO -> HediffKind.YAYO_HIGH to HediffKind.YAYO_ADDICTION
+        ItemType.GO_JUICE -> HediffKind.GOJUICE_HIGH to HediffKind.GOJUICE_ADDICTION
+        ItemType.WAKE_UP -> { p.rest = min(1f, p.rest + 0.45f); addHediff(p, HediffKind.WAKEUP_HIGH, 0.5f).duration = 3000; p.addThought("Drug use", 0.04f, tick, TICKS_PER_DAY / 2); return }
         else -> return
     }
     val h = addHediff(p, high, 0.5f)
-    h.duration = if (t == ItemType.BEER) 3500 else 2600
+    h.duration = if (t == ItemType.BEER) 3500 else if (t == ItemType.GO_JUICE) 4000 else 2600
+    if (t == ItemType.FLAKE) p.addThought("Flake rush", 0.28f, tick, TICKS_PER_DAY)
+    if (t == ItemType.YAYO) p.addThought("Yayo rush", 0.3f, tick, TICKS_PER_DAY)
     // Existing addiction is satisfied again.
     val ad = p.hediff(addict)
     if (ad != null) { ad.severity = 1f; removeHediff(p, HediffKind.WITHDRAWAL) }
-    else if (rng.chance(if (t == ItemType.PSYCHITE_TEA) 0.1f else if (t == ItemType.BEER) 0.03f else 0.015f)) {
+    else if (rng.chance(when (t) { ItemType.PSYCHITE_TEA -> 0.1f; ItemType.BEER -> 0.03f; ItemType.FLAKE -> 0.45f; ItemType.YAYO -> 0.3f; ItemType.GO_JUICE -> 0.06f; else -> 0.015f })) {
         addHediff(p, addict, 1f)
         say("${p.name} is now addicted to ${t.label.lowercase()}.", 3)
     }
@@ -619,7 +625,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
         4 -> {
             b.progress = j.work
             if (doWork(p, j, skill, b.def.work.toFloat())) {
-                val q = if (b.def.category == "Furniture" || b.def.isFloor || b.def.workbench) rollQuality(p.level(skill), b.def.art) else Quality.NORMAL
+                val q = if (b.def.category == "Furniture" || b.def.isFloor || b.def.workbench) rollQuality(p.level(skill) + (if (Trait.CREATIVE in p.traits && b.def.art) 4 else 0), b.def.art) else Quality.NORMAL
                 if (b.def.isFloor) {
                     map.floor[i] = b.def
                     map.floorQuality[i] = q

@@ -32,6 +32,7 @@ private fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float): Float {
         base *= (1.15f - d / (w.range * 1.35f)).coerceIn(0.2f, 1.1f)
         base *= p.cap[Cap.SIGHT.ordinal].coerceAtLeast(0.2f)
         base *= (1f - map.coverAt(p.x, p.y, t.x, t.y)).coerceAtLeast(0.2f)
+        if (Trait.CAREFUL_SHOOTER in p.traits) base *= 1.12f
         if (weather == Weather.FOG) base *= 0.85f
         if (Trait.TRIGGER_HAPPY in p.traits) base *= 0.92f
         base *= (0.55f + 0.45f * t.race.size.coerceIn(0.5f, 1.4f)) // small animals are harder to hit
@@ -61,7 +62,7 @@ fun Game.fire(p: Pawn, t: Pawn) {
                 else dealDamage(t, w.kind, dmg, w.armorPen, p)
             }
         }
-        p.attackCd = max(8, (w.cooldown * (if (Trait.TRIGGER_HAPPY in p.traits) 0.85f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.attackCd = max(8, (w.cooldown * (if (Trait.TRIGGER_HAPPY in p.traits) 0.85f else if (Trait.CAREFUL_SHOOTER in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
         p.gainXp(SkillType.SHOOTING, 4f * w.burst)
     } else {
         if (d > 2.1f) return
@@ -148,6 +149,15 @@ private fun Game.pickTurretTarget(p: Pawn): Building? {
         if (d < bd && map.lineOfSight(p.x, p.y, b.x, b.y)) { best = b; bd = d }
     }
     return best
+}
+
+/** Dormant mechanoids lie still until someone gets close; the whole cluster wakes together. */
+internal fun Game.dormantTick(p: Pawn) {
+    if (tick % 20 != (p.id % 20).toLong()) return
+    if (pawns.any { it.alive && it.faction == Faction.PLAYER && !it.isAnimal && distance(p.x, p.y, it.x, it.y) < 11f }) {
+        for (o in pawns) if (o.dormant && o.raidId == p.raidId) o.dormant = false
+        say("The mechanoid cluster has awoken!", 3)
+    }
 }
 
 internal fun Game.hostileAI(p: Pawn) {

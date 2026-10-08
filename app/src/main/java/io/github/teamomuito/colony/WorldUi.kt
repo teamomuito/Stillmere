@@ -19,6 +19,9 @@ import io.github.teamomuito.colony.sim.Hills
 import io.github.teamomuito.colony.sim.ItemType
 import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.Settlement
+import io.github.teamomuito.colony.sim.hasBeacon
+import io.github.teamomuito.colony.sim.hasComms
+import io.github.teamomuito.colony.sim.requestOrbitalTrader
 import io.github.teamomuito.colony.sim.hostileTo
 import io.github.teamomuito.colony.sim.peaceCost
 import io.github.teamomuito.colony.sim.peaceTalks
@@ -490,7 +493,8 @@ fun Dialogs.factionsDialog() {
         fun render() {
             body.removeAllViews()
             val w = game.world
-            body.addView(ui.label("Silver in stockpiles: ${game.silverInStockpiles()}", 12f, ui.accent, true))
+            body.addView(ui.label("Silver in stockpiles: ${game.silverInStockpiles()}${if (!game.hasComms()) " · no powered comms console" else ""}", 12f, ui.accent, true))
+            if (game.hasComms() && game.hasBeacon()) body.addView(ui.button("Call an orbital trade ship (120 silver)", 12f) { val e = game.requestOrbitalTrader(); a.toast(e ?: "A ship is landing at your beacon."); render() }, ui.lin(-2, -2, 0f, 0, 6, 0, 0))
             for (f in w.factions) {
                 val st = game.standing(f)
                 val col = if (st == io.github.teamomuito.colony.sim.Standing.HOSTILE) ui.bad else if (st == io.github.teamomuito.colony.sim.Standing.WARY) ui.warn else ui.good

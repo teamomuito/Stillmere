@@ -55,7 +55,7 @@ private fun Game.growthMoment(p: Pawn) {
     if (p.passion[s] < 2) { p.passion[s]++; if (p.colonist) say("$first discovered a passion for ${SkillType.entries[s].label.lowercase()}.", 1) }
     p.skill[s] = min(20, p.skill[s] + 2)
     if (p.age == 13) {
-        val t = Trait.entries[rng.int(Trait.entries.size)]
+        val t = if (rng.chance(0.16f)) rng.pick(listOf(Trait.GAY, Trait.BISEXUAL, Trait.ASEXUAL)) else Trait.entries[rng.int(Trait.entries.size)]
         if (p.traits.none { it == t || conflicts(it, t) } && p.traits.size < 4) { p.traits.add(t); if (p.colonist) say("$first became ${t.label.lowercase()}.", 1) }
         for (w in WorkType.entries) {
             val sk = w.skill()

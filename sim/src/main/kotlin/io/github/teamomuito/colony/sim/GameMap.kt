@@ -149,6 +149,7 @@ class GameMap(val w: Int, val h: Int) {
     fun walkable(i: Int): Boolean {
         if (!terrain[i].passable) return false
         val b = building[i]
+        if (b != null && b.built && b.def == BuildDef.AUTODOOR && !b.powered) return false
         return !(b != null && b.built && b.def.blocksMove)
     }
 
@@ -459,11 +460,12 @@ class GameMap(val w: Int, val h: Int) {
             }
             // Plants.
             val trees = when (biome) {
-                Biome.TEMPERATE -> listOf(PlantType.OAK, PlantType.POPLAR, PlantType.OAK)
-                Biome.BOREAL -> listOf(PlantType.PINE, PlantType.PINE, PlantType.POPLAR)
+                Biome.TEMPERATE -> listOf(PlantType.OAK, PlantType.POPLAR, PlantType.OAK, PlantType.BIRCH, PlantType.MAPLE)
+                Biome.BOREAL -> listOf(PlantType.PINE, PlantType.PINE, PlantType.POPLAR, PlantType.BIRCH)
                 Biome.TUNDRA -> listOf(PlantType.PINE)
-                Biome.DESERT, Biome.ARID -> listOf(PlantType.PALM)
-                Biome.TROPICAL -> listOf(PlantType.PALM, PlantType.OAK, PlantType.POPLAR)
+                Biome.DESERT -> listOf(PlantType.SAGUARO, PlantType.PALM)
+                Biome.ARID -> listOf(PlantType.PALM, PlantType.SAGUARO, PlantType.PALM)
+                Biome.TROPICAL -> listOf(PlantType.PALM, PlantType.TEAK, PlantType.TEAK, PlantType.POPLAR)
             }
             for (y in 0 until h) for (x in 0 until w) {
                 val i = m.idx(x, y)

@@ -38,6 +38,17 @@ fun Game.igniteCell(i: Int, intensity: Float = 0.3f) {
 
 fun Game.fireTick() {
     if (map.fires.isEmpty()) return
+    // Firefoam poppers burst when flames reach them.
+    for (b in map.buildings()) {
+        if (!b.built || b.def != BuildDef.FOAM_POPPER) continue
+        if (map.fires.keys.any { val fx = it % map.w; val fy = it / map.w; Math.abs(fx - b.x) <= 3 && Math.abs(fy - b.y) <= 3 }) {
+            for (dy in -6..6) for (dx in -6..6) { val x = b.x + dx; val y = b.y + dy; if (map.inB(x, y)) map.fires.remove(map.idx(x, y)) }
+            map.removeBuilding(b)
+            say("A firefoam popper smothers the flames.", 1)
+            break
+        }
+    }
+    if (map.fires.isEmpty()) return
     val rain = weather == Weather.RAIN || weather == Weather.THUNDER
     val snow = weather == Weather.SNOW
     for ((i, f) in map.fires.entries.toList()) {
