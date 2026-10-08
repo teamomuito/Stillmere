@@ -620,8 +620,14 @@ class Panels(private val a: MainActivity) {
         val food = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         for ((i, n) in listOf("Anything", "No raw", "Meals only").withIndex()) food.addView(ui.button(n, 10.5f, selected = p.foodPolicy == i) { p.foodPolicy = i; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 3, 0))
         body.addView(ui.hscroll(food))
+        body.addView(ui.label("Outfit", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 2))
+        val outfit = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((i, n) in listOf("Anything", "Worker (no armor)", "Soldier (armor)", "Nothing").withIndex()) outfit.addView(ui.button(n, 10.5f, selected = p.outfit == i) { p.outfit = i; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 3, 0))
+        body.addView(ui.hscroll(outfit))
         body.addView(ui.label("Drugs", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 2))
-        body.addView(ui.button(if (p.allowDrugs) "Recreational drugs: allowed" else "Recreational drugs: no", 10.5f, selected = p.allowDrugs) { p.allowDrugs = !p.allowDrugs; fillPawn(p) })
+        val drugs = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        for ((i, n) in listOf("None", "Social only", "Whenever bored").withIndex()) drugs.addView(ui.button(n, 10.5f, selected = (if (p.allowDrugs) 2 else p.drugPolicy) == i) { p.drugPolicy = i; p.allowDrugs = false; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 3, 0))
+        body.addView(ui.hscroll(drugs))
         body.addView(ui.label("Schedule (tap to change)", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 2))
         val strip = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         for (h in 0 until 24) {

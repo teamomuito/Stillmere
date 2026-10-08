@@ -128,6 +128,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var schedule = IntArray(24) { if (it >= 22 || it < 6) 3 else if (it in 19..21) 2 else 0 } // 0 anything, 1 work, 2 joy, 3 sleep
     var areaRestriction = 0
     var foodPolicy = 0 // 0 anything, 1 no raw, 2 meals only
+    var outfit = 0 // 0 anything, 1 worker (no armor), 2 soldier (armor first), 3 none
+    var drugPolicy = 0 // 0 none, 1 social only, 2 whenever bored
     var allowDrugs = false
 
     // Orders

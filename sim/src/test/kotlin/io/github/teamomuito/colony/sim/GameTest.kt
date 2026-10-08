@@ -983,3 +983,43 @@ class ContentTest {
         assertTrue(l.pawns.any { it.race == Race.LANCER && it.dormant })
     }
 }
+
+class RulesTest {
+    @Test fun outdoorGearWearsAwayButRoofedGearDoesNot() {
+        val g = newGame(61); g.quiet()
+        for (yy in g.homeY + 5..g.homeY + 6) for (xx in g.homeX + 5..g.homeX + 8) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
+        g.map.drop(ItemType.W_CLUB, 1, g.homeX + 5, g.homeY + 5)
+        g.map.drop(ItemType.W_CLUB, 1, g.homeX + 8, g.homeY + 6)
+        g.map.natRoof[g.map.idx(g.homeX + 8, g.homeY + 6)] = true
+        g.map.roomDirty = true
+        g.weather = Weather.RAIN; g.weatherUntil = Long.MAX_VALUE
+        g.run(TICKS_PER_DAY * 12)
+        assertNull(g.map.items[g.map.idx(g.homeX + 5, g.homeY + 5)])
+        assertNotNull(g.map.items[g.map.idx(g.homeX + 8, g.homeY + 6)])
+    }
+
+    @Test fun outfitPolicyKeepsArmorOffWorkers() {
+        val g = newGame(62); g.quiet()
+        val p = g.colonists.first(); p.outfit = 1
+        for (o in g.colonists) if (o !== p) o.outfit = 1
+        p.apparel.clear()
+        g.map.drop(ItemType.A_FLAK_VEST, 1, p.x + 1, p.y)
+        g.run(600)
+        assertTrue(p.apparel.none { it.type == ItemType.A_FLAK_VEST })
+        p.outfit = 2
+        g.run(6000)
+        assertTrue(p.apparel.any { it.type == ItemType.A_FLAK_VEST })
+    }
+
+    @Test fun lovers_with_bad_opinions_break_up_and_kin_like_each_other() {
+        val g = newGame(63); g.quiet()
+        val a = g.colonists[0]; val b = g.colonists[1]
+        a.lover = b.id; b.lover = a.id; a.opinion[b.id] = -10; b.opinion[a.id] = -10
+        repeat(60) { g.socialInteract(a, b) }
+        assertEquals(-1, a.lover)
+        val kid = g.newHuman(0, 0); kid.mother = a.id
+        a.opinion[kid.id] = 0; kid.opinion[a.id] = 0
+        g.socialInteract(a, kid)
+        assertTrue((a.opinion[kid.id] ?: 0) >= 40)
+    }
+}

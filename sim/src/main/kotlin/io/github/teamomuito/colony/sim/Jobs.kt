@@ -304,7 +304,7 @@ internal fun Game.startSleep(p: Pawn): Boolean {
 
 internal fun Game.startJoy(p: Pawn): Job? {
     // Drugs, when allowed.
-    if (p.allowDrugs && p.joy < 0.6f && p.hediff(HediffKind.ALCOHOL_HIGH) == null) {
+    if ((p.allowDrugs || p.drugPolicy == 2 || p.drugPolicy == 1 && pawns.any { it !== p && it.colonist && it.alive && distance(p.x, p.y, it.x, it.y) < 8f }) && p.joy < 0.6f && p.hediff(HediffKind.ALCOHOL_HIGH) == null) {
         val s = nearestItem(p) { it.type == ItemType.BEER || it.type == ItemType.JOINT || (it.type == ItemType.FLAKE || it.type == ItemType.YAYO) && rng.chance(0.4f) || it.type == ItemType.PSYCHITE_TEA && rng.chance(0.3f) }
         if (s != null) {
             val j = Job(JobType.SMOKE, s.x, s.y); j.key = key(map.idx(s.x, s.y), K_ITEM); reserve(p, j.key); j.item = s.type
@@ -356,7 +356,7 @@ internal fun Game.findGear(p: Pawn): Job? {
         return j
     }
     // Apparel: wear a better piece for any slot; swap tattered clothes.
-    if (Trait.NUDIST in p.traits) return null
+    if (Trait.NUDIST in p.traits || p.outfit == 3) return null
     val temp = outdoorTemp()
     var best: ItemStack? = null
     var bs = 0f
@@ -366,10 +366,12 @@ internal fun Game.findGear(p: Pawn): Job? {
         if (abs(s.x - p.x) + abs(s.y - p.y) > 45) continue
         val i = map.idx(s.x, s.y)
         if (!isFree(p, key(i, K_ITEM)) || isBad(p, key(i, K_ITEM))) continue
+        if (p.outfit == 1 && a.armorSharp > 0.25f) continue
         // Conflicting layers: shirts under outer, same slot replaces.
         val worn = p.apparel.filter { it.type.apparel?.slot == a.slot }
         val wornValue = worn.sumOf { ((it.type.apparel?.armorSharp ?: 0f) * 2f * it.quality.mult + (it.type.apparel?.insCold ?: 0f) * 0.02f * it.quality.mult + 0.1f).toDouble() }.toFloat()
         var v = apparelValue(s) - wornValue
+        if (p.outfit == 2) v += a.armorSharp * 1.5f
         // Cold weather prefers warm gear and hot prefers light gear.
         if (temp < 5f) v += a.insCold * 0.01f
         if (temp > 28f) v -= a.insCold * 0.006f

@@ -415,9 +415,28 @@ private fun Game.plantsTick(out: Float) {
     }
 }
 
+/** Manufactured goods left out in the open wear away; roofs, and especially rain, matter. */
+private fun deteriorates(t: ItemType) = t.isGear || t == ItemType.CLOTH || t == ItemType.LEATHER || t == ItemType.WOOL || t == ItemType.DEVILSTRAND ||
+    t == ItemType.MEDS_HERBAL || t == ItemType.MEDS_INDUSTRIAL || t == ItemType.KIBBLE || t.cat == ItemCat.ART
+
+private fun Game.deteriorationTick() {
+    val m = map
+    val wet = weather == Weather.RAIN || weather == Weather.THUNDER || weather == Weather.SNOW
+    val gone = ArrayList<Int>()
+    for ((i, s) in m.items) {
+        if (s.corpseOf != null || !deteriorates(s.type) || m.roofed(i) || m.building[i]?.def?.sleeps == true) continue
+        s.hp -= 250f / (TICKS_PER_DAY * 25f) * (if (wet) 3f else 1f)
+        if (s.hp <= 0f) {
+            if (s.count <= 1 || s.type.isGear) gone.add(i) else { s.count = max(1, s.count - max(1, s.count / 6)); s.hp = 0.6f }
+        }
+    }
+    for (i in gone) { val s = m.items.remove(i) ?: continue; if (s.type.isGear) say("A ${s.type.label.lowercase()} fell apart in the weather.", 0) }
+}
+
 private fun Game.spoilTick(out: Float) {
     val m = map
     val dt = 250f
+    deteriorationTick()
     var spoiled = 0
     val rem = ArrayList<Int>()
     for ((i, s) in m.items) {

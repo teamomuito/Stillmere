@@ -75,10 +75,55 @@ class WorldMapView(context: Context, private val game: Game, private val onPick:
         Biome.DESERT -> 0xFFD3B676.toInt(); Biome.TROPICAL -> 0xFF2F7A3A.toInt(); Biome.ARID -> 0xFFA39B5A.toInt()
     }
 
-    private fun geom(): Triple<Float, Float, Float> {
-        val cell = min(width.toFloat() / w.w, height.toFloat() / w.h)
-        return Triple(cell, (width - cell * w.w) / 2f, (height - cell * w.h) / 2f)
+    // Pan and zoom: zoom 1 fits the whole planet; the offset is the pixel shift of the map.
+    private var zoom = 1f
+    private var panX = 0f
+    private var panY = 0f
+    private var fitted = false
+
+    private fun baseCell() = min(width.toFloat() / w.w, height.toFloat() / w.h)
+
+    private fun clampPan() {
+        val cell = baseCell() * zoom
+        val mw = cell * w.w; val mh = cell * w.h
+        panX = if (mw <= width) (width - mw) / 2f else panX.coerceIn(width - mw, 0f)
+        panY = if (mh <= height) (height - mh) / 2f else panY.coerceIn(height - mh, 0f)
     }
+
+    private fun geom(): Triple<Float, Float, Float> {
+        if (!fitted && width > 0) { fitted = true; zoom = 1f; clampPan() }
+        clampPan()
+        return Triple(baseCell() * zoom, panX, panY)
+    }
+
+    /** Zoom around a screen point. */
+    private fun zoomAt(f: Float, fx: Float, fy: Float) {
+        val old = zoom
+        zoom = (zoom * f).coerceIn(1f, 5f)
+        val k = zoom / old
+        panX = fx - (fx - panX) * k
+        panY = fy - (fy - panY) * k
+        clampPan()
+        invalidate()
+    }
+
+    fun centerOnTile(t: Int) {
+        if (width == 0) return
+        zoom = max(zoom, 2.5f)
+        val cell = baseCell() * zoom
+        panX = width / 2f - (w.x(t) + 0.5f) * cell
+        panY = height / 2f - (w.y(t) + 0.5f) * cell
+        clampPan(); invalidate()
+    }
+
+    private val scaler = android.view.ScaleGestureDetector(context, object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(d: android.view.ScaleGestureDetector): Boolean { zoomAt(d.scaleFactor, d.focusX, d.focusY); return true }
+    })
+    private var downX = 0f
+    private var downY = 0f
+    private var lastX = 0f
+    private var lastY = 0f
+    private var moved = false
 
     override fun onDraw(c: Canvas) {
         c.drawColor(0xFF0F1A24.toInt())
@@ -219,10 +264,22 @@ class WorldMapView(context: Context, private val game: Game, private val onPick:
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (e.action == MotionEvent.ACTION_UP) {
-            val (cell, ox, oy) = geom()
-            val x = ((e.x - ox) / cell).toInt(); val y = ((e.y - oy) / cell).toInt()
-            if (w.inB(x, y)) onPick(w.tile(x, y))
+        scaler.onTouchEvent(e)
+        if (scaler.isInProgress || e.pointerCount > 1) { moved = true; return true }
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; lastX = e.x; lastY = e.y; moved = false; parent?.requestDisallowInterceptTouchEvent(true) }
+            MotionEvent.ACTION_MOVE -> {
+                if (Math.abs(e.x - downX) + Math.abs(e.y - downY) > 14f) moved = true
+                if (moved) { panX += e.x - lastX; panY += e.y - lastY; clampPan(); invalidate() }
+                lastX = e.x; lastY = e.y
+            }
+            MotionEvent.ACTION_UP -> {
+                if (!moved) {
+                    val (cell, ox, oy) = geom()
+                    val x = Math.floor(((e.x - ox) / cell).toDouble()).toInt(); val y = Math.floor(((e.y - oy) / cell).toDouble()).toInt()
+                    if (w.inB(x, y)) onPick(w.tile(x, y))
+                }
+            }
         }
         return true
     }
@@ -299,6 +356,7 @@ fun Dialogs.worldMap(focus: Caravan? = null) {
     box.addView(ui.hscroll(chips))
     map = WorldMapView(a, game) { t -> sel = t; render() }
     map.bases = a.colonies().map { it.tile }
+    map.post { focus?.let { map.centerOnTile(it.tile) } ?: map.centerOnTile(w.homeTile) }
     val h = (a.resources.displayMetrics.heightPixels * 0.55f).toInt()
     box.addView(map, ui.lin(-1, h, 0f, 0, 6, 0, 0))
     box.addView(info, ui.lin(-1, -2, 0f, 0, 6, 0, 0))

@@ -60,6 +60,15 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
             b.addThought("Chitchat", 0.02f, tick, TICKS_PER_DAY)
         }
     }
+    // Relationships can sour, and kin look out for each other.
+    if (a.lover == b.id && b.lover == a.id && (opinionOf(a, b) < 5 || opinionOf(b, a) < 5) && rng.chance(0.25f)) {
+        a.lover = -1; b.lover = -1
+        a.addThought("Broke up with ${b.name.substringBefore(' ')}", -0.15f, tick, 6 * TICKS_PER_DAY); b.addThought("Broke up with ${a.name.substringBefore(' ')}", -0.15f, tick, 6 * TICKS_PER_DAY)
+        say("${a.name} and ${b.name} broke up.", 2)
+    }
+    if (a.mother == b.id || a.father == b.id || b.mother == a.id || b.father == a.id) {
+        a.opinion[b.id] = max(opinionOf(a, b), 40); b.opinion[a.id] = max(opinionOf(b, a), 40)
+    }
     // Lovers who are together long enough marry.
     if (a.lover == b.id && b.lover == a.id && opinionOf(a, b) > 60 && opinionOf(b, a) > 60 && rng.chance(0.02f)) {
         a.spouse = b.id; b.spouse = a.id; a.lover = -1; b.lover = -1

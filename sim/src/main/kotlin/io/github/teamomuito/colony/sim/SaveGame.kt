@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 13
+    private const val VERSION = 14
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -122,7 +122,7 @@ object SaveGame {
         o.writeInt(p.age); o.writeBoolean(p.female); o.writeFloat(p.mood)
         o.writeLong(p.breakUntil); o.writeInt(p.breakKind)
         o.writeFloat(p.food); o.writeFloat(p.rest); o.writeFloat(p.joy); o.writeFloat(p.bloodLoss)
-        o.writeInt(p.careLevel); o.writeInt(p.foodPolicy); o.writeBoolean(p.allowDrugs)
+        o.writeInt(p.careLevel); o.writeInt(p.foodPolicy); o.writeBoolean(p.allowDrugs); o.writeInt(p.outfit); o.writeInt(p.drugPolicy)
         for (s in p.skill) o.writeInt(s)
         for (s in p.xp) o.writeFloat(s)
         for (s in p.passion) o.writeInt(s)
@@ -297,7 +297,7 @@ object SaveGame {
         p.age = i.readInt(); p.female = i.readBoolean(); p.mood = i.readFloat()
         p.breakUntil = i.readLong(); p.breakKind = i.readInt()
         p.food = i.readFloat(); p.rest = i.readFloat(); p.joy = i.readFloat(); p.bloodLoss = i.readFloat()
-        p.careLevel = i.readInt(); p.foodPolicy = i.readInt(); p.allowDrugs = i.readBoolean()
+        p.careLevel = i.readInt(); p.foodPolicy = i.readInt(); p.allowDrugs = i.readBoolean(); p.outfit = i.readInt(); p.drugPolicy = i.readInt()
         for (s in p.skill.indices) p.skill[s] = i.readInt()
         for (s in p.xp.indices) p.xp[s] = i.readFloat()
         for (s in p.passion.indices) p.passion[s] = i.readInt()

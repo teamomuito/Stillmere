@@ -187,6 +187,17 @@ fun Game.moodUpdate(p: Pawn) {
         if (s.corpseColonist) seen += 0.02f
     }
     if (seen > 0f) add("Saw a corpse", -min(0.14f, seen))
+    // Rivals nearby grate on people; family nearby reassures.
+    var rivals = 0; var kin = 0
+    for (o in pawns) {
+        if (o === p || !o.alive || o.isAnimal || o.faction != Faction.PLAYER) continue
+        if (abs(o.x - p.x) + abs(o.y - p.y) > 12) continue
+        val op = p.opinion[o.id] ?: 0
+        if (op < -40) rivals++
+        if (o.id == p.mother || o.id == p.father || o.mother == p.id || o.father == p.id) kin++
+    }
+    if (rivals > 0) add("Rival nearby", -min(0.12f, 0.05f * rivals))
+    if (kin > 0 && p.age >= 3) add("Family close by", min(0.06f, 0.03f * kin))
     // Relationships.
     if (p.spouse >= 0) {
         val sp = pawnById(p.spouse)
