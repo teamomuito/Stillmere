@@ -356,6 +356,8 @@ class MainActivity : Activity() {
 
     private fun refreshAlerts() {
         alertBar.removeAllViews()
+        // The pawn panel sits on the same side of the screen.
+        alertBar.visibility = if (view.selectedId >= 0) View.GONE else View.VISIBLE
         for (a in computeAlerts()) {
             val color = when (a.level) { 3 -> 0xDD8A2828.toInt(); 2 -> 0xDD8A6420.toInt(); 1 -> 0xDD4A5A2A.toInt(); else -> 0xDD3A3A3A.toInt() }
             val tv = ui.chip(a.text, color)

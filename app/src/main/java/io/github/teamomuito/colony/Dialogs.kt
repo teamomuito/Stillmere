@@ -55,6 +55,10 @@ class Dialogs(private val a: MainActivity) {
         val d = Dialog(a, android.R.style.Theme_Material_Dialog_NoActionBar)
         d.setContentView(holder)
         build(body, d)
+        // The colony waits while a window is open.
+        val prevSpeed = a.speed
+        if (prevSpeed > 0) { a.speed = 0; a.refreshSpeed() }
+        d.setOnDismissListener { if (a.speed == 0 && prevSpeed > 0 && !a.game.gameOver) { a.speed = prevSpeed; a.refreshSpeed() } }
         d.window?.let { w ->
             w.setBackgroundDrawable(ui.bg(0x00000000, 0))
             val m = a.resources.displayMetrics
@@ -95,6 +99,9 @@ class Dialogs(private val a: MainActivity) {
         val side = (a.resources.displayMetrics.heightPixels * 0.78f).toInt()
         box.addView(v, ui.lin(side, side))
         d.setContentView(box)
+        val prevSpeed = a.speed
+        if (prevSpeed > 0) { a.speed = 0; a.refreshSpeed() }
+        d.setOnDismissListener { if (a.speed == 0 && prevSpeed > 0) { a.speed = prevSpeed; a.refreshSpeed() } }
         d.show()
     }
 
