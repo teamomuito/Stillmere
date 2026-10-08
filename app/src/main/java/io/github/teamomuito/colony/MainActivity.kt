@@ -22,6 +22,7 @@ import io.github.teamomuito.colony.sim.LogEntry
 import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.Research
 import io.github.teamomuito.colony.sim.SaveGame
+import io.github.teamomuito.colony.sim.settle
 import io.github.teamomuito.colony.sim.Weather
 import io.github.teamomuito.colony.sim.ZoneKind
 import io.github.teamomuito.colony.sim.TICKS_PER_DAY
@@ -537,6 +538,64 @@ class MainActivity : Activity() {
                 if (n == 0 && t is Tool.Build) toast("Can't build ${t.def.label.lowercase()} there")
             }
         }
+    }
+
+    // ------------------------------------------------------------------ several colonies
+    class ColonyEntry(val tile: Int, val name: String, val file: String)
+
+    private val coloniesFile get() = File(filesDir, "colonies.txt")
+
+    fun colonies(): List<ColonyEntry> = try {
+        if (!coloniesFile.exists()) emptyList() else coloniesFile.readLines().mapNotNull { l ->
+            val parts = l.split("|")
+            if (parts.size == 3 && File(filesDir, parts[2]).exists()) ColonyEntry(parts[0].toInt(), parts[1], parts[2]) else null
+        }
+    } catch (_: Throwable) { emptyList() }
+
+    private fun writeColonies(list: List<ColonyEntry>) {
+        try { coloniesFile.writeText(list.joinToString("\n") { "${it.tile}|${it.name.replace('|', ' ')}|${it.file}" }) } catch (_: Throwable) {}
+    }
+
+    /** Found a colony with the caravan; the old one is archived and can be switched back to. */
+    fun settleWith(c: io.github.teamomuito.colony.sim.Caravan, name: String): String? {
+        val oldTile = game.world.homeTile
+        val oldName = game.colonyName
+        val st = game.settle(c, name) ?: return "This tile can't be settled."
+        val file = "colony_${System.currentTimeMillis()}.sav"
+        File(filesDir, file).writeBytes(st.archivedOld)
+        writeColonies(colonies() + ColonyEntry(oldTile, oldName, file))
+        swapTo(st.game)
+        return null
+    }
+
+    fun switchColony(e: ColonyEntry) {
+        try {
+            val target = SaveGame.read(File(filesDir, e.file).readBytes())
+            val file = "colony_${System.currentTimeMillis()}.sav"
+            File(filesDir, file).writeBytes(SaveGame.write(game))
+            val rest = colonies().filter { it.file != e.file }
+            writeColonies(rest + ColonyEntry(game.world.homeTile, game.colonyName, file))
+            File(filesDir, e.file).delete()
+            swapTo(target)
+        } catch (t: Throwable) { reportError(t) }
+    }
+
+    private fun swapTo(g: Game) {
+        game = g
+        hookAutosave(game)
+        view.game = game
+        view.selectedId = -1
+        view.selectedCell = -1
+        view.recenter()
+        overShown = false
+        lastLogEntry = null
+        chipIds = emptyList()
+        select(null)
+        panels.closePanel()
+        setTool(Tool.Select)
+        speed = 1; refreshSpeed()
+        save()
+        refreshHud()
     }
 
     // ------------------------------------------------------------------ whole-game control

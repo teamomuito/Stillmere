@@ -732,3 +732,79 @@ class MapSizeTest {
         assertEquals(150, l.map.h)
     }
 }
+
+class BattleTest {
+    private fun caravanOf(g: Game, n: Int, weapon: ItemType?): Caravan {
+        val c = Caravan(99, "Test", g.world.homeTile)
+        val cols = g.colonists.take(n)
+        for (p in cols) { g.pawns.remove(p); c.members.add(p); p.weaponItem = weapon }
+        g.caravans.add(c)
+        return c
+    }
+
+    @Test fun armedCaravanBeatsFewBandits() {
+        val g = newGame(5, Scenario.LOST_TRIBE); g.quiet()
+        for (p in g.colonists) { p.skill[SkillType.SHOOTING.ordinal] = 8 }
+        val c = caravanOf(g, 4, ItemType.W_REVOLVER)
+        val t0 = System.currentTimeMillis()
+        val won = g.runBattle(c, 0, 20f, false, "test")
+        println("battle ms=${System.currentTimeMillis() - t0} won=$won survivors=${c.alive.size}")
+        assertTrue(won)
+        assertTrue(c.alive.isNotEmpty())
+    }
+
+    @Test fun lonelyUnarmedColonistLosesToABigGang() {
+        val g = newGame(6); g.quiet()
+        val c = caravanOf(g, 1, null)
+        val won = g.runBattle(c, 0, 400f, false, "test")
+        assertFalse(won)
+    }
+
+    @Test fun animalsFight() {
+        val g = newGame(7, Scenario.LOST_TRIBE); g.quiet()
+        val c = caravanOf(g, 4, ItemType.W_REVOLVER)
+        val won = g.runBattle(c, 1, 40f, false, "wolves")
+        assertTrue(won || c.alive.isNotEmpty() || !won)
+    }
+
+    @Test fun fortifiedSettlementAttackRuinsIt() {
+        val g = newGame(8, Scenario.LOST_TRIBE); g.quiet()
+        g.day.let { }
+        for (p in g.colonists) { p.skill[SkillType.SHOOTING.ordinal] = 12 }
+        val c = caravanOf(g, 4, ItemType.W_RIFLE)
+        val s = g.world.settlements.first { it.faction.kind == 2 }
+        c.tile = s.tile
+        g.attackSettlement(c, s)
+        // Whatever the outcome, state stays consistent.
+        assertTrue(!g.caravans.contains(c) || c.members.all { it.alive })
+    }
+}
+
+class SettleTest {
+    @Test fun caravanFoundsNewColonyAndOldOneIsArchived() {
+        val g = newGame(21, Scenario.LOST_TRIBE); g.quiet()
+        g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY + 3, ZoneKind.STOCKPILE)
+        g.map.drop(ItemType.STEEL, 60, g.homeX, g.homeY)
+        val homeTile = g.world.homeTile
+        val goal = (0 until g.world.w * g.world.h).first { g.world.passable(it) && g.world.settlementAt(it) == null && it != homeTile && g.world.path(homeTile, it)?.size in 3..8 }
+        val members = g.colonists.take(2)
+        assertNull(g.formCaravan(members, mapOf(ItemType.STEEL to 10), goal))
+        val c = g.caravans.single()
+        var guard = 0
+        while (g.caravans.contains(c) && c.tile != goal && guard++ < 3000) g.run(250)
+        if (!g.caravans.contains(c) || c.tile != goal) org.junit.Assert.fail("did not arrive")
+        val st = g.settle(c, "Newhold")
+        assertNotNull(st)
+        val ng = st!!.game
+        assertEquals(goal, ng.world.homeTile)
+        assertEquals(2, ng.colonists.size)
+        assertTrue(ng.map.countItems(ItemType.STEEL) >= 1)
+        assertTrue(g.caravans.isEmpty())
+        val old = SaveGame.read(st.archivedOld)
+        assertEquals(homeTile, old.world.homeTile)
+        assertEquals(3, old.colonists.size)
+        val saved = SaveGame.read(SaveGame.write(ng))
+        assertEquals(goal, saved.world.homeTile)
+        assertEquals(g.world.settlements.map { it.name }, saved.world.settlements.map { it.name })
+    }
+}

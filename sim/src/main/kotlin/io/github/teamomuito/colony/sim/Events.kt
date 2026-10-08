@@ -165,14 +165,14 @@ private fun Game.miscFriendly() {
 
 // ----------------------------------------------------------------------------------------- raids
 
-private fun raidWeaponTier(day: Int): List<Pair<ItemType?, Float>> = when {
+internal fun raidWeaponTier(day: Int): List<Pair<ItemType?, Float>> = when {
     day < 9 -> listOf(ItemType.W_CLUB to 14f, ItemType.W_KNIFE to 16f, ItemType.W_SPEAR to 18f, ItemType.W_BOW to 20f, ItemType.W_REVOLVER to 26f)
     day < 22 -> listOf(ItemType.W_MACE to 24f, ItemType.W_BOW to 20f, ItemType.W_REVOLVER to 26f, ItemType.W_AUTOPISTOL to 28f, ItemType.W_BOLT to 32f, ItemType.W_SHOTGUN to 34f, ItemType.W_SPEAR to 18f)
     day < 40 -> listOf(ItemType.W_SMG to 34f, ItemType.W_SHOTGUN to 34f, ItemType.W_RIFLE to 42f, ItemType.W_BOLT to 32f, ItemType.W_LONGSWORD to 38f, ItemType.W_MACE to 24f)
     else -> listOf(ItemType.W_RIFLE to 42f, ItemType.W_LMG to 52f, ItemType.W_SNIPER to 54f, ItemType.W_SMG to 34f, ItemType.W_LONGSWORD to 38f, ItemType.W_SHOTGUN to 34f)
 }
 
-private fun tribalTier(day: Int): List<Pair<ItemType?, Float>> = when {
+internal fun tribalTier(day: Int): List<Pair<ItemType?, Float>> = when {
     day < 15 -> listOf(ItemType.W_CLUB to 14f, ItemType.W_KNIFE to 16f, ItemType.W_SPEAR to 18f, ItemType.W_BOW to 20f)
     day < 30 -> listOf(ItemType.W_MACE to 24f, ItemType.W_SPEAR to 18f, ItemType.W_BOW to 20f, ItemType.W_GREATBOW to 30f, ItemType.W_LONGSWORD to 38f)
     else -> listOf(ItemType.W_MACE to 24f, ItemType.W_GREATBOW to 30f, ItemType.W_LONGSWORD to 38f, ItemType.W_BOLT to 32f)

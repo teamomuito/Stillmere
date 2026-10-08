@@ -35,6 +35,7 @@ import io.github.teamomuito.colony.sim.caravanDaysLeft
 import io.github.teamomuito.colony.sim.caravanSell
 import io.github.teamomuito.colony.sim.caravanSellPrice
 import io.github.teamomuito.colony.sim.caravanSilver
+import io.github.teamomuito.colony.sim.attackSettlement
 import io.github.teamomuito.colony.sim.carryCapacity
 import io.github.teamomuito.colony.sim.disbandCaravan
 import io.github.teamomuito.colony.sim.foodDays
@@ -56,6 +57,7 @@ import kotlin.math.min
 class WorldMapView(context: Context, private val game: Game, private val onPick: (Int) -> Unit) : View(context) {
     var selected = -1
     var route: List<Int> = emptyList()
+    var bases: List<Int> = emptyList()
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val w get() = game.world
 
@@ -183,6 +185,13 @@ class WorldMapView(context: Context, private val game: Game, private val onPick:
             c.drawCircle(cx, cy, cell * 0.42f, p)
             p.style = Paint.Style.FILL; c.drawCircle(cx, cy, cell * 0.16f, p)
         }
+        for (bt in bases) {
+            val cx = ox + (w.x(bt) + 0.5f) * cell; val cy = oy + (w.y(bt) + 0.5f) * cell
+            p.style = Paint.Style.STROKE; p.color = 0xFFFFD54A.toInt(); p.strokeWidth = max(2f, cell * 0.1f)
+            p.pathEffect = android.graphics.DashPathEffect(floatArrayOf(cell * 0.2f, cell * 0.15f), 0f)
+            c.drawCircle(cx, cy, cell * 0.4f, p); p.pathEffect = null
+            p.style = Paint.Style.FILL; c.drawCircle(cx, cy, cell * 0.12f, p)
+        }
         // Caravans.
         for (cv in game.caravans) {
             val cx = ox + (w.x(cv.tile) + 0.5f) * cell; val cy = oy + (w.y(cv.tile) + 0.5f) * cell - cell * 0.05f; val r = cell * 0.3f
@@ -286,10 +295,12 @@ fun Dialogs.worldMap(focus: Caravan? = null) {
     renderChips()
     box.addView(ui.hscroll(chips))
     map = WorldMapView(a, game) { t -> sel = t; render() }
+    map.bases = a.colonies().map { it.tile }
     val h = (a.resources.displayMetrics.heightPixels * 0.55f).toInt()
     box.addView(map, ui.lin(-1, h, 0f, 0, 6, 0, 0))
     box.addView(info, ui.lin(-1, -2, 0f, 0, 6, 0, 0))
     val bottom = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+    if (a.colonies().isNotEmpty()) bottom.addView(ui.button("Colonies", 12f) { d.dismiss(); coloniesDialog() }, ui.lin(0, -2, 1f, 0, 0, 4, 0))
     bottom.addView(ui.button("Factions", 12f) { d.dismiss(); factionsDialog() }, ui.lin(0, -2, 1f, 0, 0, 4, 0))
     bottom.addView(closeRow(d), ui.lin(0, -2, 1f, 4, 0, 0, 0))
     box.addView(bottom, ui.lin(-1, -2, 0f, 0, 6, 0, 0))
@@ -400,8 +411,17 @@ fun Dialogs.caravanDialog(c: Caravan) {
             if (c.inventory.isEmpty()) body.addView(ui.label("Empty.", 11.5f, ui.dim))
             for ((t, n) in c.inventory) body.addView(ui.label("${t.label} ×$n  (${f1(t.mass() * n)} kg)", 11.5f))
             val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
-            if (s != null && s.faction.trades && !game.hostileTo(s.faction) && c.tile == s.tile && c.route.isEmpty())
+            if (s != null && s.faction.trades && !game.hostileTo(s.faction) && s.destroyedUntil <= game.tick && c.tile == s.tile && c.route.isEmpty())
                 row.addView(ui.button("Trade at ${s.name}", 12f) { d.dismiss(); caravanTrade(c, s) }, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
+            if (s != null && s.destroyedUntil <= game.tick && c.route.isEmpty() && c.humans.any { !it.downed }) row.addView(ui.button("Attack ${s.name}", 12f) {
+                AlertDialog.Builder(a).setMessage("Attack ${s.name}? Its defenders fight behind sandbags. You will lose all goodwill with ${s.faction.name}, but a win loots the settlement.")
+                    .setPositiveButton("Attack") { _, _ -> d.dismiss(); game.attackSettlement(c, s); a.refreshHud(); if (game.caravans.contains(c)) caravanDialog(c) else a.toast("The caravan is gone.") }.setNegativeButton("No", null).show()
+            }, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
+            if (s == null && w.siteAt(c.tile) == null && c.tile != w.homeTile && c.route.isEmpty() && c.humans.any { !it.downed }) row.addView(ui.button("Found a colony here", 12f) {
+                val input = android.widget.EditText(a).apply { setText("New Hold"); setSingleLine() }
+                AlertDialog.Builder(a).setTitle("Found a colony").setMessage("The caravan settles ${game.tileName(c.tile)}. Your current colony is kept and you can switch back to it from the world map.").setView(input)
+                    .setPositiveButton("Settle") { _, _ -> d.dismiss(); val err = a.settleWith(c, input.text.toString().ifBlank { "New Hold" }); if (err != null) a.toast(err) }.setNegativeButton("No", null).show()
+            }, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
             if (c.tile != w.homeTile) row.addView(ui.button("Come home", 12f) {
                 val err = game.orderCaravan(c, w.homeTile)
                 if (err != null) a.toast(err) else { a.toast("Heading home."); render() }
@@ -492,5 +512,14 @@ fun Dialogs.factionsDialog() {
             body.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 10, 0, 0))
         }
         render()
+    })
+}
+
+fun Dialogs.coloniesDialog() {
+    dialog("Colonies", { body, d ->
+        body.addView(ui.label("Current: ${game.colonyName} (day ${game.day})", 13f, ui.accent, true))
+        body.addView(ui.label("Switching saves this colony and loads the other; time stands still in the one you leave.", 11f, ui.dim))
+        for (e in a.colonies()) body.addView(ui.button("Switch to ${e.name}", 12.5f) { d.dismiss(); a.switchColony(e) }, ui.lin(-1, -2, 0f, 0, 6, 0, 0))
+        body.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 10, 0, 0))
     })
 }

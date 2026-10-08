@@ -89,13 +89,17 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     // Trading
     val traders = ArrayList<TraderInfo>()
     // World map and caravans
-    val world = World.generate(seed, map.biome)
+    /** The biome the world was generated around; kept so a later colony on another tile sees the same planet. */
+    var worldBiome = map.biome
+    var world = World.generate(seed, map.biome)
     val caravans = ArrayList<Caravan>()
     var nextCaravanId = 1
     var silverEarned = 0
     var autosaveHook: (() -> Unit)? = null
     var debugHook: ((String) -> Unit)? = null
     var mentalBreaksEnabled = true
+    /** True for the throwaway battle maps used by caravan fights. */
+    var encounter = false
     var hintBits = 0
     var graveyard = ArrayList<String>()
 
@@ -266,8 +270,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     }
 
     // ------------------------------------------------------------------ scenario
-    fun startNewColony(sc: Scenario = scenario, supplied: List<Pawn>? = null) {
-        scenario = sc
+    private fun findStartSpot(): Pair<Int, Int> {
         val cx = map.w / 2
         val cy = map.h / 2
         var sx = cx; var sy = cy
@@ -284,6 +287,12 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
                 if (ok) { sx = x; sy = y; break@loop }
             }
         }
+        return sx to sy
+    }
+
+    fun startNewColony(sc: Scenario = scenario, supplied: List<Pawn>? = null) {
+        scenario = sc
+        val (sx, sy) = findStartSpot()
         homeX = sx; homeY = sy
         for (yy in sy - 4..sy + 4) for (xx in sx - 4..sx + 4) if (map.inB(xx, yy)) map.plant[map.idx(xx, yy)] = null
 
@@ -348,6 +357,39 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         populateWildlife()
         say("Your colonists have arrived. Build beds, grow food, and survive.", 1)
         say("Tip: open Architect to mark trees and rock, and to place buildings and zones.", 0)
+    }
+
+    /** Found a new colony from a caravan's people and cargo, continuing the old game's calendar and research. */
+    fun startSettlement(from: Game, members: List<Pawn>, cargo: Map<ItemType, Int>, name: String) {
+        scenario = from.scenario; storyteller = from.storyteller; difficulty = from.difficulty
+        colonyName = name
+        tick = from.tick
+        nextPawnId = from.nextPawnId
+        researchDone.addAll(from.researchDone)
+        for ((r, v) in from.researchProgress) researchProgress[r] = v
+        researchCurrent = from.researchCurrent
+        graveyard.addAll(from.graveyard)
+        statsKilled = from.statsKilled; silverEarned = from.silverEarned; raidsSurvived = from.raidsSurvived
+        val (sx, sy) = findStartSpot()
+        homeX = sx; homeY = sy
+        for (yy in sy - 4..sy + 4) for (xx in sx - 4..sx + 4) if (map.inB(xx, yy)) map.plant[map.idx(xx, yy)] = null
+        for ((k, p) in members.withIndex()) {
+            p.x = sx - 1 + k % 5; p.y = sy + 2 + k / 5; p.fromX = p.x; p.fromY = p.y; p.moveCd = 0
+            p.job = null; p.bedId = -1; p.homeTile = -1; p.reserved.clear(); p.clearPath()
+            for (b in 0 until 3) { }
+            pawns.add(p)
+            recomputeHealth(p)
+        }
+        val z = map.newZone(ZoneKind.STOCKPILE)
+        z.allowed[ItemType.CORPSE_HUMAN.ordinal] = false
+        for (yy in sy - 2..sy) for (xx in sx - 2..sx + 1) { map.zoneId[map.idx(xx, yy)] = z.id; z.cells++ }
+        var k = 0
+        for ((t, n) in cargo) { if (n > 0) { val cell = k % 8; map.drop(t, n, sx - 2 + cell % 4, sy - 2 + cell / 4); k++ } }
+        map.rebuildRooms(outdoorTemp())
+        populateWildlife()
+        nextRaid = tick + 6L * TICKS_PER_DAY
+        nextTrader = tick + 8L * TICKS_PER_DAY
+        say("$name is founded. Build beds, grow food, and survive.", 1)
     }
 
     // ------------------------------------------------------------------ reservations
@@ -549,7 +591,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (tick % TICKS_PER_HOUR == 0L) hourlyTick()
         val gone = pawns.filter { it.dead && tick - it.deathTick > 10 }
         if (gone.isNotEmpty()) pawns.removeAll(gone.toSet())
-        if (humansOnSide.none { it.colonist } && caravans.none { c -> c.members.any { it.colonist && it.alive } } && !gameOver) {
+        if (!encounter && humansOnSide.none { it.colonist } && caravans.none { c -> c.members.any { it.colonist && it.alive } } && !gameOver) {
             gameOver = true
             say("Everyone is dead. The colony has fallen.", 3)
         }

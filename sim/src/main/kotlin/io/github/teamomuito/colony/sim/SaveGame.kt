@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 9
+    private const val VERSION = 10
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -80,6 +80,7 @@ object SaveGame {
         }
         o.writeInt(m.fires.size)
         for ((i, f) in m.fires) { o.writeInt(i); o.writeFloat(f.intensity) }
+        o.writeInt(g.worldBiome.ordinal); o.writeInt(g.world.homeTile)
 
         val pawns = g.pawns.filter { it.alive }
         o.writeInt(pawns.size)
@@ -235,6 +236,7 @@ object SaveGame {
         }
         repeat(i.readInt()) { val c = i.readInt(); map.fires[c] = Fire(i.readFloat()) }
 
+        val wBiome = Biome.entries[i.readInt()]; val wHome = i.readInt()
         val g = Game(seed, map)
         g.rng = Rng(seed + tick)
         g.tick = tick; g.colonyName = name
@@ -255,6 +257,9 @@ object SaveGame {
 
         repeat(i.readInt()) { g.pawns.add(readPawn(i, tick)) }
         run {
+            g.worldBiome = wBiome
+            g.world = World.generate(seed, wBiome)
+            g.world.homeTile = wHome
             for (k in g.world.goodwill.indices) g.world.goodwill[k] = i.readInt()
             repeat(i.readInt()) { idx ->
                 val st = g.world.settlements.getOrNull(idx)

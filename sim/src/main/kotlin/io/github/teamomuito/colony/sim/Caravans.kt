@@ -283,25 +283,6 @@ private fun Game.enterTile(c: Caravan): Boolean {
     }
 }
 
-private fun Pawn.combatPower(): Float {
-    if (!alive || downed) return 0f
-    val w = weaponItem?.weapon
-    val skill = if (w != null && !w.ranged) level(SkillType.MELEE) else level(SkillType.SHOOTING)
-    val dps = if (isAnimal) race.weapon.damage * 0.9f else if (w != null) w.damage * w.burst * 60f / max(40f, w.cooldown.toFloat()) * w.accuracy else 5f * 0.82f
-    return dps * (0.55f + 0.05f * skill) * (if (isAnimal) race.hpScale.coerceAtMost(2f) else 1f)
-}
-
-private fun Game.caravanStrength(c: Caravan) = c.members.sumOf { it.combatPower().toDouble() }.toFloat() +
-    c.members.count { it.alive && it.apparel.any { a -> (a.type.apparel?.armorSharp ?: 0f) > 0.3f } } * 3f
-
-private fun Game.woundMember(c: Caravan, kind: DamageKind, amount: Float, source: String) {
-    val targets = c.alive.filter { !it.isAnimal || rng.chance(0.3f) }
-    if (targets.isEmpty()) return
-    val p = rng.pick(targets)
-    dealDamage(p, kind, amount)
-    if (p.alive) c.lastEvent = "$source wounded ${p.name}."
-}
-
 private fun Game.loseCargo(c: Caravan, frac: Float): Int {
     var lost = 0
     for (t in c.inventory.keys.toList()) {
@@ -313,48 +294,29 @@ private fun Game.loseCargo(c: Caravan, frac: Float): Int {
     return lost
 }
 
-private fun Game.encounter(c: Caravan, foes: String, perFoe: Float, kindOf: DamageKind, amount: Float): Boolean {
-    val n = 2 + rng.int(3) + day / 40
-    val threat = n * perFoe * (0.8f + rng.float() * 0.5f) * difficulty.threat.coerceAtLeast(0.5f)
-    val strength = caravanStrength(c)
-    val ratio = strength / max(1f, threat)
-    c.lastEvent = foes
-    when {
-        ratio >= 1.7f -> say("${c.name} fought off $foes without a scratch.", 1)
-        ratio >= 1.0f -> {
-            say("${c.name} beat back $foes, but took wounds.", 2)
-            repeat(1 + rng.int(2)) { woundMember(c, kindOf, amount * 0.7f, foes) }
-        }
-        ratio >= 0.55f -> {
-            val lost = loseCargo(c, 0.25f)
-            say("${c.name} was mauled by $foes and fled, dropping $lost items.", 3)
-            repeat(2 + rng.int(3)) { woundMember(c, kindOf, amount, foes) }
-            c.progress = 0f
-        }
-        else -> {
-            val lost = loseCargo(c, 0.6f)
-            say("${c.name} was overwhelmed by $foes! Cargo lost: $lost items.", 3)
-            repeat(3 + rng.int(4)) { woundMember(c, kindOf, amount * 1.3f, foes) }
-        }
-    }
-    c.members.removeAll { it.dead }
-    if (c.members.none { it.alive }) { caravans.remove(c); say("${c.name} was wiped out.", 3); return false }
+/** Threat points for a random ambush, scaled by how rich and well-defended the caravan is. */
+private fun Game.ambushPoints(c: Caravan, base: Float): Float {
+    val cargo = c.inventory.entries.sumOf { (it.key.value * it.value).toDouble() }.toFloat()
+    var pts = base + c.humans.size * 13f + cargo / 80f + c.alive.count { it.isAnimal } * 3f
+    pts *= difficulty.threat.coerceAtLeast(0.5f) * min(1f, 0.45f + day / 30f)
+    return pts * (0.8f + rng.float() * 0.45f)
+}
+
+/** Fight a real battle on a small map. Returns false when the caravan was wiped out. */
+private fun Game.fight(c: Caravan, label: String, kind: Int, points: Float, fortified: Boolean = false): Boolean {
+    say("${c.name} is attacked by $label!", 3)
+    val won = runBattle(c, kind, points, fortified, label)
+    if (c.members.none { it.alive }) { caravans.remove(c); say("${c.name} was wiped out by $label.", 3); return false }
+    if (won) { c.lastEvent = "Defeated $label."; say("${c.name} defeated $label.", 1) }
+    else { val lost = loseCargo(c, 0.45f); c.lastEvent = "Fled from $label."; say("${c.name} was beaten by $label and fled, abandoning $lost items.", 3); c.progress = 0f }
     return true
 }
 
-private fun Game.animalAmbush(c: Caravan): Boolean {
-    val kind = when (world.biome[c.tile]) {
-        Biome.TUNDRA, Biome.BOREAL -> "a wolf pack"; Biome.TROPICAL -> "angry boars"; Biome.DESERT, Biome.ARID -> "a mad bear"; else -> "a bear and wolves"
-    }
-    val ok = encounter(c, "manhunting animals ($kind)", 13f, DamageKind.CUT, 11f)
-    if (ok) c.inventory[ItemType.MEAT] = (c.inventory[ItemType.MEAT] ?: 0) + rng.range(20, 60)
-    return ok
-}
+private fun Game.animalAmbush(c: Caravan): Boolean = fight(c, "manhunting animals", 1, ambushPoints(c, 30f))
 
 private fun Game.banditAmbush(c: Caravan): Boolean {
-    val ok = encounter(c, "bandits", 15f, DamageKind.BULLET, 12f)
-    if (ok && rng.chance(0.6f)) c.inventory[ItemType.SILVER] = (c.inventory[ItemType.SILVER] ?: 0) + rng.range(40, 140)
-    return ok
+    val f = world.factions.filter { it.kind == 2 }.let { it[rng.int(it.size)] }
+    return fight(c, "${f.name} bandits", 0, ambushPoints(c, 38f))
 }
 
 private fun Game.findCache(c: Caravan) {
@@ -374,20 +336,60 @@ private fun Game.lostInTerrain(c: Caravan) {
 private fun Game.arrive(c: Caravan) {
     c.route.clear()
     if (c.tile == world.homeTile) { unloadCaravan(c); return }
+    val site = world.siteAt(c.tile)
+    if (site != null) { clearSite(c, site); return }
     val s = world.settlementAt(c.tile)
     if (s == null) { say("${c.name} reached ${tileName(c.tile)}.", 1); return }
+    if (s.destroyedUntil > tick) { say("${c.name} found only ruins where ${s.name} stood.", 1); return }
     refreshSettlement(s)
     val f = s.faction
-    if (f.permanentEnemy || world.goodwill[f.id] <= -75) {
+    if (hostileTo(f)) {
         say("${c.name} reached hostile ${s.name} and came under fire!", 3)
-        val ok = encounter(c, "${s.name} defenders", 17f, DamageKind.BULLET, 13f)
-        if (ok) {
-            // Flee a tile away so the caravan isn't left standing in the gate.
-            c.lastEvent = "Driven off from ${s.name}."
-        }
+        val ok = fight(c, "${s.name} guards", 0, defenderPoints(s) * 0.5f)
+        if (ok) c.lastEvent = "Driven off from ${s.name}."
         return
     }
     say("${c.name} arrived at ${s.name} (${f.label}).", 1)
+}
+
+private fun Game.defenderPoints(s: Settlement): Float {
+    val base = when (s.faction.kind) { 0 -> 75f; 1 -> 110f; else -> 100f }
+    return (base + day * 2.2f) * difficulty.threat.coerceAtLeast(0.6f)
+}
+
+private fun Game.clearSite(c: Caravan, site: Site) {
+    say("${c.name} reached the ${site.name}.", 1)
+    val ok = fight(c, "the ${site.name}", 0, site.strength, fortified = true)
+    if (!ok) return
+    if (c.lastEvent.startsWith("Defeated")) {
+        world.sites.remove(site)
+        c.inventory[ItemType.SILVER] = caravanSilver(c) + site.reward
+        say("The ${site.name} is cleared. Reward: ${site.reward} silver.", 1)
+        for (f in world.factions) if (!f.permanentEnemy && world.goodwill[f.id] in 1..99 && world.relation[f.id][site.factionId] == -1) adjustGoodwill(f, 6, false)
+    }
+}
+
+/** Attack a settlement: a real fight against its defenders behind sandbags. Winning loots and ruins it for a while. */
+fun Game.attackSettlement(c: Caravan, s: Settlement): String? {
+    if (c.tile != s.tile || c.route.isNotEmpty()) return "The caravan must be at ${s.name}."
+    if (s.destroyedUntil > tick) return "It is already in ruins."
+    if (c.humans.none { !it.downed }) return "Nobody can fight."
+    refreshSettlement(s)
+    val wasHostile = hostileTo(s.faction)
+    if (!s.faction.permanentEnemy) adjustGoodwill(s.faction, -100)
+    say("${c.name} attacks ${s.name}!", 3)
+    val ok = fight(c, "${s.name}'s defenders", 0, defenderPoints(s), fortified = true)
+    if (!ok || !caravans.contains(c)) return null
+    if (c.lastEvent.startsWith("Defeated")) {
+        var looted = 0
+        for ((t, n) in s.stock.toList()) { val take = (n * 0.7f).toInt(); if (take > 0) { c.inventory[t] = (c.inventory[t] ?: 0) + take; looted += take } }
+        val silver = (s.silver * 0.8f).toInt() + (if (wasHostile) 150 else 0)
+        c.inventory[ItemType.SILVER] = caravanSilver(c) + silver
+        s.stock.clear(); s.silver = 0
+        s.destroyedUntil = tick + 30L * TICKS_PER_DAY
+        say("${s.name} falls. The caravan takes $looted goods and $silver silver.", 1)
+    }
+    return null
 }
 
 // ---------------------------------------------------------------------- settlements
@@ -494,4 +496,26 @@ internal fun Game.caravanDeath(p: Pawn, cause: String): Boolean {
     for (w in p.apparel) c.inventory[w.type] = (c.inventory[w.type] ?: 0) + 1
     p.apparel.clear()
     return true
+}
+
+class Settled(val game: Game, val archivedOld: ByteArray)
+
+/**
+ * Found a new colony where the caravan stands. The old colony is archived as a save (its other colonists stay in it);
+ * the caller stores those bytes and may switch back later.
+ */
+fun Game.settle(c: Caravan, name: String): Settled? {
+    val tile = c.tile
+    if (c.route.isNotEmpty() || c.humans.none { !it.downed }) return null
+    if (!world.passable(tile) || world.settlementAt(tile) != null || tile == world.homeTile || world.siteAt(tile) != null) return null
+    caravans.remove(c)
+    val archive = SaveGame.write(this)
+    val biome = world.biome[tile]
+    val lt = World.LocalTerrain(world.river[tile], world.adjacentWater(tile) && !world.river[tile], world.hills[tile])
+    val g = Game(seed, GameMap.generate(map.w, map.h, seed * 17 + tick, biome, lt))
+    g.worldBiome = worldBiome
+    g.world = world
+    world.homeTile = tile
+    g.startSettlement(this, c.members.filter { it.alive }, c.inventory.toMap(), name)
+    return Settled(g, archive)
 }
