@@ -276,7 +276,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
         if (supplied != null) {
             for ((k, p) in supplied.withIndex()) {
                 p.x = sx - 1 + k % 5; p.y = sy + 2 + k / 5; p.fromX = p.x; p.fromY = p.y
-                pawns.add(p); crew.add(p)
+                if (!pawns.contains(p)) pawns.add(p)
+                crew.add(p)
             }
         } else for (k in 0 until count) crew.add(newHuman(sx - 1 + k, sy + 2, Faction.PLAYER, sc == Scenario.LOST_TRIBE))
         for ((k, p) in crew.withIndex()) {

@@ -15,7 +15,7 @@ android {
         targetSdk = 35
         val buildNumber = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.toIntOrNull() ?: 1
         versionCode = buildNumber
-        versionName = "1.0.0"
+        versionName = "2.0.0"
     }
 
     buildTypes {

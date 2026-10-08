@@ -3,111 +3,105 @@ package io.github.teamomuito.colony
 import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import io.github.teamomuito.colony.sim.BuildDef
 import io.github.teamomuito.colony.sim.Desig
+import io.github.teamomuito.colony.sim.Faction
 import io.github.teamomuito.colony.sim.Game
+import io.github.teamomuito.colony.sim.ItemCat
 import io.github.teamomuito.colony.sim.ItemType
+import io.github.teamomuito.colony.sim.LogEntry
 import io.github.teamomuito.colony.sim.Pawn
-import io.github.teamomuito.colony.sim.PlantType
 import io.github.teamomuito.colony.sim.Research
 import io.github.teamomuito.colony.sim.SaveGame
-import io.github.teamomuito.colony.sim.SkillType
-import io.github.teamomuito.colony.sim.Terrain
-import io.github.teamomuito.colony.sim.WorkType
+import io.github.teamomuito.colony.sim.Weather
 import io.github.teamomuito.colony.sim.ZoneKind
+import io.github.teamomuito.colony.sim.TICKS_PER_DAY
+import io.github.teamomuito.colony.sim.bedCount
+import io.github.teamomuito.colony.sim.totalFoodNutrition
+import io.github.teamomuito.colony.sim.trader
 import java.io.File
 import kotlin.math.min
 
 class MainActivity : Activity() {
-    private lateinit var view: GameView
-    private lateinit var game: Game
-    private lateinit var root: FrameLayout
+    lateinit var view: GameView
+    lateinit var game: Game
+    lateinit var root: FrameLayout
+    lateinit var ui: UiKit
+    lateinit var panels: Panels
+    lateinit var dialogs: Dialogs
 
     private lateinit var status: TextView
     private lateinit var resources2: TextView
     private lateinit var banner: TextView
     private lateinit var toolChip: TextView
-    private lateinit var tileInfo: TextView
+    lateinit var tileCard: LinearLayout
+    private lateinit var tileText: TextView
+    private lateinit var tileActions: LinearLayout
     private lateinit var colonistBar: LinearLayout
+    private lateinit var alertBar: LinearLayout
     private val speedButtons = ArrayList<TextView>()
     private var chipIds: List<Int> = emptyList()
     private val chips = ArrayList<TextView>()
 
-    private var panel: FrameLayout? = null
-    private var panelKind = ""
-    private var pawnPanel: LinearLayout? = null
-    private var pawnText: TextView? = null
-    private var draftButton: TextView? = null
-    private var workCells = ArrayList<Triple<TextView, Pawn, WorkType>>()
-    private var researchHost: LinearLayout? = null
-    private var logText: TextView? = null
-
-    private var speed = 1
+    var speed = 1
     private var acc = 0.0
     private var lastFrameNs = 0L
     private var hudAcc = 0.0
-    private var lastLogEntry: io.github.teamomuito.colony.sim.LogEntry? = null
+    private var slowAcc = 0.0
+    private var lastLogEntry: LogEntry? = null
     private var bannerUntil = 0L
     private var overShown = false
-    private var lastSavedHour = -1L
+    private var lastSaved = -1L
+    private var started = false
 
     private val speedMult = intArrayOf(0, 1, 3, 6)
-    private val density by lazy { resources.displayMetrics.density }
-    private fun dp(v: Int) = (v * density).toInt()
-
     private val saveFile get() = File(filesDir, "colony.sav")
 
     // ------------------------------------------------------------------ lifecycle
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        game = loadOrNew()
+        ui = UiKit(this)
+        val loaded = loadSave()
+        game = loaded ?: Game(System.currentTimeMillis()).also { it.startNewColony() }
+        hookAutosave(game)
         buildUi()
         immersive()
+        if (loaded == null) root.post { dialogs.newColony(firstRun = true) }
+        started = true
     }
 
-    private fun loadOrNew(): Game {
+    private fun loadSave(): Game? {
         try {
-            if (saveFile.exists()) return SaveGame.read(saveFile.readBytes()).also { hookAutosave(it) }
-        } catch (e: Exception) {
+            if (saveFile.exists()) return SaveGame.read(saveFile.readBytes())
+        } catch (e: Throwable) {
             saveFile.delete()
         }
-        return newGame()
+        return null
     }
 
-    private fun newGame(): Game {
-        val g = Game(System.currentTimeMillis())
-        g.startNewColony()
-        hookAutosave(g)
-        return g
-    }
-
-    private fun hookAutosave(g: Game) {
+    fun hookAutosave(g: Game) {
         g.autosaveHook = {
             val stamp = g.tick / 6000
-            if (stamp != lastSavedHour) { lastSavedHour = stamp; save() }
+            if (stamp != lastSaved) { lastSaved = stamp; save() }
         }
     }
 
-    private fun save() {
+    fun save() {
         if (game.gameOver) { saveFile.delete(); return }
         try {
             val tmp = File(filesDir, "colony.sav.tmp")
             tmp.writeBytes(SaveGame.write(game))
             tmp.renameTo(saveFile)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
     }
 
@@ -121,7 +115,7 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         Choreographer.getInstance().removeFrameCallback(frame)
-        save()
+        if (started) save()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -139,7 +133,8 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         when {
-            panel != null -> closePanel()
+            panels.panelKind.isNotEmpty() -> panels.closePanel()
+            tileCard.visibility == View.VISIBLE -> { tileCard.visibility = View.GONE; view.selectedCell = -1 }
             view.tool !== Tool.Select -> setTool(Tool.Select)
             view.selectedId >= 0 -> select(null)
             else -> super.onBackPressed()
@@ -155,8 +150,14 @@ class MainActivity : Activity() {
                 acc += min(dt, 0.1) * 30.0 * speedMult[speed]
                 var n = acc.toInt()
                 acc -= n
-                if (n > 60) n = 60
-                repeat(n) { game.step() }
+                if (n > 70) n = 70
+                try {
+                    repeat(n) { game.step() }
+                } catch (e: Throwable) {
+                    // Never let a rare simulation bug take the app down; pause and report.
+                    speed = 0; refreshSpeed()
+                    toast("Simulation error: ${e.javaClass.simpleName}. Paused.")
+                }
             }
             view.invalidate()
             hudAcc += dt
@@ -165,38 +166,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // ------------------------------------------------------------------ UI helpers
-    private val cText = 0xFFF2E8D5.toInt()
-    private val cAccent = 0xFFE8B04A.toInt()
-    private val cPanel = 0xEE1E1B17.toInt()
-    private val cButton = 0xFF3A332A.toInt()
-
-    private fun bg(color: Int, radius: Int = 10, strokeColor: Int = 0): GradientDrawable =
-        GradientDrawable().apply {
-            setColor(color); cornerRadius = dp(radius).toFloat()
-            if (strokeColor != 0) setStroke(dp(1), strokeColor)
-        }
-
-    private fun label(t: String, size: Float = 13f, color: Int = cText, bold: Boolean = false): TextView =
-        TextView(this).apply {
-            text = t; textSize = size; setTextColor(color)
-            if (bold) setTypeface(typeface, Typeface.BOLD)
-        }
-
-    private fun button(t: String, size: Float = 13f, onClick: () -> Unit): TextView =
-        TextView(this).apply {
-            text = t; textSize = size; setTextColor(cText); gravity = Gravity.CENTER
-            background = bg(cButton, 10, 0x33FFFFFF)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            setOnClickListener { onClick() }
-        }
-
-    private fun lp(w: Int, h: Int, gravity: Int = Gravity.NO_GRAVITY, l: Int = 0, t: Int = 0, r: Int = 0, b: Int = 0) =
-        FrameLayout.LayoutParams(w, h, gravity).apply { setMargins(dp(l), dp(t), dp(r), dp(b)) }
-
-    private fun lin(w: Int, h: Int, weight: Float = 0f, l: Int = 0, t: Int = 0, r: Int = 0, b: Int = 0) =
-        LinearLayout.LayoutParams(w, h, weight).apply { setMargins(dp(l), dp(t), dp(r), dp(b)) }
-
     // ------------------------------------------------------------------ UI
     private fun buildUi() {
         root = FrameLayout(this)
@@ -204,116 +173,126 @@ class MainActivity : Activity() {
         view.game = game
         view.onTileTap = { x, y -> onTileTap(x, y) }
         view.onArea = { x0, y0, x1, y1 -> onArea(x0, y0, x1, y1) }
-        root.addView(view, lp(-1, -1))
+        root.addView(view, ui.fl(-1, -1))
+        panels = Panels(this)
+        dialogs = Dialogs(this)
 
-        // Top HUD.
+        // Top-left HUD.
         val top = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val row1 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            background = bg(cPanel, 12); setPadding(dp(10), dp(6), dp(6), dp(6))
+            background = ui.bg(ui.panel, 12); setPadding(ui.dp(10), ui.dp(5), ui.dp(6), ui.dp(5))
         }
-        status = label("", 13f, cText, true)
-        row1.addView(status, lin(0, -2, 1f))
+        status = ui.label("", 12f, ui.text, true)
+        row1.addView(status, ui.lin(0, -2, 1f))
         for ((idx, s) in listOf("II", "▶", "▶▶", "▶▶▶").withIndex()) {
-            val b = button(s, 12f) { speed = idx; refreshSpeed() }
-            b.setPadding(dp(10), dp(4), dp(10), dp(4))
+            val b = ui.button(s, 12f) { speed = idx; refreshSpeed() }
+            b.setPadding(ui.dp(9), ui.dp(3), ui.dp(9), ui.dp(3))
             speedButtons.add(b)
-            row1.addView(b, lin(-2, -2, 0f, 3, 0, 0, 0))
+            row1.addView(b, ui.lin(-2, -2, 0f, 3, 0, 0, 0))
         }
-        top.addView(row1, lin(-1, -2))
-        resources2 = label("", 12f).apply { background = bg(cPanel, 10); setPadding(dp(10), dp(4), dp(10), dp(4)) }
-        top.addView(resources2, lin(-1, -2, 0f, 0, 4, 0, 0))
-        val scroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        top.addView(row1, ui.lin(-1, -2))
+        resources2 = ui.label("", 11f).apply { background = ui.bg(ui.panel, 10); setPadding(ui.dp(10), ui.dp(3), ui.dp(10), ui.dp(3)) }
+        top.addView(resources2, ui.lin(-1, -2, 0f, 0, 3, 0, 0))
         colonistBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        scroller.addView(colonistBar)
-        top.addView(scroller, lin(-1, -2, 0f, 0, 4, 0, 0))
-        banner = label("", 13f, Color.WHITE, true).apply {
-            background = bg(0xDD3A2A14.toInt(), 10); setPadding(dp(10), dp(6), dp(10), dp(6)); visibility = View.GONE
+        top.addView(ui.hscroll(colonistBar), ui.lin(-1, -2, 0f, 0, 3, 0, 0))
+        banner = ui.label("", 12f, Color.WHITE, true).apply {
+            background = ui.bg(0xDD3A2A14.toInt(), 10); setPadding(ui.dp(10), ui.dp(5), ui.dp(10), ui.dp(5)); visibility = View.GONE
         }
-        top.addView(banner, lin(-2, -2, 0f, 0, 4, 0, 0))
-        root.addView(top, lp(dp(430), -2, Gravity.TOP or Gravity.START, 8, 6, 0, 0))
+        top.addView(banner, ui.lin(-2, -2, 0f, 0, 3, 0, 0))
+        root.addView(top, ui.fl(ui.dp(470), -2, Gravity.TOP or Gravity.START, 6, 5, 0, 0))
 
-        // Bottom bar.
+        alertBar = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
+        root.addView(alertBar, ui.fl(ui.dp(170), -2, Gravity.TOP or Gravity.END, 0, 5, 6, 0))
+
+        // Bottom toolbar.
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            background = bg(cPanel, 14); setPadding(dp(6), dp(6), dp(6), dp(6))
+            background = ui.bg(ui.panel, 14); setPadding(ui.dp(6), ui.dp(5), ui.dp(6), ui.dp(5))
         }
-        toolChip = button("", 12f) { setTool(Tool.Select) }.apply { visibility = View.GONE; setTextColor(cAccent) }
-        bar.addView(toolChip, lin(-2, -2, 0f, 0, 0, 6, 0))
+        toolChip = ui.button("", 12f) { setTool(Tool.Select) }.apply { visibility = View.GONE; setTextColor(ui.accent) }
+        bar.addView(toolChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
         val items = listOf<Pair<String, () -> Unit>>(
-            "Architect" to { togglePanel("architect") },
-            "Work" to { togglePanel("work") },
-            "Research" to { togglePanel("research") },
-            "Log" to { togglePanel("log") },
-            "Menu" to { showMenu() },
+            "Architect" to { panels.toggle("architect") },
+            "Work" to { panels.toggle("work") },
+            "Schedule" to { panels.toggle("schedule") },
+            "Research" to { panels.toggle("research") },
+            "People" to { panels.toggle("people") },
+            "Animals" to { panels.toggle("animals") },
+            "Trade" to { dialogs.trade() },
+            "Log" to { panels.toggle("log") },
+            "Menu" to { dialogs.menu() },
         )
-        for ((t, a) in items) bar.addView(button(t, 13f) { a() }, lin(-2, -2, 0f, 0, 0, 5, 0))
-        root.addView(bar, lp(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, 0, 0, 6))
+        for ((t, a) in items) bar.addView(ui.button(t, 12f) { a() }, ui.lin(-2, -2, 0f, 0, 0, 4, 0))
+        root.addView(ui.hscroll(bar), ui.fl(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, 0, 0, 5))
 
-        tileInfo = label("", 12f).apply {
-            background = bg(cPanel, 10); setPadding(dp(10), dp(6), dp(10), dp(6)); visibility = View.GONE
+        tileCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; background = ui.bg(ui.panel, 10)
+            setPadding(ui.dp(10), ui.dp(6), ui.dp(10), ui.dp(6)); visibility = View.GONE
         }
-        root.addView(tileInfo, lp(dp(260), -2, Gravity.BOTTOM or Gravity.START, 8, 0, 0, 56))
+        tileText = ui.label("", 11f)
+        tileActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        tileCard.addView(tileText)
+        tileCard.addView(ui.hscroll(tileActions), ui.lin(-1, -2, 0f, 0, 4, 0, 0))
+        root.addView(tileCard, ui.fl(ui.dp(290), -2, Gravity.BOTTOM or Gravity.START, 6, 0, 0, 52))
 
         setContentView(root)
         refreshSpeed()
         refreshHud()
     }
 
-    private fun refreshSpeed() {
+    fun refreshSpeed() {
         for ((i, b) in speedButtons.withIndex()) {
-            b.background = bg(if (i == speed) 0xFF7A5A1E.toInt() else cButton, 10, if (i == speed) cAccent else 0x33FFFFFF)
+            b.background = ui.bg(if (i == speed) 0xFF7A5A1E.toInt() else ui.button, 10, if (i == speed) ui.accent else 0x33FFFFFF)
         }
     }
 
     // ------------------------------------------------------------------ HUD refresh
-    private fun refreshHud() {
+    fun refreshHud() {
         val g = game
         val temp = g.outdoorTemp()
         val ev = if (g.tempEventUntil > 0) "  ⚠ ${g.tempEventName}" else ""
-        status.text = "${g.dateLabel()}  ·  ${temp.toInt()}°C$ev"
+        val wx = when (g.weather) { Weather.CLEAR -> "☀"; Weather.CLOUDY -> "☁"; Weather.RAIN -> "🌧"; Weather.FOG -> "🌫"; Weather.SNOW -> "❄"; Weather.THUNDER -> "⛈" }
+        status.text = "${g.dateLabel()}  ·  ${temp.toInt()}°C $wx$ev"
         val m = g.map
-        resources2.text = "Wood ${m.countItems(ItemType.WOOD)}  Stone ${m.countItems(ItemType.STONE)}  " +
-            "Steel ${m.countItems(ItemType.STEEL)}  Meals ${m.countItems(ItemType.MEAL)}  Raw ${m.countItems(ItemType.RAW_FOOD)}"
+        val food = (g.totalFoodNutrition() / (0.7f * g.humansOnSide.size.coerceAtLeast(1))).let { String.format("%.1f", it) }
+        resources2.text = "Food ${food}d  Wood ${m.countItems(ItemType.WOOD)}  Stone ${m.countItems(ItemType.STONE)}  Steel ${m.countItems(ItemType.STEEL)}  " +
+            "Silver ${m.countItems(ItemType.SILVER)}  Comp ${m.countItems(ItemType.COMPONENT)}  Med ${m.countItems { it.cat == ItemCat.MEDICINE && it.potency > 0f }}"
         refreshColonistBar()
+        refreshAlerts()
         refreshBanner()
-        refreshPawnPanel()
-        when (panelKind) {
-            "work" -> for ((tv, p, w) in workCells) tv.text = prioText(p.priority[w.ordinal])
-            "research" -> refreshResearch()
-            "log" -> refreshLog()
-        }
-        if (g.gameOver && !overShown) { overShown = true; showGameOver() }
+        panels.refresh()
+        if (g.gameOver && !overShown) { overShown = true; dialogs.gameOver() }
     }
 
-    private fun prioText(v: Int) = if (v == 0) "–" else v.toString()
-
     private fun refreshColonistBar() {
-        val cols = game.colonists
+        val cols = game.humansOnSide.filter { !it.prisoner }
         val ids = cols.map { it.id }
         if (ids != chipIds) {
             colonistBar.removeAllViews(); chips.clear(); chipIds = ids
             for (p in cols) {
-                val tv = label("", 11f, Color.WHITE, true).apply { setPadding(dp(8), dp(4), dp(8), dp(4)) }
+                val tv = ui.label("", 10.5f, Color.WHITE, true).apply { setPadding(ui.dp(7), ui.dp(3), ui.dp(7), ui.dp(3)) }
                 tv.setOnClickListener {
                     if (view.selectedId == p.id) view.centerOn(p.x.toFloat(), p.y.toFloat())
                     else { select(p); view.centerOn(p.x.toFloat(), p.y.toFloat()) }
                 }
                 chips.add(tv)
-                colonistBar.addView(tv, lin(-2, -2, 0f, 0, 0, 4, 0))
+                colonistBar.addView(tv, ui.lin(-2, -2, 0f, 0, 0, 4, 0))
             }
         }
         for ((i, p) in cols.withIndex()) {
+            if (i >= chips.size) break
             val tv = chips[i]
-            val moodColor = when {
+            val c = when {
                 p.downed -> 0xFF8A2C2C.toInt()
                 p.breakUntil > 0 -> 0xFF9A4A1A.toInt()
                 p.mood < 0.3f -> 0xFF7A5A1E.toInt()
                 else -> 0xFF2F4A2A.toInt()
             }
-            tv.background = bg(moodColor, 8, if (p.id == view.selectedId) Color.WHITE else 0x33FFFFFF)
+            tv.background = ui.bg(c, 8, if (p.id == view.selectedId) Color.WHITE else 0x33FFFFFF)
             val state = when {
                 p.downed -> "DOWN"
+                p.breakUntil > 0 -> "BREAK"
                 p.drafted -> "DRAFTED"
                 else -> p.job?.type?.label ?: "Idle"
             }
@@ -321,149 +300,168 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun refreshBanner() {
+    private class Alert(val text: String, val level: Int, val x: Int = -1, val y: Int = -1)
+
+    private fun computeAlerts(): List<Alert> {
         val g = game
-        val newest = g.log.lastOrNull()
+        val out = ArrayList<Alert>()
+        val cols = g.colonists
+        if (g.raidActive) { val r = g.hostiles.firstOrNull(); out += Alert("Raiders!", 3, r?.x ?: -1, r?.y ?: -1) }
+        if (g.map.fires.isNotEmpty()) { val f = g.map.fires.keys.first(); out += Alert("Fire! (${g.map.fires.size})", 3, f % g.map.w, f / g.map.w) }
+        val starving = cols.firstOrNull { it.food < 0.1f }
+        if (starving != null) out += Alert("${starving.name.substringBefore(' ')} is starving", 3, starving.x, starving.y)
+        else if (g.totalFoodNutrition() < 0.7f * cols.size.coerceAtLeast(1)) out += Alert("Low food", 2)
+        val down = cols.firstOrNull { it.downed }
+        if (down != null) out += Alert("${down.name.substringBefore(' ')} is down", 3, down.x, down.y)
+        val bleeding = cols.firstOrNull { it.bleeding > 0.00002f && !it.downed }
+        if (bleeding != null) out += Alert("${bleeding.name.substringBefore(' ')} is bleeding", 3, bleeding.x, bleeding.y)
+        val br = cols.firstOrNull { it.breakUntil > 0 }
+        if (br != null) out += Alert("${br.name.substringBefore(' ')}: mental break", 3, br.x, br.y)
+        val sick = cols.firstOrNull { p -> p.hediffs.any { it.kind.category == 0 && it.severity > 0.4f } }
+        if (sick != null) out += Alert("${sick.name.substringBefore(' ')} is very sick", 2, sick.x, sick.y)
+        val cold = cols.firstOrNull { it.temp < it.comfyMin() - 8f }
+        if (cold != null) out += Alert("${cold.name.substringBefore(' ')} is freezing", 2, cold.x, cold.y)
+        val hot = cols.firstOrNull { it.temp > it.comfyMax() + 8f }
+        if (hot != null) out += Alert("${hot.name.substringBefore(' ')} is overheating", 2, hot.x, hot.y)
+        if (g.bedCount() < cols.size) out += Alert("Need ${cols.size - g.bedCount()} more bed(s)", 1)
+        if (g.map.zones.values.none { it.kind == ZoneKind.STOCKPILE }) out += Alert("No stockpile zone", 1)
+        if (g.researchCurrent == null && g.map.building.any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH }) out += Alert("No research selected", 1)
+        if (g.power.nets > 0 && g.power.consumed > g.power.produced + 1f && g.power.stored <= 0f) out += Alert("Power shortage", 2)
+        if (g.solarFlareUntil > g.tick) out += Alert("Solar flare", 2)
+        if (g.toxicFalloutUntil > g.tick) out += Alert("Toxic fallout", 3)
+        val idle = cols.count { it.job?.type == io.github.teamomuito.colony.sim.JobType.IDLE && !it.downed && it.priority.any { x -> x in 1..2 } }
+        if (idle >= 2 && g.hour in 7..20) out += Alert("$idle colonists idle", 0)
+        if (g.trader() != null) { val t = g.pawnById(g.trader()!!.pawnId); out += Alert("Trader here", 1, t?.x ?: -1, t?.y ?: -1) }
+        val esc = g.prisoners.firstOrNull { it.escaping }
+        if (esc != null) out += Alert("Prisoner escaping!", 3, esc.x, esc.y)
+        val crops = g.map.plant.count { it?.type?.crop == true }
+        if (crops > 0 && g.outdoorTemp() < 2f) out += Alert("Crops may freeze", 2)
+        return out.sortedByDescending { it.level }.take(7)
+    }
+
+    private fun refreshAlerts() {
+        alertBar.removeAllViews()
+        for (a in computeAlerts()) {
+            val color = when (a.level) { 3 -> 0xDD8A2828.toInt(); 2 -> 0xDD8A6420.toInt(); 1 -> 0xDD4A5A2A.toInt(); else -> 0xDD3A3A3A.toInt() }
+            val tv = ui.chip(a.text, color)
+            tv.setOnClickListener { if (a.x >= 0) view.centerOn(a.x.toFloat(), a.y.toFloat()) }
+            alertBar.addView(tv, ui.lin(-2, -2, 0f, 0, 2, 0, 0))
+        }
+    }
+
+    private fun refreshBanner() {
+        val newest = game.log.lastOrNull()
         if (newest !== lastLogEntry) {
             lastLogEntry = newest
-            val last = newest
-            if (last != null) {
-                banner.text = last.text
-                banner.setTextColor(when (last.level) { 3 -> 0xFFFF8A80.toInt(); 2 -> 0xFFFFD27A.toInt(); 1 -> 0xFFA5E6A0.toInt(); else -> Color.WHITE })
+            if (newest != null) {
+                banner.text = newest.text
+                banner.setTextColor(when (newest.level) { 3 -> ui.bad; 2 -> ui.warn; 1 -> ui.good; else -> Color.WHITE })
                 banner.visibility = View.VISIBLE
-                bannerUntil = SystemClock.uptimeMillis() + 6000
+                bannerUntil = SystemClock.uptimeMillis() + 6500
+                if (newest.level >= 3 && speed > 1) { speed = 1; refreshSpeed() }
             }
         }
         if (banner.visibility == View.VISIBLE && SystemClock.uptimeMillis() > bannerUntil) banner.visibility = View.GONE
     }
 
+    fun toast(s: String) {
+        banner.text = s
+        banner.setTextColor(ui.warn)
+        banner.visibility = View.VISIBLE
+        bannerUntil = SystemClock.uptimeMillis() + 3500
+    }
+
     // ------------------------------------------------------------------ selection and tools
-    private fun select(p: Pawn?) {
+    fun select(p: Pawn?) {
         view.selectedId = p?.id ?: -1
-        pawnPanel?.let { root.removeView(it) }
-        pawnPanel = null; pawnText = null; draftButton = null
-        if (p == null) return
-        closePanel()
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; background = bg(cPanel, 12); setPadding(dp(10), dp(8), dp(10), dp(8))
-        }
-        val tv = label("", 11f).apply { typeface = Typeface.MONOSPACE }
-        val sc = ScrollView(this).apply { addView(tv) }
-        box.addView(sc, lin(-1, 0, 1f))
-        if (p.colonist) {
-            val d = button("Draft", 13f) {
-                val sel = game.pawnById(view.selectedId) ?: return@button
-                game.setDrafted(sel, !sel.drafted)
-                refreshPawnPanel()
-            }
-            draftButton = d
-            box.addView(d, lin(-1, -2, 0f, 0, 6, 0, 0))
-        }
-        val close = button("Close", 12f) { select(null) }
-        box.addView(close, lin(-1, -2, 0f, 0, 4, 0, 0))
-        root.addView(box, lp(dp(250), dp(320), Gravity.END or Gravity.CENTER_VERTICAL, 0, 0, 8, 0))
-        pawnPanel = box; pawnText = tv
-        refreshPawnPanel()
+        panels.showPawn(p)
+        if (p != null) { tileCard.visibility = View.GONE; view.selectedCell = -1 }
     }
 
-    private fun bar(v: Float, n: Int = 10): String {
-        val f = (v.coerceIn(0f, 1f) * n).toInt()
-        return "█".repeat(f) + "░".repeat(n - f)
-    }
-
-    private fun refreshPawnPanel() {
-        val tv = pawnText ?: return
-        val p = game.pawnById(view.selectedId)
-        if (p == null || !p.alive) { select(null); return }
-        val sb = StringBuilder()
-        sb.append(p.name).append(if (p.colonist) "" else "  (hostile)").append('\n')
-        if (p.colonist) sb.append("Age ${p.age}  ·  ${p.weapon.label}\n")
-        else sb.append(p.weapon.label).append('\n')
-        sb.append("Doing: ").append(if (p.downed) "Downed" else if (p.drafted) "Drafted" else p.job?.type?.label ?: "Idle").append('\n')
-        sb.append("Health ").append(bar(p.hp / p.maxHp)).append(' ').append(p.hp.toInt()).append('\n')
-        if (p.colonist) {
-            sb.append("Mood   ").append(bar(p.mood)).append(' ').append((p.mood * 100).toInt()).append("%\n")
-            sb.append("Food   ").append(bar(p.food)).append('\n')
-            sb.append("Rest   ").append(bar(p.rest)).append('\n')
-            sb.append("Temp ${p.temp.toInt()}°C\n")
-            if (p.traits.isNotEmpty()) sb.append("Traits: ").append(p.traits.joinToString { it.label }).append('\n')
-            if (p.injuries.isNotEmpty()) {
-                sb.append("Wounds: ${p.injuries.size}").append(if (p.untended) " (bleeding)" else " (tended)").append('\n')
-            }
-            sb.append("\nSkills\n")
-            for (s in SkillType.entries) {
-                val pas = when (p.passion[s.ordinal]) { 2 -> "★★"; 1 -> "★"; else -> "" }
-                sb.append(s.label.padEnd(13)).append(p.skill[s.ordinal].toString().padStart(2)).append(' ').append(pas).append('\n')
-            }
-            val now = game.tick
-            val th = p.thoughts.filter { it.expires > now }
-            if (th.isNotEmpty()) {
-                sb.append("\nThoughts\n")
-                for (t in th) sb.append(if (t.mood >= 0) "+" else "").append((t.mood * 100).toInt()).append("% ").append(t.label).append('\n')
-            }
-        }
-        tv.text = sb.toString()
-        draftButton?.let {
-            it.text = if (p.drafted) "Undraft" else "Draft"
-            it.background = bg(if (p.drafted) 0xFF7A5A1E.toInt() else cButton, 10, if (p.drafted) cAccent else 0x33FFFFFF)
-        }
-    }
-
-    private fun setTool(t: Tool) {
+    fun setTool(t: Tool) {
         view.tool = t
         toolChip.visibility = if (t === Tool.Select) View.GONE else View.VISIBLE
         toolChip.text = "${t.label}  ✕"
-        tileInfo.visibility = View.GONE
+        tileCard.visibility = View.GONE
+        view.selectedCell = -1
         view.invalidate()
     }
 
     private fun onTileTap(x: Int, y: Int) {
         val g = game
         if (!g.map.inB(x, y)) return
-        closePanel()
+        panels.closePanel()
         val p = g.pawnAt(x, y)
         val sel = g.pawnById(view.selectedId)
-        if (p != null) { select(p); tileInfo.visibility = View.GONE; return }
-        if (sel != null && sel.colonist && sel.drafted) {
-            g.orderMove(sel, x, y)
+        if (p != null && !(sel != null && sel.drafted && p.hostile)) { select(p); return }
+        if (sel != null && sel.faction == Faction.PLAYER && sel.drafted) {
+            if (p != null && p.hostile) g.orderAttack(sel, p) else g.orderMove(sel, x, y)
             return
         }
         if (sel != null) select(null)
-        showTileInfo(x, y)
+        showTile(x, y)
     }
 
-    private fun showTileInfo(x: Int, y: Int) {
+    private fun showTile(x: Int, y: Int) {
         val g = game
         val m = g.map
         val i = m.idx(x, y)
+        view.selectedCell = i
         val sb = StringBuilder()
         sb.append(m.terrain[i].label)
-        if (m.terrain[i] == Terrain.ROCK && m.ore[i]) sb.append(" (steel ore)")
+        if (m.terrain[i] == io.github.teamomuito.colony.sim.Terrain.ROCK) sb.append(" (${m.rockType[i].label}${if (m.ore[i] != io.github.teamomuito.colony.sim.Ore.NONE) ", " + m.ore[i].label + " ore" else ""})")
         if (m.terrain[i].fertility > 0f) sb.append("  ·  fertility ${(m.terrain[i].fertility * 100).toInt()}%")
         m.floor[i]?.let { sb.append("\n${it.label}") }
+        if (m.conduit[i]) sb.append("\nPower conduit")
         m.building[i]?.let { b ->
-            sb.append("\n${b.def.label}")
-            if (!b.built) sb.append(" (blueprint ${b.delivered}/${b.def.count} ${b.def.item.label.lowercase()})")
-            else if (b.def == BuildDef.CAMPFIRE) sb.append(if (b.fuel > 0) " (fuel ${b.fuel.toInt()}h)" else " (needs wood)")
-            else if (b.def == BuildDef.BED && b.ownerId >= 0) sb.append(" (${g.pawnById(b.ownerId)?.name ?: "owned"})")
+            sb.append("\n${b.def.label}${if (b.built && b.quality != io.github.teamomuito.colony.sim.Quality.NORMAL) " (${b.quality.label})" else ""}")
+            if (!b.built) {
+                var done = 0; var tot = 0
+                for (k in b.def.cost.indices) { done += b.delivered[k]; tot += b.def.cost[k].second }
+                sb.append(" (blueprint $done/$tot materials)")
+            } else {
+                sb.append("  HP ${b.hp.toInt()}/${b.def.hp.toInt()}")
+                if (b.def.fuelCap > 0f) sb.append("\nFuel ${b.fuel.toInt()}/${b.def.fuelCap.toInt()}")
+                if (b.def.consumesPower) sb.append(if (b.powered) "\nPowered" else "\nNo power")
+                if (b.def.sleeps && b.ownerId >= 0) sb.append("\nOwner: ${g.pawnById(b.ownerId)?.name ?: "?"}")
+                if (b.def.sleeps && b.prisonerBed) sb.append("\nPrisoner bed")
+                if (b.def == BuildDef.BATTERY) sb.append("\nCharge ${b.charge.toInt()}/600")
+                if (b.def == BuildDef.MORTAR) sb.append("\nShells ${b.shells}/5")
+            }
         }
         m.plant[i]?.let { pl ->
             sb.append("\n${pl.type.label}")
-            if (pl.type.crop) sb.append(" ${(pl.growth * 100).toInt()}% grown")
+            if (pl.type.crop || pl.type.isTree) sb.append(" ${(pl.growth * 100).toInt()}% grown")
         }
-        m.items[i]?.let { sb.append("\n${it.count} × ${it.type.label}") }
-        when (m.zone[i].toInt()) {
-            ZoneKind.STOCKPILE -> sb.append("\nStockpile zone")
-            ZoneKind.GROWING -> sb.append("\nGrowing zone: ${PlantType.entries[m.zoneCrop[i].toInt()].label}")
+        m.items[i]?.let {
+            if (it.corpseOf != null) sb.append("\nCorpse: ${it.corpseOf} (${(it.rot * 100).toInt()}% decayed)")
+            else sb.append("\n${it.count} × ${it.type.label}${if (it.type.isGear) " (${it.quality.label})" else ""}${if (it.rot > 0.05f && it.type.spoilDays > 0f) ", ${(it.rot * 100).toInt()}% spoiled" else ""}")
         }
+        m.zoneAt(i)?.let { sb.append("\n${it.name}") }
+        if (m.filth[i] > 0) sb.append("\nFilth x${m.filth[i]}")
+        if (m.fires.containsKey(i)) sb.append("\nON FIRE")
         when (m.desig[i].toInt()) {
             Desig.MINE -> sb.append("\nMarked: mine")
             Desig.CUT -> sb.append("\nMarked: cut")
+            Desig.HARVEST -> sb.append("\nMarked: harvest")
             Desig.DECON -> sb.append("\nMarked: deconstruct")
+            Desig.REPAIR -> sb.append("\nMarked: repair")
         }
-        if (m.roomIndoorAt(i)) sb.append("\nIndoors, ${g.map.tempAt(i, g.outdoorTemp()).toInt()}°C")
-        tileInfo.text = sb.toString()
-        tileInfo.visibility = View.VISIBLE
+        val t = m.tempAt(i, g.outdoorTemp())
+        sb.append("\n${if (m.roomIndoorAt(i)) "Indoors" else "Outdoors"}, ${t.toInt()}°C")
+        if (m.roomIndoorAt(i) && !m.roomDirty) {
+            val r = m.roomId[i]
+            sb.append("\nRoom: ${m.roomSize[r]} cells, ${io.github.teamomuito.colony.sim.impressLabel(m.roomImpress[r])}")
+        }
+        tileText.text = sb.toString()
+        tileActions.removeAllViews()
+        val b = m.building[i]
+        if (b != null && b.built && (b.def.workbench || b.def.sleeps || b.def.fuelCap > 0f || b.def.hp > 0)) {
+            tileActions.addView(ui.button("Open", 11f) { dialogs.building(b) }, ui.lin(-2, -2, 0f, 0, 0, 4, 0))
+        }
+        if (m.zoneAt(i) != null) tileActions.addView(ui.button("Zone settings", 11f) { dialogs.zone(m.zoneAt(i)!!) }, ui.lin(-2, -2, 0f, 0, 0, 4, 0))
+        if (m.items[i] != null || b != null) tileActions.addView(ui.button("Forbid / allow", 11f) { g.toggleForbidden(i); showTile(x, y) }, ui.lin(-2, -2, 0f, 0, 0, 4, 0))
+        tileCard.visibility = View.VISIBLE
     }
 
     private fun onArea(x0: Int, y0: Int, x1: Int, y1: Int) {
@@ -471,272 +469,70 @@ class MainActivity : Activity() {
         val t = view.tool
         if (t === Tool.Select) return
         var n = 0
-        for (y in y0..y1) for (x in x0..x1) {
-            if (!g.map.inB(x, y)) continue
-            val ok = when (t) {
-                Tool.Mine -> g.designate(x, y, Desig.MINE)
-                Tool.Cut -> g.designate(x, y, Desig.CUT)
-                Tool.Deconstruct -> g.designate(x, y, Desig.DECON)
-                Tool.CancelOrders -> {
-                    g.clearDesignation(x, y)
-                    if (g.map.building[g.map.idx(x, y)]?.built == false) g.designate(x, y, Desig.DECON) else true
-                }
-                Tool.Stockpile -> { g.setZone(x, y, ZoneKind.STOCKPILE); true }
-                is Tool.Growing -> { g.setZone(x, y, ZoneKind.GROWING, t.crop); true }
-                Tool.ClearZone -> { g.setZone(x, y, ZoneKind.NONE); true }
-                is Tool.Build -> g.placeBlueprint(t.def, x, y)
-                else -> false
-            }
-            if (ok) n++
-        }
-        if (n == 0 && t is Tool.Build) toast("Can't build ${t.def.label.lowercase()} there")
-    }
-
-    private fun toast(s: String) {
-        banner.text = s
-        banner.setTextColor(0xFFFFD27A.toInt())
-        banner.visibility = View.VISIBLE
-        bannerUntil = SystemClock.uptimeMillis() + 3000
-    }
-
-    // ------------------------------------------------------------------ panels
-    private fun closePanel() {
-        panel?.let { root.removeView(it) }
-        panel = null; panelKind = ""
-        workCells.clear(); researchHost = null; logText = null
-    }
-
-    private fun togglePanel(kind: String) {
-        val was = panelKind
-        closePanel()
-        if (was == kind) return
-        tileInfo.visibility = View.GONE
-        panelKind = kind
-        val wrap = FrameLayout(this).apply { background = bg(cPanel, 14); setPadding(dp(10), dp(8), dp(10), dp(8)) }
-        val metrics = resources.displayMetrics
-        val h = (metrics.heightPixels * 0.5f).toInt()
-        when (kind) {
-            "architect" -> buildArchitect(wrap)
-            "work" -> buildWork(wrap)
-            "research" -> buildResearch(wrap)
-            "log" -> buildLog(wrap)
-        }
-        val height = if (kind == "architect") ViewGroup.LayoutParams.WRAP_CONTENT else h
-        root.addView(wrap, lp(min(metrics.widthPixels - dp(40), dp(620)), height, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, 0, 0, 56))
-        panel = wrap
-    }
-
-    private fun buildArchitect(wrap: FrameLayout) {
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val tabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val categories = linkedMapOf<String, () -> List<Pair<String, () -> Unit>>>(
-            "Orders" to {
-                listOf(
-                    "Mine" to { setTool(Tool.Mine) },
-                    "Chop / harvest" to { setTool(Tool.Cut) },
-                    "Deconstruct" to { setTool(Tool.Deconstruct) },
-                    "Cancel orders" to { setTool(Tool.CancelOrders) },
-                )
-            },
-            "Zones" to {
-                listOf(
-                    "Stockpile" to { setTool(Tool.Stockpile) },
-                    "Grow rice" to { setTool(Tool.Growing(PlantType.RICE)) },
-                    "Grow potatoes" to { setTool(Tool.Growing(PlantType.POTATO)) },
-                    "Grow corn" to { setTool(Tool.Growing(PlantType.CORN)) },
-                    "Remove zone" to { setTool(Tool.ClearZone) },
-                )
-            },
-        )
-        for (cat in listOf("Structure", "Furniture", "Production", "Security", "Ship")) {
-            categories[cat] = {
-                BuildDef.entries.filter { it.category == cat }.map { d ->
-                    val locked = d.research != null && d.research !in game.researchDone
-                    val txt = if (locked) "${d.label}\n🔒 ${d.research!!.label}" else "${d.label}\n${d.count} ${d.item.label.lowercase()}"
-                    txt to { if (locked) toast("Needs research: ${d.research!!.label}") else setTool(Tool.Build(d)) }
-                }
-            }
-        }
-        fun showCat(name: String) {
-            body.removeAllViews()
-            val rowScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            for ((t, a) in categories[name]!!.invoke()) {
-                row.addView(button(t, 12f) { a(); closePanel() }, lin(-2, -2, 0f, 0, 0, 6, 0))
-            }
-            rowScroll.addView(row)
-            body.addView(rowScroll)
-        }
-        val tabScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        for (name in categories.keys) {
-            tabs.addView(button(name, 12f) { showCat(name) }, lin(-2, -2, 0f, 0, 0, 6, 6))
-        }
-        tabScroll.addView(tabs)
-        col.addView(tabScroll)
-        col.addView(body)
-        showCat("Orders")
-        wrap.addView(col)
-    }
-
-    private fun buildWork(wrap: FrameLayout) {
-        val cols = game.colonists
-        val sv = ScrollView(this)
-        val hs = HorizontalScrollView(this)
-        val table = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        table.addView(label("Work priorities  (1 = first, 4 = last, – = never)", 12f, cAccent, true))
-        val hdr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        hdr.addView(label("", 11f), lin(dp(90), -2))
-        for (w in WorkType.entries) hdr.addView(label(w.label.replace(" ", "\n"), 10f, 0xFFB8AD98.toInt()).apply { gravity = Gravity.CENTER }, lin(dp(56), -2))
-        table.addView(hdr)
-        workCells.clear()
-        for (p in cols) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            row.addView(label(p.name.substringBefore(' '), 12f, cText, true), lin(dp(90), -2))
-            for (w in WorkType.entries) {
-                val tv = TextView(this).apply {
-                    text = prioText(p.priority[w.ordinal]); textSize = 15f; setTextColor(cText); gravity = Gravity.CENTER
-                    background = bg(cButton, 8, 0x33FFFFFF)
-                    setOnClickListener {
-                        val cur = p.priority[w.ordinal]
-                        game.setPriority(p, w, if (cur == 0) 1 else if (cur >= 4) 0 else cur + 1)
-                        text = prioText(p.priority[w.ordinal])
+        when (t) {
+            Tool.Stockpile -> { g.paintZone(x0, y0, x1, y1, ZoneKind.STOCKPILE); n = 1 }
+            Tool.Dumping -> { g.paintZone(x0, y0, x1, y1, ZoneKind.DUMPING); n = 1 }
+            is Tool.Growing -> { g.paintZone(x0, y0, x1, y1, ZoneKind.GROWING, t.crop); n = 1 }
+            Tool.Hunt, Tool.Tame, Tool.Slaughter -> {
+                for (p in g.pawns) {
+                    if (!p.alive || !p.isAnimal || p.x !in x0..x1 || p.y !in y0..y1) continue
+                    when (t) {
+                        Tool.Hunt -> if (p.faction == Faction.WILD) { p.huntMark = !p.huntMark; if (p.huntMark) p.tameMark = false; n++ }
+                        Tool.Tame -> if (p.faction == Faction.WILD) { p.tameMark = !p.tameMark; if (p.tameMark) p.huntMark = false; n++ }
+                        else -> if (p.faction == Faction.PLAYER) { p.slaughterMark = !p.slaughterMark; n++ }
                     }
                 }
-                workCells.add(Triple(tv, p, w))
-                row.addView(tv, lin(dp(50), dp(40), 0f, 3, 3, 3, 3))
+                if (n == 0) toast("No suitable animals there")
             }
-            table.addView(row)
-        }
-        hs.addView(table)
-        sv.addView(hs)
-        wrap.addView(sv)
-    }
-
-    private fun buildResearch(wrap: FrameLayout) {
-        val sv = ScrollView(this)
-        val host = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        sv.addView(host)
-        wrap.addView(sv)
-        researchHost = host
-        refreshResearch(force = true)
-    }
-
-    private var researchSig = ""
-
-    private fun refreshResearch(force: Boolean = false) {
-        val host = researchHost ?: return
-        val g = game
-        val sig = g.researchCurrent?.name + g.researchDone.size + (g.researchProgress[g.researchCurrent] ?: 0f).toInt() / 20
-        if (!force && sig == researchSig) return
-        researchSig = sig
-        host.removeAllViews()
-        val hasBench = g.map.building.any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH }
-        host.addView(label(if (hasBench) "Research (colonists with Research work will use the bench)" else "Build a research bench to start researching", 12f, cAccent, true))
-        for (r in Research.entries) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            val prog = (g.researchProgress[r] ?: 0f) / r.cost
-            val state = when {
-                r in g.researchDone -> "Done"
-                !g.researchAvailable(r) -> "Needs ${r.needs!!.label}"
-                g.researchCurrent == r -> "In progress ${(prog * 100).toInt()}%"
-                else -> "${(prog * 100).toInt()}%  ·  cost ${r.cost.toInt()}"
+            Tool.Forbid -> {
+                var anyAllowed = false
+                for (y in y0..y1) for (x in x0..x1) if (g.map.inB(x, y)) { val i = g.map.idx(x, y); if (g.map.items[i]?.forbidden == false || g.map.building[i]?.forbidden == false) anyAllowed = true }
+                for (y in y0..y1) for (x in x0..x1) if (g.map.inB(x, y)) {
+                    val i = g.map.idx(x, y)
+                    g.map.items[i]?.let { it.forbidden = anyAllowed; n++ }
+                    g.map.building[i]?.let { it.forbidden = anyAllowed; n++ }
+                }
             }
-            val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            col.addView(label(r.label, 13f, cText, true))
-            col.addView(label("${r.unlocks}  ·  $state", 11f, 0xFFB8AD98.toInt()))
-            row.addView(col, lin(0, -2, 1f))
-            if (g.researchAvailable(r)) {
-                val active = g.researchCurrent == r
-                row.addView(button(if (active) "Stop" else "Start", 12f) {
-                    g.startResearch(if (active) null else r); refreshResearch(true)
-                })
+            else -> {
+                for (y in y0..y1) for (x in x0..x1) {
+                    if (!g.map.inB(x, y)) continue
+                    val ok = when (t) {
+                        Tool.Mine -> g.designate(x, y, Desig.MINE)
+                        Tool.Cut -> g.designate(x, y, Desig.CUT)
+                        Tool.Harvest -> g.designate(x, y, Desig.HARVEST)
+                        Tool.Deconstruct -> g.designate(x, y, Desig.DECON)
+                        Tool.Repair -> g.designate(x, y, Desig.REPAIR)
+                        Tool.CancelOrders -> {
+                            g.clearDesignation(x, y)
+                            if (g.map.building[g.map.idx(x, y)]?.built == false) g.designate(x, y, Desig.DECON) else true
+                        }
+                        Tool.ClearZone -> { g.setZone(x, y, ZoneKind.NONE); true }
+                        is Tool.Build -> g.placeBlueprint(t.def, x, y)
+                        else -> false
+                    }
+                    if (ok) n++
+                }
+                if (n == 0 && t is Tool.Build) toast("Can't build ${t.def.label.lowercase()} there")
             }
-            host.addView(row, lin(-1, -2, 0f, 0, 6, 0, 0))
         }
     }
 
-    private fun buildLog(wrap: FrameLayout) {
-        val sv = ScrollView(this)
-        val tv = label("", 12f)
-        sv.addView(tv)
-        wrap.addView(sv)
-        logText = tv
-        refreshLog()
-    }
-
-    private fun refreshLog() {
-        val tv = logText ?: return
-        val sb = StringBuilder()
-        for (l in game.log.asReversed().take(60)) {
-            val day = l.tick / 24000 + 1
-            val hour = (l.tick / 1000 % 24).toInt()
-            sb.append("Day $day ${hour.toString().padStart(2, '0')}:00  ").append(l.text).append('\n')
-        }
-        tv.text = sb.toString()
-    }
-
-    // ------------------------------------------------------------------ dialogs
-    private fun showMenu() {
-        val items = ArrayList<String>()
-        items.add("Save game")
-        items.add("How to play")
-        val ship = game.map.building.any { it != null && it.built && it.def == BuildDef.SHIP }
-        if (ship) items.add("🚀 Launch the escape ship")
-        items.add("New colony…")
-        AlertDialog.Builder(this).setTitle("Colony").setItems(items.toTypedArray()) { _, which ->
-            when (items[which]) {
-                "Save game" -> { save(); toast("Game saved") }
-                "How to play" -> showHelp()
-                "New colony…" -> AlertDialog.Builder(this).setMessage("Abandon this colony and start over?")
-                    .setPositiveButton("Start over") { _, _ -> restart() }.setNegativeButton("Keep playing", null).show()
-                else -> AlertDialog.Builder(this).setMessage("Launch the ship and leave the rim for good? This ends the game.")
-                    .setPositiveButton("Launch") { _, _ -> if (game.launchShip()) { refreshHud() } }.setNegativeButton("Not yet", null).show()
-            }
-        }.show()
-    }
-
-    private fun restart() {
+    // ------------------------------------------------------------------ whole-game control
+    fun restart(newGame: Game) {
         saveFile.delete()
-        game = newGame()
+        game = newGame
+        hookAutosave(game)
         view.game = game
         view.selectedId = -1
+        view.selectedCell = -1
         view.recenter()
         overShown = false
         lastLogEntry = null
         chipIds = emptyList()
         select(null)
-        closePanel()
+        panels.closePanel()
         setTool(Tool.Select)
-    }
-
-    private fun showGameOver() {
-        val won = game.won
-        AlertDialog.Builder(this)
-            .setTitle(if (won) "You escaped!" else "Colony lost")
-            .setMessage(
-                if (won) "The ship leaves the rim behind. You survived ${game.day} days and beat back ${game.raidsSurvived} raids."
-                else "Everyone is gone after ${game.day} days. You beat back ${game.raidsSurvived} raids.",
-            )
-            .setCancelable(false)
-            .setPositiveButton("New colony") { _, _ -> restart() }
-            .show()
-    }
-
-    private fun showHelp() {
-        val msg = """
-            Survive on a hostile rimworld and build a ship to leave it.
-
-            • Drag to look around, pinch to zoom.
-            • Architect → Orders: mine rock (steel veins are pale dots), chop trees, harvest berries.
-            • Colonists haul loot into a Stockpile zone. Make one first!
-            • Build walls, doors, beds and tables. Colonists need beds, and food on tables is happier.
-            • Grow zones plant crops on soil. Cook raw food at a stove into meals.
-            • Work tab: set what each colonist does (1 is first).
-            • Tap a colonist, then Draft to fight. Tap the ground to move drafted colonists. Raiders arrive every few days.
-            • Research at a bench unlocks steel, gun turrets and finally the escape ship.
-            • Keep an eye on moods. Unhappy colonists have mental breaks.
-        """.trimIndent()
-        AlertDialog.Builder(this).setTitle("How to play").setMessage(msg).setPositiveButton("OK", null).show()
+        speed = 1; refreshSpeed()
+        refreshHud()
     }
 }

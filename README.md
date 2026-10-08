@@ -1,54 +1,71 @@
 # Colony
 
-A RimWorld-style colony sim for Android. A few crash-landed survivors, a hostile rimworld, and the
-goal of building a ship to get off it.
+A RimWorld-style colony simulator for Android, written from scratch in Kotlin. A few survivors land on a hostile
+rimworld; you keep them fed, warm, healthy and sane, fight off raiders, and eventually build a ship to leave.
 
-Everything is original code with no copied assets: the art is drawn on a canvas.
+Everything is original code with no copied assets (the art is drawn on a canvas). It is built to play like the base game
+without any DLC. It is not literally a 1:1 clone: buildings are one tile each, there is a single map and no world map.
 
 ## what's in it
 
-- **Map**: generated terrain (soil, rich soil, sand, marsh, water, gravel), mountains with steel veins,
-  forests and berry bushes.
-- **Colonists**: skills with passions, traits, work priorities (1-4 per job), needs (food, rest),
-  mood with thoughts, mental breaks (including berserk), injuries, bleeding and doctoring.
-- **Autonomous jobs**: mining, chopping, harvesting, sowing, hauling to stockpiles, building with
-  material delivery, deconstructing, cooking, research, fuelling campfires, eating (at tables if there is one),
-  sleeping in owned beds, fleeing and self-defence.
-- **Building**: wood/stone/steel walls, doors, floors, beds, tables, campfires, stoves, research benches,
-  gun turrets. Enclosed rooms are detected and have their own temperature (campfires heat them).
-- **Zones**: stockpiles and growing zones (rice, potatoes, corn). Crops need warmth and light and die in frost.
-- **World**: day/night, four seasons, cold snaps and heat waves.
-- **Storyteller**: raids that scale with your wealth and colony size, wanderers who join, supply pods.
-- **Combat**: draft colonists, ranged and melee weapons, line of sight, raiders that breach walls and retreat.
-- **Research**: Smithing, Stonecutting, Gun turrets and finally the Escape ship. Build it and launch to win.
-- **Saves**: autosave every few in-game hours and when the app is paused.
+**Colonists**
+- Backstories, 12 skills with passions, 30 traits, work priorities (1-4) for 18 job types, and a 24-hour schedule.
+- Needs: food, rest, joy and temperature comfort, plus a mood built from dozens of thoughts (room beauty and cleanliness,
+  bedroom impressiveness, meals, clothing, pain, weather, drugs, relationships, corpses...).
+- Mental breaks (wandering, food binge, insult spree, tantrum, fire starting, berserk, catatonia, running into the wilds).
+- Social: chitchat, deep talks, insults, romance, marriage and fights.
+- Drug use with highs, tolerance, addiction and withdrawal.
 
-Not here: DLC content, and a lot of the base game's depth (animals, prisoners, apparel, mortars, power,
-fire, plant diseases and so on). It is a playable, complete loop rather than a 1:1 copy.
+**Health**
+- Full body-part health: 25 human parts, organs, hit locations, armor, penetration into organs, bleeding, pain,
+  consciousness, blood loss, infections, scars and lost limbs. Capacities (moving, manipulation, sight...) follow the parts.
+- Doctors tend wounds with herbal or industrial medicine; hospital beds heal better. Colonists rescue the downed.
+- Illnesses (flu, plague, malaria, sleeping sickness, gut worms, parasites), hypothermia, frostbite, heatstroke,
+  malnutrition, food poisoning, toxic buildup.
+
+**Base building**
+- 60+ buildings: walls, doors, floors, beds, hospital beds, tables, chairs, lamps, recreation, workbenches, power,
+  heaters and coolers, sandbags, traps, turrets, mortars, graves, art and the ship parts.
+- Rooms are detected from walls; they have temperature, beauty, cleanliness, space and impressiveness.
+- Zones: stockpiles with item filters, quality limits and priorities, dumping zones, and growing zones.
+- Workbenches with bills (do X times, until you have X, forever) for cooking, butchering, tailoring, smithing,
+  machining, stonecutting, drugs and medicine. Items have quality; art has beauty.
+- Power grids: conduits, solar, wind, wood generators, batteries; lamps, heaters, coolers, hydroponics, stoves.
+- Fire that spreads, rain that puts it out, lightning, and firefighting.
+
+**World**
+- Six biomes, rivers, lakes, five rock types, six ores, caves under natural roof, trees that regrow.
+- Day and night with real lighting, four seasons, rain, fog, snow and thunderstorms, wind, cold snaps and heat waves.
+- Crops that grow by temperature, light and soil; frost and blight; spoilage of food and corpses.
+- Wildlife herds: grazers, predators, farm animals. Hunting, taming, slaughtering, butchering, wool, milk, eggs.
+
+**Threats and events**
+- Storytellers (Marlowe, Juniper, Orrin) and difficulty levels.
+- Raids that scale with wealth: assaults, sappers, sieges with mortars and drop pods, with tiered gear.
+- Manhunter packs, insect infestations, disease outbreaks, solar flares, eclipses, toxic fallout, short circuits,
+  blight, thrumbos, tame animals wandering in, wanderers joining, supply pods, trade caravans.
+- Prisoners: capture, feed, recruit or release. Escape attempts.
+
+**Progress**
+- A 33-item tech tree from basic crafts to the ship parts. Build the ship and launch to win.
+- Scenarios: Crashlanded, Lost tribe, Rich explorer, Naked brutality. Character reroll before landing.
+- Saves automatically.
 
 ## how to play
 
-Drag to pan, pinch to zoom. Landscape only.
+Landscape only. Drag to pan, pinch to zoom, tap to inspect. Open **Menu → How to play** in the game.
 
-1. Open **Architect > Orders** and paint over trees (Chop) and rock (Mine). Drag a rectangle to paint an area.
-2. Colonists haul things into the **Stockpile** zone (one is set up for you at the start).
-3. Build beds, a table, and a stove (**Architect**). Add a **growing zone** on soil and pick a crop.
-4. **Work** tab: choose who does what. 1 is first, – means never.
-5. Raiders come every few days. Tap a colonist and press **Draft**, then tap the ground to move them.
-   They shoot anything in range. Walls, doors and turrets help.
-6. Build a **research bench**, then pick a project in **Research**. The ship needs steel and a lot of research.
-
-## building
+## building it
 
 The code is split in two:
 
-- `sim/` is plain Kotlin (JVM) with the whole simulation and unit tests. It has no Android dependencies.
-- `app/` is the Android app: a canvas renderer, touch controls and the HUD.
+- `sim/` is plain Kotlin (JVM) with the whole simulation and its unit tests. No Android dependencies.
+- `app/` is the Android app: a canvas renderer, touch controls and the interface.
 
 ```sh
-./gradlew :sim:test                    # simulation tests, no Android SDK needed
+./gradlew :sim:test                        # simulation tests, no Android SDK needed
 ./gradlew -PwithApp :app:assembleRelease   # needs the Android SDK
 ```
 
-The APK ends up in `app/build/outputs/apk/release/`. The `Build APK` workflow builds it on every push and
-uploads it as an artifact.
+The APK ends up in `app/build/outputs/apk/release/`. The `Build APK` workflow builds it on every push and uploads
+it as an artifact.
