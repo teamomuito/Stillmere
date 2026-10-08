@@ -51,6 +51,14 @@ without any DLC. It is not literally a 1:1 clone: buildings are one tile each, t
 - Scenarios: Crashlanded, Lost tribe, Rich explorer, Naked brutality. Character reroll before landing.
 - Saves automatically.
 
+## install
+
+1. Download **[colony.apk](https://github.com/teamomuito/rimworld/releases/latest/download/colony.apk)** on your Android phone
+   (Android 8.0+). That link always points at the newest build; older ones are on the
+   [releases page](https://github.com/teamomuito/rimworld/releases).
+2. Open the file and allow installs from your browser or files app when asked.
+3. Uninstall an older build first if Android refuses to update it (builds are signed with a throwaway debug key).
+
 ## how to play
 
 Landscape only. Drag to pan, pinch to zoom, tap to inspect. Open **Menu → How to play** in the game.

@@ -32,3 +32,46 @@ jobs:
           name: colony-apk
           path: colony-*.apk
           if-no-files-found: error
+
+  release:
+    # Every push to the default branch becomes a release, so the newest APK is always at
+    # https://github.com/teamomuito/rimworld/releases/latest/download/colony.apk
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: colony-apk
+
+      - name: Publish release
+        run: |
+          mv colony-*.apk colony.apk
+          previous=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)
+          if [ -n "$previous" ]; then range="$previous..$GITHUB_SHA"; else range="-1 $GITHUB_SHA"; fi
+          git log --no-merges --format='- %s' $range > notes.md
+          [ -s notes.md ] || echo "- Rebuilt from the same code as $previous" > notes.md
+          version=$(sed -n 's/.*versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+          gh release create "build-$GITHUB_RUN_NUMBER" colony.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Colony $version (build $GITHUB_RUN_NUMBER)" \
+            --notes-file notes.md \
+            --latest
+
+      - name: Keep the 5 newest releases
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[5:][].tagName' |
+            while read -r tag; do
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            done
