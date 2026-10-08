@@ -48,6 +48,9 @@ sealed class Tool(val label: String, val paints: Boolean) {
     class Area(val index: Int, val add: Boolean, name: String) : Tool("${if (add) "Paint" else "Erase"} $name", true)
 }
 
+/** Cells narrower than this (in pixels) are drawn as flat shapes. */
+private const val DETAIL_SCALE = 24f
+
 class GameView(context: Context) : View(context) {
     var game: Game? = null
     var tool: Tool = Tool.Select
@@ -254,6 +257,8 @@ class GameView(context: Context) : View(context) {
         val x1 = min(m.w - 1, (camX + width / scale).toInt() + 1)
         val y1 = min(m.h - 1, (camY + height / scale).toInt() + 1)
         val s = scale
+        // Zoomed far out, cells are too small for the detailed art: draw one flat shape per cell instead.
+        val detail = s >= DETAIL_SCALE
         fill.style = Paint.Style.FILL
 
         // Ground.
@@ -262,6 +267,11 @@ class GameView(context: Context) : View(context) {
             val sx = (x - camX) * s
             val sy = (y - camY) * s
             val t = m.terrain[i]
+            if (!detail) {
+                fill.color = terrainColor(t, m.rockType[i]); c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill)
+                flatOverlays(c, m, i, sx, sy, s)
+                continue
+            }
             sprites.ground(c, m, x, y, sx, sy, s, frame, m.biome)
             if (t == Terrain.ROCK && m.ore[i] != Ore.NONE) {
                 val oc = oreColor(m.ore[i])
@@ -314,9 +324,15 @@ class GameView(context: Context) : View(context) {
             val sx = (x - camX) * s
             val sy = (y - camY) * s
             val pl = m.plant[i]
-            if (pl != null) sprites.plant(c, pl.type, pl.growth, pl.mature, x, y, sx, sy, s, frame)
+            if (pl != null) {
+                if (detail) sprites.plant(c, pl.type, pl.growth, pl.mature, x, y, sx, sy, s, frame)
+                else { fill.color = if (pl.type.isTree) 0xFF2E5E2F.toInt() else 0xFF7AB35A.toInt(); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.35f, fill) }
+            }
             val b = m.building[i]?.takeIf { it.x == x && it.y == y }
-            if (b != null) {
+            if (b != null && !detail) {
+                fill.color = flatBuildingColor(b); c.drawRect(sx, sy, sx + s * b.fw, sy + s * b.fh, fill)
+                if (b.forbidden) { fill.color = 0x88B02020.toInt(); c.drawRect(sx, sy, sx + s * b.fw, sy + s * b.fh, fill) }
+            } else if (b != null) {
                 val a = if (b.built) 255 else 110
                 if (!b.def.isFloor && !b.def.isDoor && !b.def.isWall && b.def != BuildDef.CONDUIT && b.def != BuildDef.TRAP_SPIKE && b.def != BuildDef.TRAP_DEADFALL && a > 200) sprites.furnitureShadow(c, sx, sy, s)
                 drawBig(c, m, b, sx, sy, s, a)
@@ -356,6 +372,11 @@ class GameView(context: Context) : View(context) {
             val sx = (it.x - camX) * s
             val sy = (it.y - camY) * s
             if (it.corpseOf != null) { drawCorpse(c, it.corpseRace?.color ?: 0xFF888888.toInt(), it.corpseRace?.isAnimal == true, sx, sy, s, it.rot); continue }
+            if (!detail) {
+                fill.color = if (it.forbidden) 0xFFD03030.toInt() else itemColor(it.type)
+                c.drawRect(sx + s * 0.25f, sy + s * 0.25f, sx + s * 0.75f, sy + s * 0.75f, fill)
+                continue
+            }
             sprites.item(c, it.type, itemColor(it.type), it.count, sx, sy, s, it.rot, it.x * 31 + it.y)
             if (it.rot > 0.3f && it.type.spoilDays > 0f) { fill.color = Color.argb((it.rot * 130).toInt(), 80, 100, 30); c.drawCircle(sx + s * 0.5f, sy + s * 0.5f, s * 0.3f, fill) }
             if (it.forbidden) { stroke.color = 0xFFD03030.toInt(); stroke.strokeWidth = 3f; c.drawLine(sx + s * 0.2f, sy + s * 0.2f, sx + s * 0.8f, sy + s * 0.8f, stroke) }
@@ -370,7 +391,8 @@ class GameView(context: Context) : View(context) {
             val x = i % m.w; val y = i / m.w
             if (x < x0 || x > x1 || y < y0 || y > y1) continue
             val sx = (x - camX) * s; val sy = (y - camY) * s
-            sprites.fire(c, sx, sy, s, f.intensity, frame, i)
+            if (detail) sprites.fire(c, sx, sy, s, f.intensity, frame, i)
+            else { fill.color = Color.argb(200, 255, 110, 30); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.4f, fill) }
         }
 
         // Pawns.
@@ -378,7 +400,11 @@ class GameView(context: Context) : View(context) {
             if (!p.alive) continue
             val px = p.interpX(); val py = p.interpY()
             if (px < x0 - 1 || px > x1 + 1 || py < y0 - 1 || py > y1 + 1) continue
-            drawPawn(c, p, (px - camX) * s, (py - camY) * s, s)
+            if (detail) drawPawn(c, p, (px - camX) * s, (py - camY) * s, s)
+            else {
+                fill.color = if (p.isAnimal) p.race.color else pawnColor(p)
+                c.drawCircle((px + 0.5f - camX) * s, (py + 0.5f - camY) * s, s * 0.4f, fill)
+            }
         }
 
         // Shots and blasts.
@@ -526,6 +552,36 @@ class GameView(context: Context) : View(context) {
         if (animal) { rect.set(sx + s * 0.15f, sy + s * 0.3f, sx + s * 0.85f, sy + s * 0.7f); c.drawOval(rect, fill) }
         else { rect.set(sx + s * 0.12f, sy + s * 0.38f, sx + s * 0.88f, sy + s * 0.62f); c.drawRoundRect(rect, s * 0.1f, s * 0.1f, fill); c.drawCircle(sx + s * 0.2f, sy + s * 0.5f, s * 0.12f, fill) }
         if (rot > 0.4f) { fill.color = Color.argb((rot * 140).toInt(), 90, 110, 30); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.36f, fill) }
+    }
+
+    /** Flat stand-ins used when zoomed out. Ore, filth, floors, zones and snow still show, just as colour. */
+    private fun flatOverlays(c: Canvas, m: io.github.teamomuito.colony.sim.GameMap, i: Int, sx: Float, sy: Float, s: Float) {
+        val fl = m.floor[i]
+        if (fl != null) {
+            fill.color = when (fl) {
+                BuildDef.WOOD_FLOOR -> 0xFFA9824F.toInt(); BuildDef.STONE_FLOOR -> 0xFF9A9A9C.toInt()
+                BuildDef.STEEL_FLOOR -> 0xFF8896A2.toInt(); else -> 0xFF8A5870.toInt()
+            }
+            c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill)
+        }
+        if (m.natRoof[i] && m.terrain[i] != Terrain.ROCK) { fill.color = 0x30101018; c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
+        if (m.snow[i] > 0.05f) { fill.color = Color.argb((m.snow[i] * 190).toInt(), 240, 246, 255); c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
+        val z = m.zoneAt(i)
+        if (z != null) {
+            fill.color = when (z.kind) { ZoneKind.STOCKPILE -> 0x55E8C547; ZoneKind.GROWING -> 0x4458C45A; else -> 0x558A8A8A }
+            c.drawRect(sx, sy, sx + s, sy + s, fill)
+        }
+    }
+
+    private fun flatBuildingColor(b: io.github.teamomuito.colony.sim.Building): Int {
+        val base = when {
+            b.def.isWall -> if (b.material == io.github.teamomuito.colony.sim.ItemType.WOOD || b.material == null && b.def.stuff?.first() == io.github.teamomuito.colony.sim.ItemType.WOOD) 0xFF8E6A3A.toInt() else 0xFF9A9AA0.toInt()
+            b.def.isFloor -> 0xFF9A8A6A.toInt()
+            b.def.sleeps -> 0xFF5B7BB8.toInt()
+            b.def.workbench -> 0xFF8B5E34.toInt()
+            else -> 0xFF7A6A55.toInt()
+        }
+        return (base and 0x00FFFFFF) or ((if (b.built) 255 else 110) shl 24)
     }
 
     /** The material a structure from before materials were chosen was made of. */
