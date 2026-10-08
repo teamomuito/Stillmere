@@ -5,41 +5,104 @@ import kotlin.math.max
 import kotlin.math.min
 
 class Plant(val type: PlantType, val x: Int, val y: Int, var growth: Float) {
-    val mature get() = !type.crop || growth >= 1f
+    var age = 0
+    var blighted = false
+    val mature get() = (!type.crop && !type.isTree) || growth >= 1f
 }
 
 class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
-    var delivered = 0
+    /** Materials delivered so far, indexed like def.cost. */
+    val delivered = IntArray(def.cost.size)
     var progress = 0f
     var hp = def.hp
     var ownerId = -1
     var fuel = 0f
     var cooldown = 0
-    var health = 1f
-    val lit get() = def == BuildDef.CAMPFIRE && built && fuel > 0f
+    var quality = Quality.NORMAL
+    var powered = false
+    var forbidden = false
+    var bills = ArrayList<Bill>()
+    var temperature = 0f
+    var shells = 0
+    var charge = 0f
+    var inUse = 0
+    var prisonerBed = false
+    var occupant = -1
+    var variant = 0
+    val lit get() = built && fuel > 0f && def.fuelCap > 0f
+    fun materialsComplete(): Boolean {
+        for (i in def.cost.indices) if (delivered[i] < def.cost[i].second) return false
+        return true
+    }
+    fun missing(i: Int) = max(0, def.cost[i].second - delivered[i])
 }
 
-class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var y: Int)
+class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var y: Int) {
+    var quality = Quality.NORMAL
+    var rot = 0f
+    var hp = 1f
+    var forbidden = false
+    var corpseOf: String? = null
+    var corpseRace: Race? = null
+    var corpseColonist = false
+    var corpseAge = 0
+}
 
-object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3 }
-object ZoneKind { const val NONE = 0; const val STOCKPILE = 1; const val GROWING = 2 }
+class Fire(var intensity: Float) { var age = 0 }
+
+object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5 }
+object ZoneKind { const val NONE = 0; const val STOCKPILE = 1; const val GROWING = 2; const val DUMPING = 3 }
+
+class Zone(val id: Int, val kind: Int) {
+    var name = ""
+    var priority = 2 // 0 low, 1 normal, 2 preferred, 3 important, 4 critical
+    var crop = PlantType.RICE
+    var sow = true
+    var allowed = BooleanArray(ItemType.entries.size) { true }
+    var minQuality = Quality.AWFUL
+    var cells = 0
+    fun accepts(t: ItemType, q: Quality): Boolean = allowed[t.ordinal] && q.ordinal >= minQuality.ordinal
+}
 
 class GameMap(val w: Int, val h: Int) {
     val size = w * h
     val terrain = Array(size) { Terrain.SOIL }
-    val ore = BooleanArray(size)
+    val ore = Array(size) { Ore.NONE }
+    val rockType = Array(size) { RockType.GRANITE }
     val floor = arrayOfNulls<BuildDef>(size)
+    val floorQuality = Array(size) { Quality.NORMAL }
     val building = arrayOfNulls<Building>(size)
     val plant = arrayOfNulls<Plant>(size)
     val items = HashMap<Int, ItemStack>()
-    val zone = ByteArray(size)
-    val zoneCrop = ByteArray(size)
+    val zoneId = IntArray(size)
+    val zones = HashMap<Int, Zone>()
     val desig = ByteArray(size)
+    val filth = ByteArray(size)
+    val fires = HashMap<Int, Fire>()
+    val natRoof = BooleanArray(size)
+    val conduit = BooleanArray(size)
+    fun conduitAt(i: Int) = conduit[i]
+    val light = FloatArray(size)
+    val snow = FloatArray(size)
+    var biome = Biome.TEMPERATE
 
     fun idx(x: Int, y: Int) = y * w + x
     fun inB(x: Int, y: Int) = x in 0 until w && y in 0 until h
     fun xOf(i: Int) = i % w
     fun yOf(i: Int) = i / w
+
+    fun zoneAt(i: Int): Zone? = if (zoneId[i] == 0) null else zones[zoneId[i]]
+    fun zoneKind(i: Int): Int = zoneAt(i)?.kind ?: 0
+
+    private var nextZone = 1
+    fun newZone(kind: Int): Zone {
+        val z = Zone(nextZone++, kind)
+        z.name = when (kind) { ZoneKind.STOCKPILE -> "Stockpile ${z.id}"; ZoneKind.GROWING -> "Growing zone ${z.id}"; else -> "Dumping ${z.id}" }
+        zones[z.id] = z
+        return z
+    }
+    fun setNextZone(n: Int) { nextZone = n }
+    fun peekNextZone() = nextZone
 
     fun isWall(i: Int): Boolean {
         val b = building[i]
@@ -51,7 +114,6 @@ class GameMap(val w: Int, val h: Int) {
         return terrain[i] == Terrain.ROCK || (b != null && b.built && b.def.blocksSight)
     }
 
-    /** Can pawns walk on this cell at all (doors are fine)? */
     fun walkable(i: Int): Boolean {
         if (!terrain[i].passable) return false
         val b = building[i]
@@ -60,12 +122,17 @@ class GameMap(val w: Int, val h: Int) {
 
     fun stepCost(i: Int): Int {
         var c = terrain[i].cost * 10
-        if (plant[i]?.type == PlantType.TREE) c += 50
+        val p = plant[i]
+        if (p != null && (p.type.isTree || p.type == PlantType.BRAMBLE)) c += 50
         if (floor[i] != null) c -= 3
+        if (snow[i] > 0.5f) c += 3
+        val b = building[i]
+        if (b != null && b.built && b.def.cover > 0f) c += 12
+        if (b != null && b.built && b.def.trap) c += 0
+        if (fires.containsKey(i)) c += 200
         return max(c, 6)
     }
 
-    /** Bresenham line of sight. */
     fun lineOfSight(x0: Int, y0: Int, x1: Int, y1: Int): Boolean {
         var x = x0
         var y = y0
@@ -83,12 +150,29 @@ class GameMap(val w: Int, val h: Int) {
         return true
     }
 
-    // ---- rooms ----
+    /** True when a line of fire between two cells is blocked by cover that stands right in front of the target. */
+    fun coverAt(x0: Int, y0: Int, x1: Int, y1: Int): Float {
+        // Cover on the cell adjacent to the target along the shot.
+        val dx = Integer.signum(x0 - x1)
+        val dy = Integer.signum(y0 - y1)
+        val cx = x1 + dx
+        val cy = y1 + dy
+        if (!inB(cx, cy)) return 0f
+        val b = building[idx(cx, cy)] ?: return 0f
+        return if (b.built) b.def.cover else 0f
+    }
+
+    // ---------------------------------------------------------------- rooms
     var roomDirty = true
     var roomId = IntArray(size)
     var roomSize = IntArray(0)
     var roomIndoor = BooleanArray(0)
     var roomTemp = FloatArray(0)
+    var roomBeauty = FloatArray(0)
+    var roomClean = FloatArray(0)
+    var roomImpress = FloatArray(0)
+    var roomRole = IntArray(0) // 0 none, 1 bedroom, 2 barracks, 3 dining, 4 hospital, 5 prison, 6 rec, 7 workshop, 8 kitchen
+    var roomWealth = FloatArray(0)
 
     private fun separates(i: Int): Boolean {
         val b = building[i]
@@ -110,9 +194,11 @@ class GameMap(val w: Int, val h: Int) {
             id[start] = rid
             var count = 0
             var edge = false
+            var natural = 0
             while (sp > 0) {
                 val c = stack[--sp]
                 count++
+                if (natRoof[c]) natural++
                 val cx = xOf(c); val cy = yOf(c)
                 if (cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1) edge = true
                 for (d in 0 until 4) {
@@ -125,9 +211,8 @@ class GameMap(val w: Int, val h: Int) {
                 }
             }
             sizes.add(count)
-            indoor.add(!edge && count <= 600)
+            indoor.add(!edge && (count <= 700 || natural * 2 > count))
         }
-        // Walls and doors take the temperature of the neighbouring room (or the outdoors).
         roomId = id
         roomSize = sizes.toIntArray()
         roomIndoor = indoor.toBooleanArray()
@@ -139,6 +224,11 @@ class GameMap(val w: Int, val h: Int) {
             if (o >= 0 && o < old.size) temps[r] = old[o]
         }
         roomTemp = temps
+        roomBeauty = FloatArray(sizes.size)
+        roomClean = FloatArray(sizes.size)
+        roomImpress = FloatArray(sizes.size)
+        roomRole = IntArray(sizes.size)
+        roomWealth = FloatArray(sizes.size)
         roomDirty = false
     }
 
@@ -148,37 +238,47 @@ class GameMap(val w: Int, val h: Int) {
         return r >= 0 && roomIndoor[r]
     }
 
+    fun roofed(i: Int): Boolean = natRoof[i] || roomIndoorAt(i)
+
     fun tempAt(i: Int, outdoor: Float): Float {
         if (roomDirty) return outdoor
         val r = roomId[i]
         return if (r >= 0 && roomIndoor[r]) roomTemp[r] else outdoor
     }
 
-    // ---- items ----
+    // ---------------------------------------------------------------- items
     private var nextItemId = 1
     fun nextId() = nextItemId++
     fun setNextId(n: Int) { nextItemId = n }
 
-    fun itemAt(i: Int) = items[i]
+    fun dropCell(i: Int): Boolean {
+        if (!terrain[i].passable || terrain[i] == Terrain.WATER_SHALLOW) return false
+        val b = building[i]
+        if (b != null && b.built && b.def.blocksMove) return false
+        if (b != null && !b.built && b.def.blocksMove) return false
+        return true
+    }
 
-    /** Places items on or near (x, y), merging with matching stacks. Returns what could not be placed. */
-    fun drop(type: ItemType, count: Int, x: Int, y: Int): Int {
+    /** Drops items on or near (x, y), merging with matching stacks. Returns what could not be placed. */
+    fun drop(type: ItemType, count: Int, x: Int, y: Int, quality: Quality = Quality.NORMAL, rot: Float = 0f): Int {
         var left = count
         var radius = 0
-        while (left > 0 && radius < 12) {
+        while (left > 0 && radius < 14) {
             for (yy in y - radius..y + radius) for (xx in x - radius..x + radius) {
                 if (max(abs(xx - x), abs(yy - y)) != radius || !inB(xx, yy)) continue
                 val i = idx(xx, yy)
-                if (!terrain[i].passable || terrain[i] == Terrain.WATER_SHALLOW) continue
-                val b = building[i]
-                if (b != null && b.built && b.def.blocksMove) continue
+                if (!dropCell(i)) continue
                 val s = items[i]
                 if (s == null) {
                     val n = min(left, type.stack)
-                    items[i] = ItemStack(nextId(), type, n, xx, yy)
+                    val ns = ItemStack(nextId(), type, n, xx, yy)
+                    ns.quality = quality; ns.rot = rot
+                    items[i] = ns
                     left -= n
-                } else if (s.type == type && s.count < type.stack) {
+                } else if (s.type == type && s.count < type.stack && s.quality == quality) {
                     val n = min(left, type.stack - s.count)
+                    // Mixing fresh with old food ages the whole pile a bit.
+                    s.rot = (s.rot * s.count + rot * n) / (s.count + n)
                     s.count += n
                     left -= n
                 }
@@ -197,12 +297,22 @@ class GameMap(val w: Int, val h: Int) {
         return t
     }
 
-    fun countItems(type: ItemType): Int = items.values.filter { it.type == type }.sumOf { it.count }
+    fun countItems(type: ItemType): Int {
+        var n = 0
+        for (s in items.values) if (s.type == type && s.corpseOf == null) n += s.count
+        return n
+    }
+
+    fun countItems(pred: (ItemType) -> Boolean): Int {
+        var n = 0
+        for (s in items.values) if (pred(s.type) && s.corpseOf == null) n += s.count
+        return n
+    }
 
     fun wealth(): Float {
         var v = 0f
-        for (s in items.values) v += s.type.value * s.count
-        for (b in building) if (b != null && b.built) v += b.def.count * b.def.item.value
+        for (s in items.values) v += s.type.value * s.count * (if (s.type.isGear) s.quality.mult else 1f)
+        for (b in building) if (b != null && b.built) v += b.def.totalCost * b.quality.mult
         return v
     }
 
@@ -212,61 +322,118 @@ class GameMap(val w: Int, val h: Int) {
         val DX8 = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
         val DY8 = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
 
-        fun generate(w: Int, h: Int, seed: Long): GameMap {
+        fun generate(w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE): GameMap {
             val m = GameMap(w, h)
+            m.biome = biome
             val rng = Rng(seed)
             val elev = Noise(seed.toInt() xor 0x1234)
             val fert = Noise(seed.toInt() xor 0x5678)
             val wet = Noise(seed.toInt() xor 0x9abc)
             val tree = Noise(seed.toInt() xor 0xdef0)
+            val rockN = Noise(seed.toInt() xor 0x2468)
             val cx = w / 2
             val cy = h / 2
+            val desert = biome == Biome.DESERT || biome == Biome.ARID
+            val cold = biome == Biome.TUNDRA || biome == Biome.BOREAL
+            // A river meanders across the map for most seeds.
+            val riverY = FloatArray(w)
+            val riverNoise = Noise(seed.toInt() xor 0x77)
+            val riverOn = rng.chance(0.65f) && !desert
+            val horizontal = rng.chance(0.5f)
+            for (x in 0 until w) riverY[x] = (if (horizontal) h * 0.22f else w * 0.22f) + (riverNoise.fractal(x.toFloat(), 0f, 24f) - 0.5f) * 30f
             for (y in 0 until h) for (x in 0 until w) {
                 val i = m.idx(x, y)
-                val e = elev.fractal(x.toFloat(), y.toFloat(), 22f)
-                val wt = wet.fractal(x.toFloat(), y.toFloat(), 18f)
-                val f = fert.fractal(x.toFloat(), y.toFloat(), 10f)
-                // Keep the landing zone in the middle gentle.
+                val e = elev.fractal(x.toFloat(), y.toFloat(), 26f)
+                val wt = wet.fractal(x.toFloat(), y.toFloat(), 20f)
+                val f = fert.fractal(x.toFloat(), y.toFloat(), 11f) + biome.soilBias
                 val d = max(abs(x - cx), abs(y - cy))
-                val calm = if (d < 12) (12 - d) / 12f * 0.35f else 0f
+                val calm = if (d < 14) (14 - d) / 14f * 0.35f else 0f
                 val ee = e - calm
                 val ww = wt + calm
-                m.terrain[i] = when {
+                var t = when {
                     ee > 0.62f -> Terrain.ROCK
-                    ww < 0.24f -> Terrain.WATER_DEEP
-                    ww < 0.31f -> Terrain.WATER_SHALLOW
-                    ww < 0.34f -> Terrain.SAND
+                    !desert && ww < 0.22f -> Terrain.WATER_DEEP
+                    !desert && ww < 0.29f -> Terrain.WATER_SHALLOW
+                    ww < 0.32f -> if (cold) Terrain.MUD else Terrain.SAND
                     ee > 0.55f -> Terrain.GRAVEL
-                    f > 0.62f -> Terrain.RICH_SOIL
+                    desert -> if (f > 0.55f) Terrain.SOIL else if (f > 0.35f) Terrain.SAND else Terrain.GRAVEL
+                    f > 0.64f -> Terrain.RICH_SOIL
                     f < 0.28f -> Terrain.MARSH
                     else -> Terrain.SOIL
                 }
-            }
-            // Steel veins inside the rock.
-            repeat(7) {
-                for (attempt in 0 until 60) {
-                    val ox = rng.int(w); val oy = rng.int(h)
-                    if (m.terrain[m.idx(ox, oy)] != Terrain.ROCK) continue
-                    for (k in 0 until 9) {
-                        val x = ox + rng.range(-2, 2); val y = oy + rng.range(-2, 2)
-                        if (m.inB(x, y) && m.terrain[m.idx(x, y)] == Terrain.ROCK) m.ore[m.idx(x, y)] = true
+                if (riverOn && t != Terrain.ROCK) {
+                    val along = if (horizontal) x else y
+                    val across = if (horizontal) y else x
+                    val dist = abs(across - riverY[along])
+                    if (dist < 1.6f && d > 6) t = Terrain.WATER_DEEP
+                    else if (dist < 3.2f && d > 6) t = Terrain.WATER_SHALLOW
+                }
+                if (biome == Biome.TUNDRA && (t == Terrain.SOIL || t == Terrain.RICH_SOIL) && rng.chance(0.3f)) t = Terrain.GRAVEL
+                m.terrain[i] = t
+                if (t == Terrain.ROCK) {
+                    m.natRoof[i] = true
+                    val r = rockN.fractal(x.toFloat(), y.toFloat(), 40f)
+                    m.rockType[i] = when {
+                        r < 0.3f -> RockType.GRANITE
+                        r < 0.45f -> RockType.SLATE
+                        r < 0.58f -> RockType.LIMESTONE
+                        r < 0.72f -> RockType.SANDSTONE
+                        else -> RockType.MARBLE
                     }
-                    break
+                }
+            }
+            // Thick mountain interior stays roofed after mining; thin edges are open sky.
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = m.idx(x, y)
+                if (m.terrain[i] == Terrain.ROCK) continue
+                var rockNb = 0
+                for (dy in -2..2) for (dx in -2..2) {
+                    val nx = x + dx; val ny = y + dy
+                    if (m.inB(nx, ny) && m.terrain[m.idx(nx, ny)] == Terrain.ROCK) rockNb++
+                }
+                if (rockNb >= 14) m.natRoof[i] = true
+            }
+            // Ore veins.
+            val ores = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.PLASTEEL to 2, Ore.COMPONENTS to 3)
+            for ((ore, veins) in ores) {
+                repeat(veins) {
+                    for (attempt in 0 until 80) {
+                        val ox = rng.int(w); val oy = rng.int(h)
+                        if (m.terrain[m.idx(ox, oy)] != Terrain.ROCK) continue
+                        val n = if (ore == Ore.STEEL) 11 else if (ore == Ore.COMPONENTS) 4 else 6
+                        for (k in 0 until n) {
+                            val x = ox + rng.range(-2, 2); val y = oy + rng.range(-2, 2)
+                            if (m.inB(x, y) && m.terrain[m.idx(x, y)] == Terrain.ROCK) m.ore[m.idx(x, y)] = ore
+                        }
+                        break
+                    }
                 }
             }
             // Plants.
+            val trees = when (biome) {
+                Biome.TEMPERATE -> listOf(PlantType.OAK, PlantType.POPLAR, PlantType.OAK)
+                Biome.BOREAL -> listOf(PlantType.PINE, PlantType.PINE, PlantType.POPLAR)
+                Biome.TUNDRA -> listOf(PlantType.PINE)
+                Biome.DESERT, Biome.ARID -> listOf(PlantType.PALM)
+                Biome.TROPICAL -> listOf(PlantType.PALM, PlantType.OAK, PlantType.POPLAR)
+            }
             for (y in 0 until h) for (x in 0 until w) {
                 val i = m.idx(x, y)
                 val t = m.terrain[i]
-                if (t == Terrain.ROCK || t == Terrain.WATER_DEEP || t == Terrain.WATER_SHALLOW) continue
+                if (!t.passable || t == Terrain.WATER_SHALLOW || t == Terrain.ICE) continue
                 val dens = tree.fractal(x.toFloat(), y.toFloat(), 9f)
                 val d = max(abs(x - cx), abs(y - cy))
                 if (d < 4) continue
                 val fertile = t.fertility > 0.1f
-                if (fertile && dens > 0.56f && rng.chance(0.55f)) {
-                    m.plant[i] = Plant(PlantType.TREE, x, y, 1f)
-                } else if (fertile && rng.chance(0.006f)) {
+                val threshold = 0.62f - 0.12f * (biome.treeDensity - 0.6f)
+                if (fertile && dens > threshold && rng.chance(0.55f * min(1.2f, biome.treeDensity))) {
+                    m.plant[i] = Plant(rng.pick(trees), x, y, 1f).also { it.age = rng.int(30) }
+                } else if (fertile && rng.chance(0.006f * biome.treeDensity)) {
                     m.plant[i] = Plant(PlantType.BERRY, x, y, 1f)
+                } else if (fertile && rng.chance(0.004f)) {
+                    m.plant[i] = Plant(PlantType.WILD_HEALROOT, x, y, 1f)
+                } else if (rng.chance(0.004f)) {
+                    m.plant[i] = Plant(PlantType.BRAMBLE, x, y, 1f)
                 }
             }
             return m

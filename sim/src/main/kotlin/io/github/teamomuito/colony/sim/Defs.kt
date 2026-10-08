@@ -13,96 +13,311 @@ enum class Terrain(val label: String, val passable: Boolean, val fertility: Floa
     WATER_SHALLOW("Shallow water", true, 0f, 4),
     WATER_DEEP("Deep water", false, 0f, 0),
     ROCK("Rock", false, 0f, 0),
+    ICE("Ice", true, 0f, 2),
+    MUD("Mud", true, 0.5f, 3),
 }
 
-enum class ItemType(val label: String, val nutrition: Float, val stack: Int, val value: Float) {
-    WOOD("Wood", 0f, 75, 0.5f),
-    STONE("Stone blocks", 0f, 75, 0.6f),
-    STEEL("Steel", 0f, 75, 1.9f),
-    RAW_FOOD("Raw food", 0.05f, 75, 0.4f),
-    MEAL("Simple meal", 0.9f, 10, 10f),
+enum class RockType(val label: String, val beauty: Float) {
+    GRANITE("Granite", 0f), MARBLE("Marble", 1f), LIMESTONE("Limestone", 0f), SANDSTONE("Sandstone", 0f), SLATE("Slate", 0f)
 }
 
-enum class Season(val label: String, val baseTemp: Float) {
-    SPRING("Spring", 13f), SUMMER("Summer", 25f), FALL("Fall", 10f), WINTER("Winter", -7f)
+enum class Ore(val label: String, val item: ItemType?, val yieldMin: Int, val yieldMax: Int, val work: Float) {
+    NONE("", null, 0, 0, 1000f),
+    STEEL("Steel", ItemType.STEEL, 14, 24, 1500f),
+    SILVER("Silver", ItemType.SILVER, 40, 80, 1500f),
+    GOLD("Gold", ItemType.GOLD, 10, 25, 1800f),
+    PLASTEEL("Plasteel", ItemType.PLASTEEL, 10, 20, 2200f),
+    COMPONENTS("Components", ItemType.COMPONENT, 1, 3, 2000f),
 }
 
-enum class WorkType(val label: String) {
-    DOCTOR("Doctor"), COOK("Cook"), CONSTRUCT("Construct"), GROW("Grow"), MINE("Mine"),
-    PLANT_CUT("Plant cut"), HAUL("Haul"), RESEARCH("Research")
+enum class Season(val label: String) { SPRING("Spring"), SUMMER("Summer"), FALL("Fall"), WINTER("Winter") }
+
+enum class Biome(
+    val label: String, val springT: Float, val summerT: Float, val fallT: Float, val winterT: Float,
+    val rain: Float, val treeDensity: Float, val soilBias: Float,
+) {
+    TEMPERATE("Temperate forest", 13f, 24f, 10f, -3f, 0.4f, 1f, 0f),
+    BOREAL("Boreal forest", 4f, 15f, 2f, -18f, 0.35f, 1.1f, -0.05f),
+    TUNDRA("Tundra", -2f, 8f, -4f, -26f, 0.2f, 0.25f, -0.12f),
+    DESERT("Desert", 28f, 38f, 28f, 15f, 0.05f, 0.1f, -0.2f),
+    TROPICAL("Tropical rainforest", 26f, 29f, 26f, 23f, 0.7f, 1.4f, 0.1f),
+    ARID("Arid shrubland", 22f, 31f, 20f, 8f, 0.12f, 0.3f, -0.1f),
+}
+
+enum class WorkType(val label: String, val short: String) {
+    FIREFIGHT("Firefight", "Fire"), PATIENT("Patient", "Rest"), DOCTOR("Doctor", "Doc"), WARDEN("Warden", "Ward"),
+    HANDLE("Handle animals", "Hndl"), COOK("Cook", "Cook"), HUNT("Hunt", "Hunt"), CONSTRUCT("Construct", "Cnst"),
+    GROW("Grow", "Grow"), MINE("Mine", "Mine"), PLANT_CUT("Plant cut", "Cut"), SMITH("Smith", "Smth"),
+    TAILOR("Tailor", "Tail"), ART("Art", "Art"), CRAFT("Craft", "Crft"), HAUL("Haul", "Haul"),
+    CLEAN("Clean", "Cln"), RESEARCH("Research", "Rsrch"),
 }
 
 enum class SkillType(val label: String) {
     SHOOTING("Shooting"), MELEE("Melee"), CONSTRUCTION("Construction"), MINING("Mining"),
-    COOKING("Cooking"), PLANTS("Plants"), MEDICINE("Medicine"), INTELLECTUAL("Intellectual")
+    COOKING("Cooking"), PLANTS("Plants"), ANIMALS("Animals"), CRAFTING("Crafting"),
+    ARTISTIC("Artistic"), MEDICINE("Medicine"), SOCIAL("Social"), INTELLECTUAL("Intellectual"),
 }
 
-fun WorkType.skill(): SkillType = when (this) {
+fun WorkType.skill(): SkillType? = when (this) {
     WorkType.DOCTOR -> SkillType.MEDICINE
+    WorkType.WARDEN -> SkillType.SOCIAL
+    WorkType.HANDLE -> SkillType.ANIMALS
     WorkType.COOK -> SkillType.COOKING
+    WorkType.HUNT -> SkillType.SHOOTING
     WorkType.CONSTRUCT -> SkillType.CONSTRUCTION
     WorkType.GROW, WorkType.PLANT_CUT -> SkillType.PLANTS
     WorkType.MINE -> SkillType.MINING
-    WorkType.HAUL -> SkillType.CONSTRUCTION
+    WorkType.SMITH, WorkType.TAILOR, WorkType.CRAFT -> SkillType.CRAFTING
+    WorkType.ART -> SkillType.ARTISTIC
     WorkType.RESEARCH -> SkillType.INTELLECTUAL
+    WorkType.FIREFIGHT, WorkType.PATIENT, WorkType.HAUL, WorkType.CLEAN -> null
 }
 
 enum class PlantType(
     val label: String, val growDays: Float, val yieldType: ItemType?, val yieldCount: Int,
-    val harvestWork: Int, val sowWork: Int, val crop: Boolean,
+    val harvestWork: Int, val sowWork: Int, val crop: Boolean, val minTemp: Float = 6f, val maxTemp: Float = 42f,
+    val flammable: Float = 0.5f, val wood: Boolean = false,
 ) {
-    TREE("Tree", 0f, ItemType.WOOD, 20, 400, 0, false),
-    BERRY("Berry bush", 0f, ItemType.RAW_FOOD, 8, 120, 0, false),
-    RICE("Rice", 5.8f, ItemType.RAW_FOOD, 12, 110, 170, true),
-    POTATO("Potatoes", 5.8f, ItemType.RAW_FOOD, 11, 110, 170, true),
-    CORN("Corn", 11.5f, ItemType.RAW_FOOD, 40, 110, 170, true),
+    OAK("Oak tree", 12f, ItemType.WOOD, 24, 450, 0, false, wood = true),
+    PINE("Pine tree", 12f, ItemType.WOOD, 20, 400, 0, false, wood = true),
+    PALM("Palm tree", 9f, ItemType.WOOD, 14, 300, 0, false, wood = true),
+    POPLAR("Poplar", 8f, ItemType.WOOD, 18, 350, 0, false, wood = true),
+    BERRY("Strawberry bush", 0f, ItemType.STRAWBERRIES, 8, 120, 0, false),
+    BRAMBLE("Brambles", 0f, null, 0, 150, 0, false),
+    WILD_HEALROOT("Wild healroot", 0f, ItemType.HEALROOT, 3, 120, 0, false),
+    RICE("Rice", 5.8f, ItemType.RICE, 12, 110, 170, true),
+    POTATO("Potatoes", 5.8f, ItemType.POTATOES, 11, 110, 170, true),
+    CORN("Corn", 11.5f, ItemType.CORN, 40, 110, 170, true),
+    STRAWBERRY("Strawberries", 6.5f, ItemType.STRAWBERRIES, 10, 110, 170, true),
+    COTTON("Cotton", 5.5f, ItemType.CLOTH, 14, 110, 170, true),
+    HEALROOT("Healroot", 8f, ItemType.HEALROOT, 5, 110, 170, true),
+    SMOKELEAF("Smokeleaf", 7f, ItemType.SMOKELEAF, 10, 110, 170, true),
+    PSYCHOID("Psychoid", 7f, ItemType.PSYCHOID, 8, 110, 170, true),
+    HAYGRASS("Hay grass", 3.5f, ItemType.HAY, 20, 90, 120, true, minTemp = 3f);
+
+    val isTree get() = wood
 }
 
-enum class Research(val label: String, val cost: Float, val needs: Research?, val unlocks: String) {
-    SMITHING("Smithing", 5000f, null, "Steel walls and floors"),
-    STONECUTTING("Stonecutting", 6000f, null, "Stone tile floors"),
-    GUN_TURRETS("Gun turrets", 18000f, SMITHING, "Auto-firing turrets"),
-    SHIP("Escape ship", 90000f, GUN_TURRETS, "Build a ship and leave the planet"),
+enum class ItemCat(val label: String) {
+    RESOURCE("Resources"), FOOD_PLANT("Plant food"), FOOD_MEAT("Meat"), FOOD_MEAL("Meals"), FOOD_ANIMAL("Animal feed"),
+    MEDICINE("Medicine"), DRUG("Drugs"), WEAPON("Weapons"), APPAREL("Apparel"), ART("Art"), MISC("Other"),
 }
 
-enum class BuildDef(
-    val label: String, val item: ItemType, val count: Int, val work: Int, val hp: Float,
-    val blocksMove: Boolean = false, val blocksSight: Boolean = false, val isFloor: Boolean = false,
-    val isDoor: Boolean = false, val research: Research? = null, val category: String = "Structure",
+enum class ItemType(
+    val label: String, val cat: ItemCat, val stack: Int, val value: Float, val nutrition: Float = 0f,
+    val spoilDays: Float = 0f, val flammable: Float = 0f, val weapon: Weapon? = null, val apparel: Apparel? = null,
+    val potency: Float = 0f, val humanFood: Boolean = true,
 ) {
-    WOOD_WALL("Wooden wall", ItemType.WOOD, 5, 160, 150f, true, true),
-    STONE_WALL("Stone wall", ItemType.STONE, 5, 280, 300f, true, true),
-    STEEL_WALL("Steel wall", ItemType.STEEL, 5, 200, 400f, true, true, research = Research.SMITHING),
-    DOOR("Wooden door", ItemType.WOOD, 15, 220, 120f, isDoor = true, blocksSight = false),
-    WOOD_FLOOR("Wood floor", ItemType.WOOD, 3, 70, 1f, isFloor = true),
-    STONE_FLOOR("Stone tiles", ItemType.STONE, 3, 100, 1f, isFloor = true, research = Research.STONECUTTING),
-    STEEL_FLOOR("Steel tiles", ItemType.STEEL, 2, 90, 1f, isFloor = true, research = Research.SMITHING),
-    BED("Bed", ItemType.WOOD, 30, 500, 100f, category = "Furniture"),
-    TABLE("Table", ItemType.WOOD, 25, 350, 100f, blocksMove = true, category = "Furniture"),
-    CAMPFIRE("Campfire", ItemType.WOOD, 10, 120, 40f, category = "Furniture"),
-    STOVE("Stove", ItemType.STEEL, 50, 500, 100f, blocksMove = true, category = "Production"),
-    RESEARCH_BENCH("Research bench", ItemType.STEEL, 60, 600, 100f, blocksMove = true, category = "Production"),
-    TURRET("Gun turret", ItemType.STEEL, 80, 450, 200f, blocksMove = true, research = Research.GUN_TURRETS, category = "Security"),
-    SHIP("Escape ship", ItemType.STEEL, 400, 4000, 500f, blocksMove = true, research = Research.SHIP, category = "Ship");
+    WOOD("Wood", ItemCat.RESOURCE, 75, 0.5f, flammable = 1f),
+    STONE_CHUNK("Stone chunk", ItemCat.RESOURCE, 1, 0.1f),
+    STONE("Stone blocks", ItemCat.RESOURCE, 75, 0.6f),
+    STEEL("Steel", ItemCat.RESOURCE, 75, 1.9f),
+    PLASTEEL("Plasteel", ItemCat.RESOURCE, 75, 9f),
+    SILVER("Silver", ItemCat.RESOURCE, 500, 1f),
+    GOLD("Gold", ItemCat.RESOURCE, 500, 10f),
+    COMPONENT("Components", ItemCat.RESOURCE, 50, 32f),
+    CLOTH("Cloth", ItemCat.RESOURCE, 75, 1.3f, flammable = 1f),
+    LEATHER("Leather", ItemCat.RESOURCE, 75, 2.1f, flammable = 0.6f),
+    WOOL("Wool", ItemCat.RESOURCE, 75, 1.4f, flammable = 1f),
 
-    val isWall get() = this == WOOD_WALL || this == STONE_WALL || this == STEEL_WALL
+    RICE("Rice", ItemCat.FOOD_PLANT, 75, 1.1f, 0.05f, 40f),
+    POTATOES("Potatoes", ItemCat.FOOD_PLANT, 75, 1.1f, 0.05f, 40f),
+    CORN("Corn", ItemCat.FOOD_PLANT, 75, 1.1f, 0.05f, 40f),
+    STRAWBERRIES("Strawberries", ItemCat.FOOD_PLANT, 75, 1.2f, 0.05f, 10f),
+    MEAT("Meat", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 4f),
+    HUMAN_MEAT("Human meat", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 4f),
+    INSECT_MEAT("Insect meat", ItemCat.FOOD_MEAT, 75, 1.2f, 0.05f, 4f),
+    EGGS("Eggs", ItemCat.FOOD_MEAT, 75, 2f, 0.05f, 8f),
+    MILK("Milk", ItemCat.FOOD_MEAT, 75, 2f, 0.05f, 4f),
+    MEAL_SIMPLE("Simple meal", ItemCat.FOOD_MEAL, 10, 10f, 0.9f, 4f),
+    MEAL_FINE("Fine meal", ItemCat.FOOD_MEAL, 10, 15f, 0.9f, 4f),
+    PEMMICAN("Pemmican", ItemCat.FOOD_MEAL, 50, 3f, 0.05f, 0f),
+    KIBBLE("Kibble", ItemCat.FOOD_ANIMAL, 75, 0.9f, 0.05f, 0f, humanFood = false),
+    HAY("Hay", ItemCat.FOOD_ANIMAL, 75, 0.4f, 0.05f, 40f, flammable = 1f, humanFood = false),
+
+    HEALROOT("Healroot", ItemCat.MEDICINE, 75, 1f, flammable = 0.8f),
+    MEDS_HERBAL("Herbal medicine", ItemCat.MEDICINE, 25, 10f, potency = 0.6f),
+    MEDS_INDUSTRIAL("Medicine", ItemCat.MEDICINE, 25, 18f, potency = 1.0f),
+
+    BEER("Beer", ItemCat.DRUG, 25, 12f),
+    SMOKELEAF("Smokeleaf leaves", ItemCat.DRUG, 75, 2f, flammable = 1f),
+    JOINT("Smokeleaf joint", ItemCat.DRUG, 25, 14f, flammable = 1f),
+    PSYCHOID("Psychoid leaves", ItemCat.DRUG, 75, 3f, flammable = 1f),
+    PSYCHITE_TEA("Psychite tea", ItemCat.DRUG, 25, 14f),
+
+    SCULPTURE_SMALL("Small sculpture", ItemCat.ART, 1, 80f),
+    SCULPTURE_LARGE("Large sculpture", ItemCat.ART, 1, 220f),
+
+    // Weapons
+    W_KNIFE("Knife", ItemCat.WEAPON, 1, 20f, weapon = Weapon.KNIFE),
+    W_CLUB("Club", ItemCat.WEAPON, 1, 9f, weapon = Weapon.CLUB, flammable = 1f),
+    W_SPEAR("Spear", ItemCat.WEAPON, 1, 26f, weapon = Weapon.SPEAR, flammable = 1f),
+    W_MACE("Mace", ItemCat.WEAPON, 1, 40f, weapon = Weapon.MACE),
+    W_LONGSWORD("Longsword", ItemCat.WEAPON, 1, 90f, weapon = Weapon.LONGSWORD),
+    W_BOW("Short bow", ItemCat.WEAPON, 1, 22f, weapon = Weapon.BOW, flammable = 1f),
+    W_GREATBOW("Greatbow", ItemCat.WEAPON, 1, 40f, weapon = Weapon.GREATBOW, flammable = 1f),
+    W_REVOLVER("Revolver", ItemCat.WEAPON, 1, 90f, weapon = Weapon.REVOLVER),
+    W_AUTOPISTOL("Autopistol", ItemCat.WEAPON, 1, 95f, weapon = Weapon.AUTOPISTOL),
+    W_BOLT("Bolt-action rifle", ItemCat.WEAPON, 1, 125f, weapon = Weapon.BOLT_RIFLE),
+    W_SHOTGUN("Pump shotgun", ItemCat.WEAPON, 1, 140f, weapon = Weapon.SHOTGUN),
+    W_SMG("Machine pistol", ItemCat.WEAPON, 1, 130f, weapon = Weapon.SMG),
+    W_RIFLE("Assault rifle", ItemCat.WEAPON, 1, 190f, weapon = Weapon.RIFLE),
+    W_LMG("Light machine gun", ItemCat.WEAPON, 1, 260f, weapon = Weapon.LMG),
+    W_SNIPER("Sniper rifle", ItemCat.WEAPON, 1, 340f, weapon = Weapon.SNIPER),
+
+    // Apparel
+    A_TSHIRT("T-shirt", ItemCat.APPAREL, 1, 15f, apparel = Apparel.TSHIRT, flammable = 1f),
+    A_BUTTONDOWN("Button-down shirt", ItemCat.APPAREL, 1, 25f, apparel = Apparel.BUTTONDOWN, flammable = 1f),
+    A_PANTS("Pants", ItemCat.APPAREL, 1, 18f, apparel = Apparel.PANTS, flammable = 1f),
+    A_TRIBAL("Tribalwear", ItemCat.APPAREL, 1, 25f, apparel = Apparel.TRIBAL, flammable = 0.7f),
+    A_DUSTER("Duster", ItemCat.APPAREL, 1, 55f, apparel = Apparel.DUSTER, flammable = 0.8f),
+    A_PARKA("Parka", ItemCat.APPAREL, 1, 70f, apparel = Apparel.PARKA, flammable = 1f),
+    A_HAT("Cowboy hat", ItemCat.APPAREL, 1, 25f, apparel = Apparel.COWBOY_HAT, flammable = 0.8f),
+    A_BEANIE("Tuque", ItemCat.APPAREL, 1, 25f, apparel = Apparel.TUQUE, flammable = 1f),
+    A_FLAK_VEST("Flak vest", ItemCat.APPAREL, 1, 90f, apparel = Apparel.FLAK_VEST),
+    A_FLAK_PANTS("Flak pants", ItemCat.APPAREL, 1, 70f, apparel = Apparel.FLAK_PANTS),
+    A_FLAK_JACKET("Flak jacket", ItemCat.APPAREL, 1, 120f, apparel = Apparel.FLAK_JACKET),
+    A_HELMET("Simple helmet", ItemCat.APPAREL, 1, 55f, apparel = Apparel.HELMET),
+    A_ARMOR("Plate armor", ItemCat.APPAREL, 1, 250f, apparel = Apparel.PLATE_ARMOR),
+    A_RECON("Recon armor", ItemCat.APPAREL, 1, 480f, apparel = Apparel.RECON_ARMOR),
+
+    // Misc
+    CORPSE_HUMAN("Corpse", ItemCat.MISC, 1, 0f, flammable = 0.3f),
+    SHELL("Mortar shell", ItemCat.MISC, 25, 15f),
+    ;
+
+    val isFood get() = nutrition > 0f
+    val isPlantFood get() = cat == ItemCat.FOOD_PLANT
+    val isGear get() = weapon != null || apparel != null
+}
+
+enum class Quality(val label: String, val mult: Float) {
+    AWFUL("awful", 0.6f), POOR("poor", 0.8f), NORMAL("normal", 1f), GOOD("good", 1.15f),
+    EXCELLENT("excellent", 1.3f), MASTERWORK("masterwork", 1.6f), LEGENDARY("legendary", 2f)
+}
+
+enum class DamageKind(val label: String, val sharp: Boolean, val bleed: Float, val pain: Float, val infect: Float) {
+    CUT("Cut", true, 1.0f, 0.9f, 0.20f), STAB("Stab", true, 0.8f, 1.0f, 0.15f), BULLET("Gunshot", true, 0.7f, 1.1f, 0.10f),
+    BRUISE("Bruise", false, 0f, 0.7f, 0f), SCRATCH("Scratch", true, 0.3f, 0.3f, 0.10f), BITE("Bite", true, 0.8f, 1.0f, 0.25f),
+    BURN("Burn", false, 0f, 1.2f, 0.18f), FROSTBITE("Frostbite", false, 0f, 0.6f, 0f), BLAST("Blast", false, 0.5f, 1.2f, 0.12f),
+    CRUSH("Crush", false, 0.2f, 1.1f, 0f), ACID("Toxic burn", false, 0f, 1f, 0.1f),
 }
 
 enum class Weapon(
     val label: String, val ranged: Boolean, val damage: Float, val range: Float, val cooldown: Int, val accuracy: Float,
+    val kind: DamageKind, val burst: Int = 1, val armorPen: Float = 0f, val warmup: Int = 0, val aoe: Float = 0f,
 ) {
-    FISTS("Fists", false, 5f, 1.5f, 40, 0.8f),
-    KNIFE("Knife", false, 9f, 1.5f, 36, 0.85f),
-    CLUB("Club", false, 11f, 1.5f, 46, 0.8f),
-    REVOLVER("Revolver", true, 12f, 20f, 55, 0.8f),
-    RIFLE("Assault rifle", true, 11f, 28f, 45, 0.75f),
+    FISTS("Fists", false, 5f, 1.5f, 38, 0.82f, DamageKind.BRUISE),
+    KNIFE("Knife", false, 9f, 1.5f, 34, 0.86f, DamageKind.CUT),
+    CLUB("Club", false, 11f, 1.5f, 46, 0.8f, DamageKind.BRUISE),
+    SPEAR("Spear", false, 13f, 1.9f, 48, 0.82f, DamageKind.STAB),
+    MACE("Mace", false, 14f, 1.5f, 50, 0.8f, DamageKind.BRUISE, armorPen = 0.2f),
+    LONGSWORD("Longsword", false, 18f, 1.5f, 42, 0.85f, DamageKind.CUT, armorPen = 0.25f),
+    BOW("Short bow", true, 9f, 19f, 50, 0.72f, DamageKind.STAB, warmup = 10),
+    GREATBOW("Greatbow", true, 15f, 26f, 70, 0.72f, DamageKind.STAB, warmup = 14),
+    REVOLVER("Revolver", true, 12f, 20f, 55, 0.8f, DamageKind.BULLET, warmup = 8),
+    AUTOPISTOL("Autopistol", true, 12f, 20f, 55, 0.78f, DamageKind.BULLET, warmup = 7),
+    BOLT_RIFLE("Bolt-action rifle", true, 15f, 30f, 80, 0.78f, DamageKind.BULLET, warmup = 14),
+    SHOTGUN("Pump shotgun", true, 18f, 12f, 70, 0.85f, DamageKind.BULLET, warmup = 10, burst = 1),
+    SMG("Machine pistol", true, 10f, 16f, 50, 0.72f, DamageKind.BULLET, burst = 3, warmup = 8),
+    RIFLE("Assault rifle", true, 11f, 28f, 55, 0.76f, DamageKind.BULLET, burst = 3, warmup = 10),
+    LMG("Light machine gun", true, 11f, 30f, 70, 0.74f, DamageKind.BULLET, burst = 5, warmup = 20),
+    SNIPER("Sniper rifle", true, 22f, 40f, 110, 0.8f, DamageKind.BULLET, warmup = 22, armorPen = 0.3f),
+    TURRET_GUN("Turret", true, 11f, 28f, 50, 0.75f, DamageKind.BULLET, burst = 3),
+    MORTAR_SHELL("Mortar", true, 40f, 55f, 300, 0.5f, DamageKind.BLAST, aoe = 2.6f),
+    MOLOTOV("Molotov", true, 5f, 15f, 100, 0.8f, DamageKind.BURN, aoe = 1.8f),
+    TEETH("Teeth", false, 8f, 1.5f, 36, 0.85f, DamageKind.BITE),
+    CLAWS("Claws", false, 6f, 1.5f, 32, 0.85f, DamageKind.SCRATCH),
+    HEAD_BUTT("Horns", false, 12f, 1.5f, 50, 0.8f, DamageKind.BRUISE),
+    TRAMPLE("Trample", false, 20f, 1.5f, 60, 0.8f, DamageKind.CRUSH),
+    SPIT("Acid spit", true, 8f, 12f, 80, 0.8f, DamageKind.ACID);
+
+    val meleeSkill get() = !ranged
+}
+
+enum class ApparelSlot { HEAD, SHIRT, PANTS, OUTER }
+
+/** Coverage bits: 1 head, 2 torso, 4 arms, 8 legs, 16 neck */
+enum class Apparel(
+    val label: String, val slot: ApparelSlot, val cover: Int, val insCold: Float, val insHeat: Float,
+    val armorSharp: Float, val armorBlunt: Float, val hp: Float, val beauty: Float = 0f,
+) {
+    TSHIRT("T-shirt", ApparelSlot.SHIRT, 2 or 4, 2f, 2f, 0.03f, 0.01f, 60f),
+    BUTTONDOWN("Button-down shirt", ApparelSlot.SHIRT, 2 or 4, 4f, 3f, 0.05f, 0.02f, 80f, 0.5f),
+    PANTS("Pants", ApparelSlot.PANTS, 8, 3f, 2f, 0.04f, 0.01f, 80f),
+    TRIBAL("Tribalwear", ApparelSlot.SHIRT, 2 or 8, 5f, 4f, 0.06f, 0.02f, 90f),
+    DUSTER("Duster", ApparelSlot.OUTER, 2 or 4 or 8, 14f, 5f, 0.15f, 0.04f, 150f, 0.5f),
+    PARKA("Parka", ApparelSlot.OUTER, 2 or 4 or 8, 40f, -8f, 0.14f, 0.05f, 160f),
+    COWBOY_HAT("Cowboy hat", ApparelSlot.HEAD, 1, 3f, 8f, 0.04f, 0.02f, 80f, 0.5f),
+    TUQUE("Tuque", ApparelSlot.HEAD, 1, 12f, -3f, 0.02f, 0.02f, 70f),
+    FLAK_VEST("Flak vest", ApparelSlot.OUTER, 2, 5f, -3f, 0.45f, 0.1f, 160f),
+    FLAK_PANTS("Flak pants", ApparelSlot.PANTS, 8, 3f, -1f, 0.4f, 0.09f, 160f),
+    FLAK_JACKET("Flak jacket", ApparelSlot.OUTER, 2 or 4, 8f, -4f, 0.52f, 0.14f, 180f),
+    HELMET("Simple helmet", ApparelSlot.HEAD, 1, 2f, -4f, 0.4f, 0.25f, 150f),
+    PLATE_ARMOR("Plate armor", ApparelSlot.OUTER, 2 or 4 or 8, 6f, -8f, 0.75f, 0.35f, 350f, -0.5f),
+    RECON_ARMOR("Recon armor", ApparelSlot.OUTER, 2 or 4 or 8, 22f, 12f, 0.58f, 0.35f, 320f),
 }
 
 enum class Trait(val label: String, val desc: String) {
-    HARD_WORKER("Hard worker", "Works 25% faster"),
-    LAZY("Lazy", "Works 25% slower"),
-    TOUGH("Tough", "Takes less damage"),
-    OPTIMIST("Optimist", "+10% mood"),
-    PESSIMIST("Pessimist", "-10% mood"),
-    NIMBLE("Nimble", "Moves faster"),
+    HARD_WORKER("Industrious", "Works faster"), LAZY("Lazy", "Works slower"),
+    TOUGH("Tough", "Takes less damage"), WIMP("Wimp", "Feels pain more"),
+    OPTIMIST("Optimist", "+10% mood"), PESSIMIST("Pessimist", "-10% mood"),
+    NIMBLE("Nimble", "Moves faster"), SLOW_WALKER("Slowpoke", "Moves slower"),
+    NIGHT_OWL("Night owl", "Prefers working at night"), FAST_LEARNER("Fast learner", "Learns skills faster"),
+    BRAWLER("Brawler", "Melee only"), TRIGGER_HAPPY("Trigger-happy", "Shoots faster"),
+    KIND("Kind", "Gets along with everyone"), ABRASIVE("Abrasive", "Insults others"),
+    GOURMAND("Gourmand", "Needs more food, loves eating"), GREEN_THUMB("Green thumb", "Loves plants"),
+    NUDIST("Nudist", "Hates clothes"), PYROMANIAC("Pyromaniac", "Loves fire"),
+    CANNIBAL("Cannibal", "Enjoys human flesh"), SANGUINE("Sanguine", "Cheerful"),
+    DEPRESSIVE("Depressive", "Gloomy"), TORTURED_ARTIST("Tortured artist", "Better art, moody"),
+    BEAUTIFUL("Beautiful", "Pleasant to look at"), UGLY("Ugly", "Unpleasant to look at"),
+    PSYCHOPATH("Psychopath", "Unbothered by death"), BLOODLUST("Bloodlust", "Enjoys violence"),
+    TOO_SMART("Too smart", "Fast researcher"), SLOW_LEARNER("Slow learner", "Learns skills slowly"),
+    CARNIVORE("Carnivore", "Loves meat"), TRANSHUMANIST("Transhumanist", "Loves bionics"),
+}
+
+enum class Research(
+    val label: String, val baseCost: Float, val needs: List<Research> = emptyList(), val unlocks: String = "",
+    val tier: Int = 1, val bench: Int = 0,
+) {
+    // Neolithic / basics
+    COMPLEX_FURNITURE("Complex furniture", 400f, emptyList(), "Chairs, stools, dressers, plant pots"),
+    CARPETS("Carpets", 300f, listOf(COMPLEX_FURNITURE), "Carpet floors"),
+    STONECUTTING("Stonecutting", 300f, emptyList(), "Stonecutter table"),
+    SMITHING("Smithing", 400f, emptyList(), "Smithy: weapons, steel walls, armor"),
+    TAILORING("Tailoring", 300f, emptyList(), "Tailor bench"),
+    PEMMICAN("Pemmican", 300f, emptyList(), "Pemmican"),
+    BREWING("Brewing", 500f, emptyList(), "Beer"),
+    DRUGS("Drug production", 600f, listOf(BREWING), "Drug lab: joints, tea"),
+    HERBAL_MEDICINE("Herbal medicine", 500f, emptyList(), "Herbal medicine"),
+    BASIC_MELEE("Mace and spear", 300f, listOf(SMITHING), "Mace, spear, longsword"),
+    BOWS("Bows", 300f, listOf(SMITHING), "Short bow and greatbow"),
+    // Medieval / industrial
+    ELECTRICITY("Electricity", 1000f, listOf(SMITHING), "Conduits, generators, lamps, heaters, coolers", 2),
+    BATTERIES("Batteries", 600f, listOf(ELECTRICITY), "Batteries, switches", 2),
+    SOLAR_POWER("Solar power", 800f, listOf(ELECTRICITY), "Solar panels", 2),
+    WIND_POWER("Wind power", 700f, listOf(ELECTRICITY), "Wind turbines", 2),
+    MACHINING("Machining", 700f, listOf(SMITHING), "Machining table: components, firearms", 2),
+    FIREARMS("Firearms", 800f, listOf(MACHINING), "Revolver, autopistol, shotgun, rifles", 2),
+    GUN_TURRETS("Gun turrets", 800f, listOf(FIREARMS), "Auto-firing turrets", 2),
+    MORTARS("Mortars", 900f, listOf(GUN_TURRETS), "Mortars and shells", 2),
+    FLAK_ARMOR("Flak armor", 800f, listOf(MACHINING, TAILORING), "Flak vest, pants, jacket, helmet", 2),
+    PLATE_ARMOR("Plate armor", 1000f, listOf(FLAK_ARMOR), "Plate armor", 3),
+    HYDROPONICS("Hydroponics", 1100f, listOf(ELECTRICITY), "Hydroponics basins", 2),
+    ELECTRIC_COOKING("Electric stove", 600f, listOf(ELECTRICITY), "Electric stove", 2),
+    MEDICINE("Medicine production", 1000f, listOf(HERBAL_MEDICINE, MACHINING), "Industrial medicine", 2),
+    BIONICS_BASIC("Prosthetics", 700f, listOf(SMITHING), "Peg legs, wooden hands", 2),
+    SURGERY("Sterile surgery", 700f, listOf(HERBAL_MEDICINE), "Hospital beds", 2),
+    FABRICATION("Fabrication", 2000f, listOf(MACHINING, ELECTRICITY), "Fabrication bench: plasteel gear, advanced components", 3),
+    MULTIANALYZER("Multi-analyzer", 1600f, listOf(ELECTRICITY), "Hi-tech research bench", 3),
+    BIONICS("Bionics", 2200f, listOf(FABRICATION, BIONICS_BASIC), "Bionic limbs and organs", 3),
+    ADV_ARMOR("Recon armor", 2500f, listOf(FABRICATION, PLATE_ARMOR), "Recon armor", 3),
+    // Ship
+    CRYPTOSLEEP("Cryptosleep", 3000f, listOf(MULTIANALYZER), "Cryptosleep caskets", 3),
+    SHIP_ENGINE("Ship engine", 3500f, listOf(MULTIANALYZER, FABRICATION), "Ship engine", 3),
+    SHIP_REACTOR("Ship reactor", 4000f, listOf(SHIP_ENGINE), "Ship reactor", 3),
+    SHIP_COMPUTER("Ship computer core", 3500f, listOf(MULTIANALYZER), "Ship computer core", 3),
+    ;
+
+    val cost get() = baseCost * 16f
 }

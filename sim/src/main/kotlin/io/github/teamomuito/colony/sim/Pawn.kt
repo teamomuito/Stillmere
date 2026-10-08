@@ -3,11 +3,19 @@ package io.github.teamomuito.colony.sim
 import kotlin.math.max
 import kotlin.math.min
 
+enum class Faction { PLAYER, ENEMY, WILD, VISITOR }
+
 enum class JobType(val label: String) {
     IDLE("Idle"), WANDER("Wandering"), EAT("Eating"), SLEEP("Sleeping"), MINE("Mining"), CUT("Cutting plants"),
     SOW("Sowing"), HARVEST("Harvesting"), HAUL("Hauling"), BUILD("Building"), DECONSTRUCT("Deconstructing"),
-    COOK("Cooking"), RESEARCH("Researching"), TEND("Doctoring"), REFUEL("Refuelling"), MOVE("Moving"),
+    REPAIR("Repairing"), BILL("Crafting"), RESEARCH("Researching"), TEND("Doctoring"), REFUEL("Refuelling"), MOVE("Moving"),
     FLEE("Fleeing"), ATTACK("Fighting"), BREAK("Mental break"), RAID("Raiding"), LEAVE("Leaving"),
+    WEAR("Changing clothes"), EQUIP("Equipping"), BUTCHER("Butchering"), HUNT("Hunting"), TAME("Taming"),
+    SLAUGHTER("Slaughtering"), RESCUE("Rescuing"), CAPTURE("Capturing"), WARDEN("Talking to prisoner"),
+    FEED_PRISONER("Feeding prisoner"), FEED_ANIMAL("Feeding animal"), SHEAR("Gathering from animal"),
+    CLEAN("Cleaning"), FIREFIGHT("Fighting fire"), JOY("Relaxing"), REST("Resting"), SURGERY("Operating"),
+    SOCIAL("Chatting"), GRAZE("Grazing"), WAIT("Waiting"), TRADE("Trading"), CHASE("Chasing"), HUNT_PREY("Hunting"),
+    EXTINGUISH("Putting out fire"), DELIVER("Delivering"), BURY("Burying"), SMOKE("Taking a drug"),
 }
 
 class Job(val type: JobType, var tx: Int = -1, var ty: Int = -1) {
@@ -19,13 +27,22 @@ class Job(val type: JobType, var tx: Int = -1, var ty: Int = -1) {
     var amount = 0
     var dx = -1
     var dy = -1
+    var bench = -1
+    var billIndex = -1
+    var item: ItemType? = null
+    var aux = 0
+    var ingIdx = 0
+    var collected = 0
+    val held = ArrayList<Triple<ItemType, Int, Quality>>()
+    var heldRot = 0f
+    var stack: ItemStack? = null
 }
 
-class Injury(var severity: Float, var bleed: Float, var tended: Boolean = false)
+class Thought(val label: String, val mood: Float, var expires: Long, var stack: Int = 1)
 
-class Thought(val label: String, val mood: Float, var expires: Long)
+class Worn(val type: ItemType, var quality: Quality, var hp: Float)
 
-class Pawn(val id: Int, var name: String, val colonist: Boolean) {
+class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) {
     var x = 0
     var y = 0
     var fromX = 0
@@ -33,80 +50,176 @@ class Pawn(val id: Int, var name: String, val colonist: Boolean) {
     var moveCd = 0
     var moveTotal = 1
 
-    var hp = 100f
-    var maxHp = 100f
-    var food = 0.85f
-    var rest = 0.9f
-    var mood = 0.55f
+    // Status
     var downed = false
     var dead = false
     var deathTick = 0L
     var drafted = false
-    var weapon = Weapon.FISTS
-    var hostile = !colonist
+    var prisoner = false
+    var hostileFlag = false
     var age = 25
-    var attackCd = 0
+    var female = false
+    var mood = 0.6f
     var breakUntil = 0L
     var breakKind = 0
     var temp = 20f
     var wanderer = false
     var pathKey = -1
+    var attackCd = 0
+    var burstLeft = 0
+    var warmup = 0
+    var carriedBy = -1
+    var carrying = -1
+    var raidId = 0
+    var retreating = false
+    var homeTile = -1
+    var escapeTick = 0L
+    var raidMode = 0 // 0 assault, 1 sapper, 2 siege, 3 pod
+    var campX = -1
+    var campY = -1
+    var escaping = false
 
+    // Needs
+    var food = 0.85f
+    var rest = 0.9f
+    var joy = 0.6f
+    var dark = false
+    var lastSocial = 0L
+    var lastJoyKind = ""
+    var hunger = 1f
+
+    // Health
+    val injuries = ArrayList<Injury>()
+    val hediffs = ArrayList<Hediff>()
+    var bloodLoss = 0f
+    val parts: List<PartDef> get() = race.body
+    var healthDirty = true
+    val cap = FloatArray(Cap.entries.size) { 1f }
+    var pain = 0f
+    var careLevel = 2 // 0 none, 1 herbal, 2 any medicine
+    var fullHealthCache = 1f
+
+    // Skills and traits
     val skill = IntArray(SkillType.entries.size)
     val xp = FloatArray(SkillType.entries.size)
     val passion = IntArray(SkillType.entries.size)
     val priority = IntArray(WorkType.entries.size) { 3 }
     val traits = ArrayList<Trait>()
-    val injuries = ArrayList<Injury>()
-    val thoughts = ArrayList<Thought>()
+    var backstory = ""
+    var incapable = 0 // bitmask of WorkType ordinals
 
+    // Gear
+    var weaponItem: ItemType? = null
+    var weaponQuality = Quality.NORMAL
+    val apparel = ArrayList<Worn>()
+
+    // Mind
+    val thoughts = ArrayList<Thought>()
+    val situ = ArrayList<Thought>()
+    val opinion = HashMap<Int, Int>()
+    var spouse = -1
+    var lover = -1
+    var schedule = IntArray(24) { if (it >= 22 || it < 6) 3 else 0 } // 0 anything, 1 work, 2 joy, 3 sleep
+    var areaRestriction = 0
+    var foodPolicy = 0 // 0 anything, 1 no raw, 2 meals only
+    var allowDrugs = false
+
+    // Orders
     var job: Job? = null
     var path: IntArray? = null
     var pathI = 0
     var carryType: ItemType? = null
     var carryCount = 0
-    var bedId = -1 // cell index of owned bed, -1 for none
+    var carryQuality = Quality.NORMAL
+    var bedId = -1
     val reserved = ArrayList<Int>()
+    var doctorOrder = false
+    var huntMark = false
+    var tameMark = false
+    var slaughterMark = false
+    var releaseMark = false
+    var recruitMode = 0 // 0 none/recruit, 1 convert... (1: just feed and hold)
+    var resistance = 0f
+    var recruitProgress = 0f
+    var rescued = false
 
-    // Raider bookkeeping
-    var raidId = 0
-    var retreating = false
+    // Animal
+    var tame = false
+    var master = -1
+    var animalProductTimer = 0
+    var manhunter = false
+    var obedience = 0f
+    var herdLeader = -1
+    var predatorTarget = -1
+    var grazeTimer = 0
+    var birthday = 0
+    var wild get() = faction == Faction.WILD
+        set(_) {}
 
+    val colonist get() = faction == Faction.PLAYER && !race.isAnimal && !prisoner
+    val isAnimal get() = race.isAnimal
+    val hostile get() = hostileFlag || faction == Faction.ENEMY || manhunter
     val alive get() = !dead
-    val bleeding get() = injuries.sumOf { it.bleed.toDouble() }.toFloat()
-    val untended get() = injuries.any { !it.tended && it.bleed > 0.0005f }
-    val injured get() = injuries.isNotEmpty() || hp < maxHp - 1f
     val moving get() = path != null && pathI < (path?.size ?: 0)
+    val capacity get() = cap
+    val maxHp: Float get() = 100f
+    val hp: Float get() = max(0f, 100f * healthFraction())
+    val untended get() = injuries.any { !it.tended && !it.scar && !it.missing && it.bleed > 0.00001f } ||
+        injuries.any { !it.tended && it.infection > 0f } || hediffs.any { it.kind.needsTend && !it.tended }
+    val bleeding get() = injuries.sumOf { (if (it.tended) it.bleed * (1f - 0.9f * it.tendQuality) else it.bleed).toDouble() }.toFloat()
+    val needsMedical get() = injuries.any { !it.scar && !it.missing && it.severity > 0.5f } || hediffs.any { it.kind.category == 0 || it.kind.category == 1 && it.severity > 0.3f } || bloodLoss > 0.05f
+    val injured get() = needsMedical
+
+    fun healthFraction(): Float {
+        var worst = 1f
+        var total = 0f
+        for (i in injuries) if (!i.scar) total += i.severity
+        val parts = race.body
+        val hpSum = parts.filter { !it.inner }.sumOf { it.hp.toDouble() }.toFloat() * race.hpScale
+        worst = 1f - min(1f, total / (hpSum * 0.9f)) - bloodLoss * 0.5f
+        return max(0f, worst)
+    }
 
     fun level(s: SkillType) = skill[s.ordinal]
 
-    fun workSpeed(s: SkillType): Float {
-        var f = 0.4f + 0.075f * skill[s.ordinal]
+    fun hasTrait(t: Trait) = t in traits
+
+    fun workSpeed(s: SkillType?): Float {
+        var f = if (s == null) 1f else 0.4f + 0.075f * skill[s.ordinal]
         if (Trait.HARD_WORKER in traits) f *= 1.25f
         if (Trait.LAZY in traits) f *= 0.75f
-        if (rest < 0.2f) f *= 0.8f
-        if (hp < maxHp * 0.6f) f *= 0.8f
+        if (rest < 0.2f) f *= 0.85f
+        if (dark) f *= 0.85f
+        f *= max(0.1f, cap[Cap.CONSCIOUSNESS.ordinal])
+        f *= min(1f, 0.2f + cap[Cap.MANIPULATION.ordinal] * 0.8f)
         return f
     }
 
     fun moveSpeedTicks(): Int {
-        var t = 11
-        if (Trait.NIMBLE in traits) t -= 2
-        if (hp < maxHp * 0.5f) t += 4
-        if (carryCount > 0) t += 1
-        return t
+        var t = race.moveTicks.toFloat()
+        if (Trait.NIMBLE in traits) t -= 2f
+        if (Trait.SLOW_WALKER in traits) t += 2f
+        t /= max(0.2f, cap[Cap.MOVING.ordinal])
+        if (carryCount > 0) t += 1f
+        return max(3, t.toInt())
     }
 
     fun gainXp(s: SkillType, amount: Float) {
         val i = s.ordinal
-        val mult = when (passion[i]) { 2 -> 2.0f; 1 -> 1.4f; else -> 1.0f }
+        var mult = when (passion[i]) { 2 -> 2.0f; 1 -> 1.4f; else -> 1.0f }
+        if (Trait.FAST_LEARNER in traits) mult *= 1.4f
+        if (Trait.SLOW_LEARNER in traits) mult *= 0.6f
         xp[i] += amount * mult
         val need = 2500f + skill[i] * 400f
         if (xp[i] >= need && skill[i] < 20) { xp[i] -= need; skill[i]++ }
     }
 
     fun addThought(label: String, mood: Float, now: Long, duration: Int) {
-        thoughts.removeAll { it.label == label }
+        val ex = thoughts.firstOrNull { it.label == label }
+        if (ex != null) {
+            ex.expires = now + duration
+            return
+        }
         thoughts.add(Thought(label, mood, now + duration))
     }
 
@@ -115,22 +228,69 @@ class Pawn(val id: Int, var name: String, val colonist: Boolean) {
     fun interpX(): Float = if (moveCd > 0 && moveTotal > 0) x + (fromX - x) * (moveCd.toFloat() / moveTotal) else x.toFloat()
     fun interpY(): Float = if (moveCd > 0 && moveTotal > 0) y + (fromY - y) * (moveCd.toFloat() / moveTotal) else y.toFloat()
 
-    fun moodWithThoughts(now: Long): Float {
-        var v = 0.6f
-        for (t in thoughts) if (t.expires > now) v += t.mood
-        if (Trait.OPTIMIST in traits) v += 0.1f
-        if (Trait.PESSIMIST in traits) v -= 0.1f
-        return min(1f, max(0f, v))
+    val weapon: Weapon get() = weaponItem?.weapon ?: race.weapon
+
+    fun weaponDamageMult() = if (weaponItem != null) weaponQuality.mult else 1f
+
+    fun armorFor(coverBit: Int, sharp: Boolean): Float {
+        var armor = 0f
+        for (w in apparel) {
+            val a = w.type.apparel ?: continue
+            if (a.cover and coverBit == 0) continue
+            val v = if (sharp) a.armorSharp else a.armorBlunt
+            armor += v * w.quality.mult * (0.5f + 0.5f * (w.hp / a.hp).coerceIn(0f, 1f))
+        }
+        return min(0.9f, armor)
     }
+
+    fun insulationCold(): Float = apparel.sumOf { ((it.type.apparel?.insCold ?: 0f) * it.quality.mult).toDouble() }.toFloat()
+    fun insulationHeat(): Float = apparel.sumOf { ((it.type.apparel?.insHeat ?: 0f)).toDouble() }.toFloat()
+
+    fun comfyMin(): Float = 16f - insulationCold() - (if (race.isAnimal) race.size * 12f else 0f)
+    fun comfyMax(): Float = 26f + insulationHeat() + (if (race.isAnimal) 10f else 0f)
 }
 
 object Names {
     val first = listOf(
         "Ada", "Bram", "Cleo", "Dax", "Elin", "Finn", "Gwen", "Hale", "Iris", "Jory", "Kai", "Lena", "Milo", "Nora", "Orin",
         "Pia", "Quinn", "Rhea", "Sol", "Tess", "Uri", "Vera", "Wren", "Xan", "Yara", "Zed", "Odette", "Jasper", "Mira", "Tobias",
+        "Anselm", "Briar", "Calla", "Dorian", "Esme", "Fenn", "Greta", "Hugo", "Isla", "Joss", "Kestrel", "Linus", "Maren",
+        "Nico", "Oona", "Pike", "Rowan", "Sable", "Thea", "Ulric", "Vesper", "Willa", "Yuri", "Zora",
+    )
+    val female = setOf(
+        "Ada", "Cleo", "Elin", "Gwen", "Iris", "Lena", "Nora", "Pia", "Rhea", "Tess", "Vera", "Wren", "Yara", "Odette", "Mira",
+        "Briar", "Calla", "Esme", "Greta", "Isla", "Maren", "Oona", "Sable", "Thea", "Vesper", "Willa", "Zora",
     )
     val last = listOf(
         "Voss", "Marek", "Okafor", "Lindqvist", "Tanaka", "Reyes", "Hollis", "Brandt", "Moreau", "Kowal", "Idris", "Calder",
+        "Ashby", "Duarte", "Eklund", "Farrow", "Grayson", "Hartley", "Ilves", "Jovanovic", "Kessler", "Larkin", "Mbeki", "Novak",
     )
     val raider = listOf("Skull", "Rat", "Ash", "Fang", "Hook", "Crow", "Slag", "Burr", "Gash", "Knuckle", "Rust", "Ox", "Jag", "Wolf")
+    val animal = listOf("Biscuit", "Clover", "Dusty", "Ember", "Fern", "Ginger", "Hazel", "Ivy", "Juniper", "Maple", "Nutmeg", "Olive", "Pepper", "Rusty", "Sage", "Tuft", "Willow")
+}
+
+object Backstories {
+    class Story(val title: String, val skills: Map<SkillType, Int>, val disabled: List<WorkType> = emptyList(), val traits: List<Trait> = emptyList())
+    val childhood = listOf(
+        Story("Vatgrown soldier", mapOf(SkillType.SHOOTING to 5, SkillType.MELEE to 3)),
+        Story("Farm kid", mapOf(SkillType.PLANTS to 5, SkillType.ANIMALS to 3)),
+        Story("Urchin", mapOf(SkillType.SOCIAL to 3, SkillType.CRAFTING to 2)),
+        Story("Medical student", mapOf(SkillType.MEDICINE to 5, SkillType.INTELLECTUAL to 3)),
+        Story("Tribal child", mapOf(SkillType.ANIMALS to 4, SkillType.CRAFTING to 4, SkillType.MELEE to 2)),
+        Story("Space-born tinker", mapOf(SkillType.CONSTRUCTION to 4, SkillType.INTELLECTUAL to 4)),
+    )
+    val adulthood = listOf(
+        Story("Colonial guard", mapOf(SkillType.SHOOTING to 8, SkillType.MELEE to 4), listOf(WorkType.ART)),
+        Story("Field medic", mapOf(SkillType.MEDICINE to 8, SkillType.SHOOTING to 2)),
+        Story("Farmhand", mapOf(SkillType.PLANTS to 8, SkillType.CONSTRUCTION to 3), listOf(WorkType.RESEARCH)),
+        Story("Cook", mapOf(SkillType.COOKING to 9, SkillType.SOCIAL to 2)),
+        Story("Miner", mapOf(SkillType.MINING to 9, SkillType.CONSTRUCTION to 4)),
+        Story("Artist", mapOf(SkillType.ARTISTIC to 10, SkillType.SOCIAL to 4), listOf(WorkType.MINE)),
+        Story("Engineer", mapOf(SkillType.INTELLECTUAL to 8, SkillType.CRAFTING to 6, SkillType.CONSTRUCTION to 6)),
+        Story("Hunter", mapOf(SkillType.SHOOTING to 7, SkillType.ANIMALS to 5, SkillType.COOKING to 3)),
+        Story("Scholar", mapOf(SkillType.INTELLECTUAL to 11, SkillType.SOCIAL to 3), listOf(WorkType.MINE)),
+        Story("Smith", mapOf(SkillType.CRAFTING to 9, SkillType.MELEE to 4)),
+        Story("Drifter", mapOf(SkillType.SHOOTING to 3, SkillType.SOCIAL to 3, SkillType.COOKING to 3)),
+        Story("Beast tamer", mapOf(SkillType.ANIMALS to 10, SkillType.MELEE to 3)),
+    )
 }
