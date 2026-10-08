@@ -288,6 +288,7 @@ class WorldMapView(context: Context, private val game: Game, private val onPick:
 private fun f1(v: Float) = String.format("%.1f", v)
 
 fun Dialogs.worldMap(focus: Caravan? = null) {
+    if (game.battle != null) { a.toast("Finish the battle first."); return }
     val d = Dialog(a, android.R.style.Theme_Material_Dialog_NoActionBar)
     val box = ui.column()
     box.background = ui.bg(0xFF1E1B17.toInt(), 12, 0x44FFFFFF)
@@ -476,7 +477,7 @@ fun Dialogs.caravanDialog(c: Caravan) {
                 row.addView(ui.button("Trade at ${s.name}", 12f) { d.dismiss(); caravanTrade(c, s) }, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
             if (s != null && s.destroyedUntil <= game.tick && c.route.isEmpty() && c.humans.any { !it.downed }) row.addView(ui.button("Attack ${s.name}", 12f) {
                 AlertDialog.Builder(a).setMessage("Attack ${s.name}? Its defenders fight behind sandbags. You will lose all goodwill with ${s.faction.name}, but a win loots the settlement.")
-                    .setPositiveButton("Attack") { _, _ -> d.dismiss(); game.attackSettlement(c, s); a.refreshHud(); if (game.caravans.contains(c)) caravanDialog(c) else a.toast("The caravan is gone.") }.setNegativeButton("No", null).show()
+                    .setPositiveButton("Attack") { _, _ -> d.dismiss(); val err = game.attackSettlement(c, s); if (err != null) a.toast(err) else a.refreshHud() }.setNegativeButton("No", null).show()
             }, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
             if (s == null && w.siteAt(c.tile) == null && c.tile != w.homeTile && c.route.isEmpty() && c.humans.any { !it.downed }) row.addView(ui.button("Found a colony here", 12f) {
                 val input = android.widget.EditText(a).apply { setText("New Hold"); setSingleLine() }

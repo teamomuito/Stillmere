@@ -268,6 +268,8 @@ fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
         explode(p.x, p.y, if (p.race == Race.BOOMRAT) 1.8f else 2.8f, if (p.race == Race.BOOMRAT) 22f else 38f, null, true)
         say("A ${p.race.label.lowercase()} exploded!", 2)
     }
+    // On a battle map, the colony's losses are recorded in the world the battle came from.
+    if (encounter) parent?.recordBattleDeath(p, cause)
     if (caravanDeath(p, cause)) return
     if (p.race.mech) {
         map.drop(ItemType.STEEL, rng.range(20, 60), p.x, p.y)

@@ -79,6 +79,8 @@ fun Game.fire(p: Pawn, t: Pawn) {
 }
 
 internal fun Game.draftedAI(p: Pawn) {
+    // Retreating pawns walk to the edge and leave, whatever else they could be doing.
+    if (p.retreating) { leaveMap(p); return }
     val j = p.job
     // Explicit attack orders.
     if (j?.type == JobType.ATTACK && j.aux == 1) {

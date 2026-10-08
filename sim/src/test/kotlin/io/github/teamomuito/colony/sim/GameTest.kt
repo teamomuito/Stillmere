@@ -737,53 +737,6 @@ class MapSizeTest {
     }
 }
 
-class BattleTest {
-    private fun caravanOf(g: Game, n: Int, weapon: ItemType?): Caravan {
-        val c = Caravan(99, "Test", g.world.homeTile)
-        val cols = g.colonists.take(n)
-        for (p in cols) { g.pawns.remove(p); c.members.add(p); p.weaponItem = weapon }
-        g.caravans.add(c)
-        return c
-    }
-
-    @Test fun armedCaravanBeatsFewBandits() {
-        val g = newGame(5, Scenario.LOST_TRIBE); g.quiet()
-        for (p in g.colonists) { p.skill[SkillType.SHOOTING.ordinal] = 8 }
-        val c = caravanOf(g, 4, ItemType.W_REVOLVER)
-        val t0 = System.currentTimeMillis()
-        val won = g.runBattle(c, 0, 20f, false, "test")
-        println("battle ms=${System.currentTimeMillis() - t0} won=$won survivors=${c.alive.size}")
-        assertTrue(won)
-        assertTrue(c.alive.isNotEmpty())
-    }
-
-    @Test fun lonelyUnarmedColonistLosesToABigGang() {
-        val g = newGame(6); g.quiet()
-        val c = caravanOf(g, 1, null)
-        val won = g.runBattle(c, 0, 400f, false, "test")
-        assertFalse(won)
-    }
-
-    @Test fun animalsFight() {
-        val g = newGame(7, Scenario.LOST_TRIBE); g.quiet()
-        val c = caravanOf(g, 4, ItemType.W_REVOLVER)
-        val won = g.runBattle(c, 1, 40f, false, "wolves")
-        assertTrue(won || c.alive.isNotEmpty() || !won)
-    }
-
-    @Test fun fortifiedSettlementAttackRuinsIt() {
-        val g = newGame(8, Scenario.LOST_TRIBE); g.quiet()
-        g.day.let { }
-        for (p in g.colonists) { p.skill[SkillType.SHOOTING.ordinal] = 12 }
-        val c = caravanOf(g, 4, ItemType.W_RIFLE)
-        val s = g.world.settlements.first { it.faction.kind == 2 }
-        c.tile = s.tile
-        g.attackSettlement(c, s)
-        // Whatever the outcome, state stays consistent.
-        assertTrue(!g.caravans.contains(c) || c.members.all { it.alive })
-    }
-}
-
 class SettleTest {
     @Test fun caravanFoundsNewColonyAndOldOneIsArchived() {
         val g = newGame(21, Scenario.LOST_TRIBE); g.quiet()
@@ -1187,5 +1140,243 @@ class MaterialTest {
         assertEquals(before[ItemType.STONE]!! - 10, g.map.countItems(ItemType.STONE))
         assertEquals(before[ItemType.PLASTEEL]!! - 10, g.map.countItems(ItemType.PLASTEEL))
         assertEquals(before[ItemType.WOOD]!! - 10, g.map.countItems(ItemType.WOOD))
+    }
+}
+
+class CaravanBattleTest {
+    /** A caravan of the first [people] colonists (armed with [weapon]) and [animals] tame muffalo, parked on the world map. */
+    private fun Game.caravanWith(people: Int, weapon: ItemType?, animals: Int = 0): Caravan {
+        val c = Caravan(nextCaravanId++, "Test caravan", world.homeTile)
+        for (p in colonists.take(people)) { pawns.remove(p); c.members.add(p); p.weaponItem = weapon; p.drafted = false }
+        repeat(animals) {
+            val a = newAnimal(Race.MUFFALO, homeX, homeY, Faction.PLAYER)
+            pawns.remove(a); c.members.add(a)
+        }
+        c.inventory[ItemType.STEEL] = 40
+        c.inventory[ItemType.MEAL_PACKAGED] = 12
+        caravans.add(c)
+        return c
+    }
+
+    /** Runs a battle map until it is decided (or the limit is hit). */
+    private fun Game.fightToEnd(limit: Int = 60_000) {
+        var n = 0
+        while (battle!!.outcome == null && n++ < limit) step()
+    }
+
+    private fun Game.enemies() = pawns.filter { it.hostile && it.alive }
+
+    @Test fun attackedCaravanStopsAndWaitsForTheBattleInsteadOfResolvingItself() {
+        val g = newGame(81, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(3, ItemType.W_REVOLVER)
+        val t0 = g.tick
+        g.startFight(c, "test raiders", 0, 60f, false, BattleAftermath.AMBUSH)
+        assertTrue(c.inBattle)
+        assertNotNull(g.pendingBattle)
+        g.run(TICKS_PER_DAY)                               // the world is frozen while the fight is pending
+        assertEquals(t0, g.tick)
+        val bg = g.beginBattle()
+        assertNull(g.pendingBattle)
+        assertTrue(bg.encounter); assertSame(g, bg.parent); assertNotNull(bg.battle)
+        assertEquals(3, bg.battleMembers.size)
+        assertTrue(bg.battleMembers.all { it.drafted && it in bg.pawns })
+        assertTrue(bg.enemies().isNotEmpty())
+        assertTrue(c.members.isEmpty())                     // the people are on the battle map now
+        assertNull(bg.battle!!.outcome)                     // nothing has been decided yet
+        bg.fightToEnd()
+        assertNotNull(bg.battle!!.outcome)
+        g.resolveBattle(bg)
+    }
+
+    @Test fun playerWinsAgainstWeakRaidersAndKeepsTheCargo() {
+        val g = newGame(82, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(4, ItemType.W_RIFLE)
+        val steelBefore = c.inventory[ItemType.STEEL]
+        g.startFight(c, "test raiders", 0, 15f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        bg.fightToEnd()
+        assertEquals(BattleOutcome.VICTORY, bg.battle!!.outcome)
+        g.resolveBattle(bg)
+        assertFalse(c.inBattle)
+        assertEquals(4, c.members.count { it.alive && !it.prisoner })
+        assertTrue(c.inventory[ItemType.STEEL]!! >= steelBefore!!)
+        assertTrue(c.members.all { !it.drafted && it.job == null && it.reserved.isEmpty() })
+        assertTrue(g.caravans.contains(c))
+    }
+
+    @Test fun playerLosesAgainstALargeRaidAndTheCargoIsLost() {
+        val g = newGame(83, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(1, null)
+        val graves = g.graveyard.size
+        g.startFight(c, "a raid", 0, 400f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        bg.fightToEnd()
+        assertEquals(BattleOutcome.DEFEAT, bg.battle!!.outcome)
+        g.resolveBattle(bg)
+        assertFalse(g.caravans.contains(c))
+        assertTrue(g.graveyard.size > graves)
+    }
+
+    @Test fun playerRetreatsAndTheCaravanKeepsItsCargoAndItsRoute() {
+        val g = newGame(84, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(3, ItemType.W_RIFLE)
+        val home = g.world.homeTile
+        c.route.add(home)
+        val cargo = c.inventory.toMap()
+        g.startFight(c, "a big raid", 0, 400f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        bg.requestRetreat()                                  // before the enemy closes in
+        bg.fightToEnd()
+        assertEquals(BattleOutcome.RETREAT, bg.battle!!.outcome)
+        g.resolveBattle(bg)
+        assertTrue(g.caravans.contains(c))
+        assertEquals(3, c.members.count { it.alive })
+        assertEquals(cargo, c.inventory)
+        assertTrue(c.route.isEmpty())
+        assertEquals("Retreated from a big raid.", c.lastEvent)
+    }
+
+    @Test fun animalsInTheCaravanFightAndComeBack() {
+        val g = newGame(85, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(2, ItemType.W_RIFLE, animals = 2)
+        g.startFight(c, "test raiders", 0, 80f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        val animals = bg.battleMembers.filter { it.isAnimal }
+        assertEquals(2, animals.size)
+        assertTrue(animals.all { it.drafted && it.faction == Faction.PLAYER && it.tame })
+        val start = animals.associateWith { it.x to it.y }
+        bg.run(600)
+        // Drafted animals go into the fight under the same AI as drafted colonists: they walk towards the enemy.
+        assertTrue("an animal moved into the fight", animals.any { a -> a in bg.pawns && (a.x to a.y) != start[a] && g.distance(a.x, a.y, start[a]!!.first, start[a]!!.second) >= 5f })
+        bg.fightToEnd()
+        g.resolveBattle(bg)
+        if (g.caravans.contains(c)) assertTrue(c.members.any { it.isAnimal } || animals.none { it.alive })
+    }
+
+    @Test fun injuriesSurviveTheBattleAsTheSameObjects() {
+        val g = newGame(86, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(2, ItemType.W_RIFLE)
+        val hurt = c.members[0]
+        val inj = Injury(0, DamageKind.CUT, 4f, 0f)
+        hurt.injuries.add(inj)
+        g.recomputeHealth(hurt)
+        g.startFight(c, "test raiders", 0, 15f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        assertTrue(bg.battleMembers.contains(hurt))
+        bg.fightToEnd()
+        g.resolveBattle(bg)
+        if (hurt.alive) {
+            assertTrue(c.members.contains(hurt))
+            assertTrue(hurt.injuries.any { it === inj })
+        }
+    }
+
+    @Test fun pawnsDyingInTheBattleAreRemovedAndRecorded() {
+        val g = newGame(87, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(3, null)
+        val graves = g.graveyard.size
+        g.startFight(c, "a raid", 0, 200f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        val starters = bg.battleMembers.toList()
+        bg.fightToEnd()
+        val dead = starters.count { it.dead }
+        g.resolveBattle(bg)
+        if (c in g.caravans) {
+            assertEquals(starters.count { it.alive }, c.members.size)
+            assertTrue(c.members.none { it.dead })
+        }
+        assertEquals(graves + dead, g.graveyard.size.coerceAtMost(graves + dead).let { if (dead == 0) graves else it })
+    }
+
+    @Test fun multipleEnemiesAreAllOnTheBattleMap() {
+        val g = newGame(88, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(4, ItemType.W_RIFLE)
+        g.startFight(c, "a warband", 0, 140f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        assertTrue("several enemies", bg.enemies().size >= 3)
+        bg.fightToEnd()
+        g.resolveBattle(bg)
+        assertFalse(c.inBattle)
+    }
+
+    @Test fun multipleMembersWithDifferentWeaponsResolveConsistently() {
+        val g = newGame(89, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(5, ItemType.W_BOW)
+        c.members.add(g.newHuman(0, 0).also { g.pawns.remove(it) })
+        g.startFight(c, "bandits", 0, 60f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        assertEquals(6, bg.battleMembers.size)
+        bg.fightToEnd()
+        val alive = bg.battleMembers.count { it.alive }
+        g.resolveBattle(bg)
+        // Downed raiders who survive a win are carried home as prisoners.
+        if (c in g.caravans) assertEquals(alive, c.members.count { !it.prisoner })
+    }
+
+    @Test fun saveAndLoadBeforeTheBattleBegins() {
+        val g = newGame(90, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(2, ItemType.W_RIFLE)
+        g.startFight(c, "test raiders", 0, 30f, false, BattleAftermath.AMBUSH)
+        val l = SaveGame.read(SaveGame.write(g))
+        val lc = l.caravans.single { it.id == c.id }
+        assertTrue(lc.inBattle)
+        assertNotNull(l.pendingBattle)
+        assertEquals(2, lc.members.size)     // not moved yet
+        val bg = l.beginBattle()
+        bg.fightToEnd()
+        l.resolveBattle(bg)
+        assertFalse(lc.inBattle)
+    }
+
+    @Test fun saveAndLoadDuringTheBattle() {
+        val g = newGame(91, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(3, ItemType.W_RIFLE, animals = 1)
+        val homeTick = g.tick
+        g.startFight(c, "a raid", 0, 120f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        bg.run(600)
+        val carriedBefore = bg.battleMembers.map { it.id to it.faction }
+        val loaded = SaveGame.read(SaveGame.write(bg))
+        assertNotNull(loaded.battle)
+        assertNotNull(loaded.parent)
+        assertEquals(carriedBefore.size, loaded.battleMembers.size)
+        assertEquals(carriedBefore.map { it.first }.toSet(), loaded.battleMembers.map { it.id }.toSet())
+        assertEquals(bg.battleMembers.count { it in bg.pawns }, loaded.battleMembers.count { it in loaded.pawns })
+        assertSame(loaded.parent!!.world, loaded.world)
+        assertEquals(homeTick, loaded.parent!!.tick)
+        // The loaded fight still plays out and resolves on the loaded world.
+        loaded.fightToEnd()
+        assertNotNull(loaded.battle!!.outcome)
+        loaded.parent!!.resolveBattle(loaded)
+        assertTrue(loaded.parent!!.caravans.none { it.inBattle })
+    }
+
+    @Test fun saveAndLoadKeepsARetreatInProgress() {
+        val g = newGame(92, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(2, ItemType.W_RIFLE)
+        g.startFight(c, "a raid", 0, 300f, false, BattleAftermath.AMBUSH)
+        val bg = g.beginBattle()
+        bg.requestRetreat()
+        bg.run(120)
+        val loaded = SaveGame.read(SaveGame.write(bg))
+        assertTrue(loaded.battle!!.retreating)
+        loaded.fightToEnd()
+        assertEquals(BattleOutcome.RETREAT, loaded.battle!!.outcome)
+    }
+
+    @Test fun settlementAssaultIsAFightTheRightSideCanCommand() {
+        val g = newGame(93, Scenario.LOST_TRIBE); g.quiet()
+        val c = g.caravanWith(4, ItemType.W_RIFLE)
+        val s = g.world.settlements.first { it.faction.trades }
+        c.tile = s.tile
+        g.adjustGoodwill(s.faction, 0)
+        assertNull(g.attackSettlement(c, s))
+        assertNotNull(g.pendingBattle)
+        assertEquals(BattleAftermath.SETTLEMENT_ASSAULT, g.pendingBattle!!.aftermath)
+        val bg = g.beginBattle()
+        assertTrue(bg.battleMembers.isNotEmpty())
+        bg.fightToEnd()
+        g.resolveBattle(bg)
+        if (bg.battle!!.outcome == BattleOutcome.VICTORY) assertTrue(s.destroyedUntil > g.tick)
     }
 }

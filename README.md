@@ -55,8 +55,10 @@ player control.
   and annoys its enemies. Hostile factions raid you with their own gear; at the comms console you can pay for peace talks,
   request traders, and ask allies for soldiers. A trade beacon and comms console call orbital trade ships.
 - Form a caravan from colonists and tame pack animals (35 kg per person, 70-140 kg for big animals), pack goods by weight,
-  and send it anywhere. On the road: food, rest, foraging, spoilage, medicine, and ambushes that play out as real battles
-  on a small map with your people's weapons, cover and wounds.
+  and send it anywhere. On the road: food, rest, foraging, spoilage, medicine. Ambushes become battles you command on a
+  small map: draft your people and animals, move, shoot and melee, retreat (downed people are carried out), and win or lose
+  with the same weapons, cover, wounds and AI as colony fights. Survivors come home with their injuries; cargo stays with the
+  caravan until you win.
 - At settlements: trade, fulfil requests, gift, or attack them (defenders fight behind sandbags; a win loots and ruins the
   settlement). Clear bandit camps for friendly factions' rewards. Found a second colony anywhere and switch between colonies.
 

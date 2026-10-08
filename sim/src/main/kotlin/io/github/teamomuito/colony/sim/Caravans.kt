@@ -14,6 +14,8 @@ class Caravan(val id: Int, var name: String, var tile: Int) {
     var resting = false
     var goingHome = false
     var lastEvent = ""
+    /** A fight is under way on a battle map: the people are over there, the cargo is still here. */
+    var inBattle = false
     var forageNote = false
     val humans get() = members.filter { it.alive && !it.isAnimal }
     val alive get() = members.filter { it.alive }
@@ -169,7 +171,10 @@ fun Game.unloadCaravan(c: Caravan) {
 // ---------------------------------------------------------------------- simulation
 
 internal fun Game.caravansTick() {
-    for (c in caravans.toList()) caravanStep(c, 250)
+    for (c in caravans.toList()) {
+        if (pendingBattle != null) return
+        if (!c.inBattle) caravanStep(c, 250)
+    }
 }
 
 private fun Game.caravanStep(c: Caravan, dt: Int) {
@@ -277,22 +282,11 @@ private fun Game.enterTile(c: Caravan): Boolean {
     if (!rng.chance(chance)) return true
     val roll = rng.float()
     return when {
-        roll < 0.42f -> animalAmbush(c)
-        roll < 0.72f -> banditAmbush(c)
+        roll < 0.42f -> { animalAmbush(c); false }
+        roll < 0.72f -> { banditAmbush(c); false }
         roll < 0.86f -> { findCache(c); true }
         else -> { lostInTerrain(c); true }
     }
-}
-
-private fun Game.loseCargo(c: Caravan, frac: Float): Int {
-    var lost = 0
-    for (t in c.inventory.keys.toList()) {
-        val n = c.inventory[t] ?: 0
-        val l = (n * frac).toInt()
-        if (l > 0) { c.inventory[t] = n - l; lost += l }
-    }
-    c.inventory.entries.removeAll { it.value <= 0 }
-    return lost
 }
 
 /** Threat points for a random ambush, scaled by how rich and well-defended the caravan is. */
@@ -303,21 +297,13 @@ private fun Game.ambushPoints(c: Caravan, base: Float): Float {
     return pts * (0.8f + rng.float() * 0.45f)
 }
 
-/** Fight a real battle on a small map. Returns false when the caravan was wiped out. */
-private fun Game.fight(c: Caravan, label: String, kind: Int, points: Float, fortified: Boolean = false): Boolean {
-    say("${c.name} is attacked by $label!", 3)
-    val won = runBattle(c, kind, points, fortified, label)
-    if (c.members.none { it.alive }) { caravans.remove(c); say("${c.name} was wiped out by $label.", 3); return false }
-    if (won) { c.lastEvent = "Defeated $label."; say("${c.name} defeated $label.", 1) }
-    else { val lost = loseCargo(c, 0.45f); c.lastEvent = "Fled from $label."; say("${c.name} was beaten by $label and fled, abandoning $lost items.", 3); c.progress = 0f }
-    return true
+private fun Game.animalAmbush(c: Caravan) {
+    startFight(c, "manhunting animals", 1, ambushPoints(c, 30f), false, BattleAftermath.AMBUSH)
 }
 
-private fun Game.animalAmbush(c: Caravan): Boolean = fight(c, "manhunting animals", 1, ambushPoints(c, 30f))
-
-private fun Game.banditAmbush(c: Caravan): Boolean {
+private fun Game.banditAmbush(c: Caravan) {
     val f = world.factions.filter { it.kind == 2 }.let { it[rng.int(it.size)] }
-    return fight(c, "${f.name} bandits", 0, ambushPoints(c, 38f))
+    startFight(c, "${f.name} bandits", 0, ambushPoints(c, 38f), false, BattleAftermath.AMBUSH)
 }
 
 private fun Game.findCache(c: Caravan) {
@@ -345,9 +331,7 @@ private fun Game.arrive(c: Caravan) {
     refreshSettlement(s)
     val f = s.faction
     if (hostileTo(f)) {
-        say("${c.name} reached hostile ${s.name} and came under fire!", 3)
-        val ok = fight(c, "${s.name} guards", 0, defenderPoints(s) * 0.5f)
-        if (ok) c.lastEvent = "Driven off from ${s.name}."
+        startFight(c, "${s.name} guards", 0, defenderPoints(s) * 0.5f, false, BattleAftermath.SETTLEMENT_GUARDS, settlement = world.settlements.indexOf(s))
         return
     }
     say("${c.name} arrived at ${s.name} (${f.label}).", 1)
@@ -360,36 +344,19 @@ private fun Game.defenderPoints(s: Settlement): Float {
 
 private fun Game.clearSite(c: Caravan, site: Site) {
     say("${c.name} reached the ${site.name}.", 1)
-    val ok = fight(c, "the ${site.name}", 0, site.strength, fortified = true)
-    if (!ok) return
-    if (c.lastEvent.startsWith("Defeated")) {
-        world.sites.remove(site)
-        c.inventory[ItemType.SILVER] = caravanSilver(c) + site.reward
-        say("The ${site.name} is cleared. Reward: ${site.reward} silver.", 1)
-        for (f in world.factions) if (!f.permanentEnemy && world.goodwill[f.id] in 1..99 && world.relation[f.id][site.factionId] == -1) adjustGoodwill(f, 6, false)
-    }
+    startFight(c, "the ${site.name}", 0, site.strength, true, BattleAftermath.SITE, site = site.id)
 }
 
-/** Attack a settlement: a real fight against its defenders behind sandbags. Winning loots and ruins it for a while. */
+/** Attack a settlement: its defenders fight behind sandbags on a battle map the player commands. */
 fun Game.attackSettlement(c: Caravan, s: Settlement): String? {
-    if (c.tile != s.tile || c.route.isNotEmpty()) return "The caravan must be at ${s.name}."
+    if (c.tile != s.tile || c.route.isNotEmpty() || c.inBattle) return "The caravan must be at ${s.name}."
     if (s.destroyedUntil > tick) return "It is already in ruins."
     if (c.humans.none { !it.downed }) return "Nobody can fight."
     refreshSettlement(s)
     val wasHostile = hostileTo(s.faction)
     if (!s.faction.permanentEnemy) adjustGoodwill(s.faction, -100)
-    say("${c.name} attacks ${s.name}!", 3)
-    val ok = fight(c, "${s.name}'s defenders", 0, defenderPoints(s), fortified = true)
-    if (!ok || !caravans.contains(c)) return null
-    if (c.lastEvent.startsWith("Defeated")) {
-        var looted = 0
-        for ((t, n) in s.stock.toList()) { val take = (n * 0.7f).toInt(); if (take > 0) { c.inventory[t] = (c.inventory[t] ?: 0) + take; looted += take } }
-        val silver = (s.silver * 0.8f).toInt() + (if (wasHostile) 150 else 0)
-        c.inventory[ItemType.SILVER] = caravanSilver(c) + silver
-        s.stock.clear(); s.silver = 0
-        s.destroyedUntil = tick + 30L * TICKS_PER_DAY
-        say("${s.name} falls. The caravan takes $looted goods and $silver silver.", 1)
-    }
+    startFight(c, "${s.name}'s defenders", 0, defenderPoints(s), true, BattleAftermath.SETTLEMENT_ASSAULT,
+        settlement = world.settlements.indexOf(s), wasHostile = wasHostile)
     return null
 }
 

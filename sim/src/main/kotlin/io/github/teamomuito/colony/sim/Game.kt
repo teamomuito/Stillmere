@@ -98,8 +98,15 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var autosaveHook: (() -> Unit)? = null
     var debugHook: ((String) -> Unit)? = null
     var mentalBreaksEnabled = true
-    /** True for the throwaway battle maps used by caravan fights. */
+    /** True for battle maps (caravan fights). */
     var encounter = false
+    /** A caravan fight that has been asked for but not begun yet; the world waits for it. */
+    var pendingBattle: BattlePlan? = null
+    /** On a battle map: its plan, and the world it returns to. */
+    var battle: BattlePlan? = null
+    var parent: Game? = null
+    /** On a battle map: the caravan's people, alive, whether or not they are still on the map. */
+    val battleMembers = ArrayList<Pawn>()
     var hintBits = 0
     var graveyard = ArrayList<String>()
 
@@ -609,9 +616,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     // ------------------------------------------------------------------ main tick
     fun step() {
-        if (gameOver) return
+        if (gameOver || pendingBattle != null) return
         tick++
         for (p in pawns.toList()) pawnTick(p)
+        if (battle != null) battleTick()
         if (tick % 10 == 0L) { turretsTick(); trapsTick() }
         if (tick % 4 == 0L) fireTick()
         shots.removeAll { it.expires < tick }
@@ -620,7 +628,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (tick % TICKS_PER_HOUR == 0L) hourlyTick()
         val gone = pawns.filter { it.dead && tick - it.deathTick > 10 }
         if (gone.isNotEmpty()) pawns.removeAll(gone.toSet())
-        if (!encounter && humansOnSide.none { it.colonist } && caravans.none { c -> c.members.any { it.colonist && it.alive } } && !gameOver) {
+        if (!encounter && humansOnSide.none { it.colonist } && caravans.none { c -> c.inBattle || c.members.any { it.colonist && it.alive } } && !gameOver) {
             gameOver = true
             say("Everyone is dead. The colony has fallen.", 3)
         }
@@ -658,8 +666,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (p.isBaby) { babyTick(p); return }
         if (p.attackCd > 0) p.attackCd--
         if (map.fires.isNotEmpty() && tick % 3 == (p.id % 3).toLong() && p.moveCd <= 0) stepOutOfFire(p)
+        // Drafted animals of the colony fight under the same AI as drafted colonists.
+        if (p.isAnimal && p.drafted && p.faction == Faction.PLAYER) { draftedAI(p); return }
         if (p.isAnimal) { animalTick(p); return }
-        if (p.drafted && tick % 60 == (p.id % 60).toLong() && (p.food < 0.08f || p.rest < 0.04f) && pawns.none { it.hostile && it.alive && !it.downed }) {
+        if (p.drafted && !p.retreating && tick % 60 == (p.id % 60).toLong() && (p.food < 0.08f || p.rest < 0.04f) && pawns.none { it.hostile && it.alive && !it.downed }) {
             setDrafted(p, false)
             say("${p.name} stood down to rest and eat.", 0)
         }
@@ -679,7 +689,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     // ------------------------------------------------------------------ slow tick (every 250)
     private fun slowTick() {
         worldSlowTick()
-        if (caravans.isNotEmpty()) caravansTick()
+        if (caravans.isNotEmpty() && pendingBattle == null) caravansTick()
         for (p in pawns) if (p.alive) {
             if ((p.colonist || p.prisoner) && !p.isBaby) moodUpdate(p)
             comfortTick(p)

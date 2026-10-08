@@ -22,6 +22,9 @@ import io.github.teamomuito.colony.sim.LogEntry
 import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.Research
 import io.github.teamomuito.colony.sim.SaveGame
+import io.github.teamomuito.colony.sim.beginBattle
+import io.github.teamomuito.colony.sim.requestRetreat
+import io.github.teamomuito.colony.sim.resolveBattle
 import io.github.teamomuito.colony.sim.settle
 import io.github.teamomuito.colony.sim.Weather
 import io.github.teamomuito.colony.sim.ZoneKind
@@ -46,6 +49,7 @@ class MainActivity : Activity() {
     private lateinit var toolChip: TextView
     private lateinit var rotChip: TextView
     private lateinit var materialChip: TextView
+    private lateinit var battleChip: TextView
     lateinit var tileCard: LinearLayout
     private lateinit var tileText: TextView
     private lateinit var tileActions: LinearLayout
@@ -78,7 +82,9 @@ class MainActivity : Activity() {
         hookAutosave(game)
         buildUi()
         immersive()
+        refreshBattleChip()
         if (loaded == null) root.post { dialogs.newColony(firstRun = true) }
+        else if (game.pendingBattle != null) root.post { beginBattleUi() }
         started = true
     }
 
@@ -158,6 +164,8 @@ class MainActivity : Activity() {
     // ------------------------------------------------------------------ loop
     private val frame = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
+            // A fight asked for from a menu starts even while the game is paused.
+            if (game.pendingBattle != null) try { beginBattleUi() } catch (e: Throwable) { reportError(e) }
             val dt = if (lastFrameNs == 0L) 0.0 else (frameTimeNanos - lastFrameNs) / 1e9
             lastFrameNs = frameTimeNanos
             if (speed > 0 && !game.gameOver) {
@@ -167,6 +175,8 @@ class MainActivity : Activity() {
                 if (n > 70) n = 70
                 try {
                     repeat(n) { game.step() }
+                    // A caravan was attacked: the battle map takes over from here.
+                    if (game.pendingBattle != null) beginBattleUi()
                 } catch (e: Throwable) {
                     // Never let a rare simulation bug take the app down; pause and report.
                     speed = 0; refreshSpeed()
@@ -179,6 +189,8 @@ class MainActivity : Activity() {
                 hudAcc = 0.0
                 try { refreshHud() } catch (e: Throwable) { reportError(e) }
             }
+            // A decided battle goes back to the world.
+            game.battle?.outcome?.let { try { endBattleUi() } catch (e: Throwable) { reportError(e) } }
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
@@ -233,6 +245,8 @@ class MainActivity : Activity() {
         bar.addView(rotChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
         materialChip = ui.button("", 12f) { cycleMaterial() }.apply { visibility = View.GONE }
         bar.addView(materialChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
+        battleChip = ui.button("", 12f) { confirmRetreat() }.apply { visibility = View.GONE; setTextColor(ui.bad) }
+        bar.addView(battleChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
         val items = listOf<Pair<String, () -> Unit>>(
             "Architect" to { panels.toggle("architect") },
             "Work" to { panels.toggle("work") },
@@ -577,6 +591,45 @@ class MainActivity : Activity() {
         }
     }
 
+    // ------------------------------------------------------------------ caravan battles
+    /** Puts the colony's battle map on screen, paused, so the player can draft and order before anything happens. */
+    fun beginBattleUi() {
+        val plan = game.pendingBattle ?: return
+        val bg = game.beginBattle()
+        swapTo(bg)
+        speed = 0; refreshSpeed()
+        refreshBattleChip()
+        toast("${plan.label}! Draft your people and give orders. Press play when ready.")
+    }
+
+    /** Takes the player back to the world map once the battle has a result. */
+    fun endBattleUi() {
+        val bg = game
+        val world = bg.parent ?: return
+        val outcome = bg.battle?.outcome ?: return
+        world.resolveBattle(bg)
+        swapTo(world)
+        refreshBattleChip()
+        toast(when (outcome) {
+            io.github.teamomuito.colony.sim.BattleOutcome.VICTORY -> "Victory!"
+            io.github.teamomuito.colony.sim.BattleOutcome.DEFEAT -> "Defeat. The caravan was lost."
+            io.github.teamomuito.colony.sim.BattleOutcome.RETREAT -> "The caravan withdrew."
+        })
+    }
+
+    fun refreshBattleChip() {
+        val b = game.battle
+        battleChip.visibility = if (b != null) View.VISIBLE else View.GONE
+        if (b != null) battleChip.text = "⚔ ${b.label}  ·  Retreat"
+    }
+
+    private fun confirmRetreat() {
+        if (game.battle?.outcome != null) return
+        AlertDialog.Builder(this).setMessage("Retreat? Your people walk to the edge of the map. Downed people are carried out if someone can take them; anyone else is left behind.")
+            .setPositiveButton("Retreat") { _, _ -> game.requestRetreat(); toast("Withdrawing") }
+            .setNegativeButton("Keep fighting", null).show()
+    }
+
     // ------------------------------------------------------------------ several colonies
     class ColonyEntry(val tile: Int, val name: String, val file: String)
 
@@ -595,6 +648,7 @@ class MainActivity : Activity() {
 
     /** Found a colony with the caravan; the old one is archived and can be switched back to. */
     fun settleWith(c: io.github.teamomuito.colony.sim.Caravan, name: String): String? {
+        if (game.battle != null) return "Finish the battle first."
         val oldTile = game.world.homeTile
         val oldName = game.colonyName
         val st = game.settle(c, name) ?: return "This tile can't be settled."
@@ -606,6 +660,7 @@ class MainActivity : Activity() {
     }
 
     fun switchColony(e: ColonyEntry) {
+        if (game.battle != null) { toast("Finish the battle first."); return }
         try {
             val target = SaveGame.read(File(filesDir, e.file).readBytes())
             val file = "colony_${System.currentTimeMillis()}.sav"
