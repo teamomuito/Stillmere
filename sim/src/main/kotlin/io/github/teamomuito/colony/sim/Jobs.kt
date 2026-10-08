@@ -141,6 +141,7 @@ fun Game.threatNear(p: Pawn): Boolean {
 }
 
 fun Game.think(p: Pawn) {
+    if (p.ally) return
     if (p.hostile && !p.colonist) { p.job = Job(if (p.retreating) JobType.LEAVE else JobType.RAID); return }
     if (p.hostileFlag) { p.job = Job(JobType.RAID); return }
     if (p.breakUntil > tick) { p.job = Job(JobType.BREAK); return }

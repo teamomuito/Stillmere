@@ -391,3 +391,17 @@ internal fun Game.findHunt(p: Pawn): Job? {
     val j = Job(JobType.HUNT, a.x, a.y); j.targetPawn = a.id; j.key = pawnKey(a.id, K_PATIENT)
     return j
 }
+
+/** Soldiers sent by an allied faction: charge the nearest enemy, otherwise wait near the colony, then go home. */
+internal fun Game.allyAI(p: Pawn) {
+    if (p.retreating) { leaveMap(p); return }
+    val h = hostiles.filter { !it.downed }.minByOrNull { distance(p.x, p.y, it.x, it.y) }
+    if (h == null) {
+        if (distance(p.x, p.y, homeX, homeY) > 7f) goTo(p, homeX, homeY, adjacent = true)
+        return
+    }
+    val w = p.weapon
+    val d = distance(p.x, p.y, h.x, h.y)
+    val inReach = if (w.ranged) d <= w.range * 0.9f && map.lineOfSight(p.x, p.y, h.x, h.y) else d < 1.9f
+    if (inReach) { if (p.moveCd > 0) p.moveCd-- else fire(p, h) } else goTo(p, h.x, h.y, adjacent = true)
+}

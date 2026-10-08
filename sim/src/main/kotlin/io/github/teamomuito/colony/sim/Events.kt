@@ -172,6 +172,12 @@ private fun raidWeaponTier(day: Int): List<Pair<ItemType?, Float>> = when {
     else -> listOf(ItemType.W_RIFLE to 42f, ItemType.W_LMG to 52f, ItemType.W_SNIPER to 54f, ItemType.W_SMG to 34f, ItemType.W_LONGSWORD to 38f, ItemType.W_SHOTGUN to 34f)
 }
 
+private fun tribalTier(day: Int): List<Pair<ItemType?, Float>> = when {
+    day < 15 -> listOf(ItemType.W_CLUB to 14f, ItemType.W_KNIFE to 16f, ItemType.W_SPEAR to 18f, ItemType.W_BOW to 20f)
+    day < 30 -> listOf(ItemType.W_MACE to 24f, ItemType.W_SPEAR to 18f, ItemType.W_BOW to 20f, ItemType.W_GREATBOW to 30f, ItemType.W_LONGSWORD to 38f)
+    else -> listOf(ItemType.W_MACE to 24f, ItemType.W_GREATBOW to 30f, ItemType.W_LONGSWORD to 38f, ItemType.W_BOLT to 32f)
+}
+
 private fun Game.pickRaidKind(): Int {
     // 0 assault, 1 sapper, 2 siege, 3 drop pods
     val hasWalls = map.building.count { it != null && it.built && it.def.isWall } > 12
@@ -186,11 +192,12 @@ private fun Game.pickRaidKind(): Int {
 
 fun Game.launchRaid() {
     val points = threatPoints()
-    val kind = pickRaidKind()
+    val rf = pickRaiders()
+    val kind = if (rf.kind == 0) 0 else pickRaidKind()
     val side = rng.int(4)
     val base = edgeCell(side) ?: return
     val raidId = ++raidCounter
-    val tier = raidWeaponTier(day)
+    val tier = if (rf.kind == 0 && kind != 4) tribalTier(day) else raidWeaponTier(day)
     var left = points
     var count = 0
     val maxCount = 1 + day / 5 + colonists.size / 3
@@ -208,9 +215,9 @@ fun Game.launchRaid() {
     while (kind != 4 && (left > 0f || count == 0) && count < min(16, maxCount)) {
         val (w, c) = tier[rng.int(tier.size)]
         val armor = ArrayList<ItemType>()
-        if (day >= 18 && rng.chance(0.5f)) armor += ItemType.A_FLAK_VEST
-        if (day >= 24 && rng.chance(0.4f)) armor += ItemType.A_HELMET
-        if (day >= 40 && rng.chance(0.3f)) { armor.clear(); armor += ItemType.A_ARMOR }
+        if (rf.kind != 0 && day >= 18 && rng.chance(0.5f)) armor += ItemType.A_FLAK_VEST
+        if (rf.kind != 0 && day >= 24 && rng.chance(0.4f)) armor += ItemType.A_HELMET
+        if (rf.kind != 0 && day >= 40 && rng.chance(0.3f)) { armor.clear(); armor += ItemType.A_ARMOR }
         var x = (base.first + rng.range(-3, 3)).coerceIn(1, map.w - 2)
         var y = (base.second + rng.range(-3, 3)).coerceIn(1, map.h - 2)
         if (kind == 3) {
@@ -226,6 +233,7 @@ fun Game.launchRaid() {
         if (!map.walkable(map.idx(x, y))) { left -= 1f; continue }
         val r = newRaider(x, y, w, raidId, armor)
         r.raidMode = kind
+        r.wfaction = rf.id
         spawned += r
         left -= c + armor.size * 10f
         count++
@@ -248,7 +256,8 @@ fun Game.launchRaid() {
     val label = when (kind) {
         1 -> "Sappers"; 2 -> "A siege force"; 3 -> "Raiders in drop pods"; 4 -> "Mechanoids"; else -> "Raiders"
     }
-    say("RAID! $label ($count) ${if (kind == 3) "drop in near your colony" else "approach from the $dir"}.", 3)
+    val who = if (kind == 4) "" else " of ${rf.name}"
+    say("RAID! $label$who ($count) ${if (kind == 3) "drop in near your colony" else "approach from the $dir"}.", 3)
 }
 
 private fun Game.spawnWanderer() {

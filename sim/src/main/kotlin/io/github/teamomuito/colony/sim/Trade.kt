@@ -9,11 +9,13 @@ class TraderInfo(val pawnId: Int, val name: String, val arrival: Long, val leave
     var wantsKind = ItemCat.RESOURCE
 }
 
-fun Game.spawnTrader() {
+fun Game.spawnTrader(from: WorldFaction? = null) {
     if (traders.isNotEmpty()) return
+    val fac = from ?: world.factions.filter { it.trades && standing(it) != Standing.HOSTILE }.let { if (it.isEmpty()) null else it[rng.int(it.size)] }
     val e = edgeCell(rng.int(4)) ?: return
     val trader = newHuman(e.first, e.second, Faction.VISITOR)
     trader.name = "Trader " + trader.name.substringBefore(' ')
+    trader.wfaction = fac?.id ?: -1
     trader.apparel.clear(); trader.apparel.add(Worn(ItemType.A_DUSTER, Quality.GOOD, 150f)); trader.weaponItem = ItemType.W_REVOLVER
     trader.escapeTick = tick + (2.0f * TICKS_PER_DAY).toInt()
     trader.homeTile = map.idx(homeX, homeY)
@@ -27,10 +29,11 @@ fun Game.spawnTrader() {
         ItemType.PLASTEEL to 60, ItemType.GOLD to 30, ItemType.KIBBLE to 100, ItemType.HAY to 100,
     )
     for ((t, n) in goods) if (rng.chance(0.55f)) info.stock[t] = rng.range(n / 4, n)
-    val gear = ItemType.entries.filter { it.isGear }
+    if (fac != null && fac.kind == 0) info.stock.keys.removeAll { it in setOf(ItemType.COMPONENT, ItemType.PLASTEEL, ItemType.MEAL_PACKAGED, ItemType.MEDS_INDUSTRIAL) }
+    val gear = ItemType.entries.filter { it.isGear && (fac == null || fac.kind != 0 || it.weapon?.ranged != true || it.weapon == Weapon.BOW || it.weapon == Weapon.GREATBOW) && (fac == null || fac.kind != 0 || (it.apparel != null && it.value < 80f) || it.weapon != null) }
     repeat(rng.range(2, 6)) { info.stock[rng.pick(gear)] = (info.stock[rng.pick(gear)] ?: 0) + 1 }
     traders.add(info)
-    say("A trade caravan arrives! ${trader.name} is waiting in your colony.", 1)
+    say("A trade caravan ${if (fac != null) "from ${fac.name} " else ""}arrives! ${trader.name} is waiting in your colony.", 1)
     if (rng.chance(0.4f)) {
         val guard = newHuman(e.first, e.second, Faction.VISITOR)
         guard.weaponItem = ItemType.W_AUTOPISTOL; guard.escapeTick = trader.escapeTick; guard.homeTile = trader.homeTile

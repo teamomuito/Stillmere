@@ -30,6 +30,7 @@ private fun Game.pickUp(p: Pawn, i: Int, type: ItemType, n: Int): Int {
 
 fun Game.driveJob(p: Pawn) {
     if (p.hostile && !p.colonist || p.hostileFlag) { hostileAI(p); return }
+    if (p.ally) { allyAI(p); return }
     if (p.drafted) { draftedAI(p); return }
     val j = p.job ?: return
     when (j.type) {

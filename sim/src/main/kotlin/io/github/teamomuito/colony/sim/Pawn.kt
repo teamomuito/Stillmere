@@ -64,6 +64,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var breakKind = 0
     var temp = 20f
     var wanderer = false
+    var wfaction = -1
+    var ally = false
     var pathKey = -1
     var attackCd = 0
     var burstLeft = 0
@@ -159,7 +161,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var wild get() = faction == Faction.WILD
         set(_) {}
 
-    val colonist get() = faction == Faction.PLAYER && !race.isAnimal && !prisoner
+    val colonist get() = faction == Faction.PLAYER && !race.isAnimal && !prisoner && !ally
     val isAnimal get() = race.isAnimal
     val hostile get() = hostileFlag || faction == Faction.ENEMY || manhunter
     val alive get() = !dead

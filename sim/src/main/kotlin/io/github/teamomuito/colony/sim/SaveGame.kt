@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 8
+    private const val VERSION = 9
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -88,12 +88,15 @@ object SaveGame {
         for (g2 in g.world.goodwill) o.writeInt(g2)
         o.writeInt(g.world.settlements.size)
         for (st in g.world.settlements) {
-            o.writeInt(st.silver); o.writeLong(st.stockTick)
+            o.writeInt(st.silver); o.writeLong(st.stockTick); o.writeLong(st.destroyedUntil)
             o.writeInt(st.stock.size); for ((k, v) in st.stock) { o.writeInt(k.ordinal); o.writeInt(v) }
             val r = st.request
             o.writeBoolean(r != null)
             if (r != null) { o.writeInt(r.type.ordinal); o.writeInt(r.count); o.writeInt(r.reward); o.writeLong(r.expires) }
         }
+        o.writeInt(g.world.nextSiteId)
+        o.writeInt(g.world.sites.size)
+        for (s2 in g.world.sites) { o.writeInt(s2.id); o.writeInt(s2.tile); o.writeInt(s2.kind); o.writeInt(s2.factionId); o.writeInt(s2.reward); o.writeLong(s2.expires); o.writeFloat(s2.strength); o.writeUTF(s2.name) }
         o.writeInt(g.nextCaravanId)
         o.writeInt(g.caravans.size)
         for (c in g.caravans) {
@@ -146,7 +149,7 @@ object SaveGame {
         o.writeBoolean(p.huntMark); o.writeBoolean(p.tameMark); o.writeBoolean(p.slaughterMark)
         o.writeFloat(p.resistance); o.writeBoolean(p.escaping); o.writeInt(p.recruitMode)
         o.writeInt(p.raidId); o.writeInt(p.raidMode); o.writeInt(p.campX); o.writeInt(p.campY); o.writeBoolean(p.retreating)
-        o.writeLong(p.escapeTick); o.writeBoolean(p.wanderer); o.writeLong(p.lastSocial)
+        o.writeLong(p.escapeTick); o.writeBoolean(p.wanderer); o.writeLong(p.lastSocial); o.writeInt(p.wfaction); o.writeBoolean(p.ally)
         o.writeInt(p.herdLeader)
         o.writeBoolean(p.refugee); o.writeInt(p.areaRestriction)
         o.writeInt(p.implants.size); for ((k, v) in p.implants) { o.writeInt(k); o.writeInt(v.ordinal) }
@@ -255,11 +258,13 @@ object SaveGame {
             for (k in g.world.goodwill.indices) g.world.goodwill[k] = i.readInt()
             repeat(i.readInt()) { idx ->
                 val st = g.world.settlements.getOrNull(idx)
-                val silver = i.readInt(); val stockTick = i.readLong()
+                val silver = i.readInt(); val stockTick = i.readLong(); val destroyed = i.readLong()
                 val stock = List(i.readInt()) { ItemType.entries[i.readInt()] to i.readInt() }
                 val req = if (i.readBoolean()) SettlementRequest(ItemType.entries[i.readInt()], i.readInt(), i.readInt(), i.readLong()) else null
-                if (st != null) { st.silver = silver; st.stockTick = stockTick; st.stock.putAll(stock); st.request = req }
+                if (st != null) { st.silver = silver; st.stockTick = stockTick; st.destroyedUntil = destroyed; st.stock.putAll(stock); st.request = req }
             }
+            g.world.nextSiteId = i.readInt()
+            repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readLong(), i.readFloat(), i.readUTF())) }
             g.nextCaravanId = i.readInt()
             repeat(i.readInt()) {
                 val c = Caravan(i.readInt(), i.readUTF(), i.readInt())
@@ -315,7 +320,7 @@ object SaveGame {
         p.huntMark = i.readBoolean(); p.tameMark = i.readBoolean(); p.slaughterMark = i.readBoolean()
         p.resistance = i.readFloat(); p.escaping = i.readBoolean(); p.recruitMode = i.readInt()
         p.raidId = i.readInt(); p.raidMode = i.readInt(); p.campX = i.readInt(); p.campY = i.readInt(); p.retreating = i.readBoolean()
-        p.escapeTick = i.readLong(); p.wanderer = i.readBoolean(); p.lastSocial = i.readLong()
+        p.escapeTick = i.readLong(); p.wanderer = i.readBoolean(); p.lastSocial = i.readLong(); p.wfaction = i.readInt(); p.ally = i.readBoolean()
         p.herdLeader = i.readInt()
         p.refugee = i.readBoolean(); p.areaRestriction = i.readInt()
         repeat(i.readInt()) { p.implants[i.readInt()] = Implant.entries[i.readInt()] }

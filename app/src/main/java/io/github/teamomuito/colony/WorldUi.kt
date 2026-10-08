@@ -19,8 +19,14 @@ import io.github.teamomuito.colony.sim.Hills
 import io.github.teamomuito.colony.sim.ItemType
 import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.Settlement
+import io.github.teamomuito.colony.sim.hostileTo
+import io.github.teamomuito.colony.sim.peaceCost
+import io.github.teamomuito.colony.sim.peaceTalks
+import io.github.teamomuito.colony.sim.requestAid
+import io.github.teamomuito.colony.sim.requestTraders
+import io.github.teamomuito.colony.sim.silverInStockpiles
+import io.github.teamomuito.colony.sim.standing
 import io.github.teamomuito.colony.sim.TICKS_PER_DAY
-import io.github.teamomuito.colony.sim.adjustGoodwill
 import io.github.teamomuito.colony.sim.canJoinCaravan
 import io.github.teamomuito.colony.sim.capacity
 import io.github.teamomuito.colony.sim.caravanBuy
@@ -118,6 +124,19 @@ class WorldMapView(context: Context, private val game: Game, private val onPick:
                 else -> {}
             }
         }
+        // Rivers.
+        p.style = Paint.Style.STROKE; p.color = 0xFF4C86B8.toInt(); p.strokeWidth = max(2f, cell * 0.2f); p.strokeCap = Paint.Cap.ROUND
+        for (y in 0 until w.h) for (x in 0 until w.w) {
+            val t = w.tile(x, y)
+            if (!w.river[t]) continue
+            val cx0 = ox + (x + 0.5f) * cell; val cy0 = oy + (y + 0.5f) * cell
+            var linked = false
+            for ((dx, dy) in listOf(1 to 0, 0 to 1, -1 to 0, 0 to -1)) {
+                val nx = x + dx; val ny = y + dy
+                if (w.inB(nx, ny) && (w.river[w.tile(nx, ny)] || w.water[w.tile(nx, ny)])) { linked = true; if (dx > 0 || dy > 0 || w.water[w.tile(nx, ny)]) c.drawLine(cx0, cy0, ox + (nx + 0.5f) * cell, oy + (ny + 0.5f) * cell, p) }
+            }
+            if (!linked) c.drawPoint(cx0, cy0, p)
+        }
         // Roads.
         p.style = Paint.Style.STROKE; p.color = 0xFFE3CE95.toInt(); p.strokeWidth = max(1.5f, cell * 0.12f); p.strokeCap = Paint.Cap.ROUND
         for (y in 0 until w.h) for (x in 0 until w.w) {
@@ -147,6 +166,14 @@ class WorldMapView(context: Context, private val game: Game, private val onPick:
             p.color = s.faction.color; c.drawRect(cx - r, cy - r * 0.2f, cx + r, cy + r, p)
             c.drawPath(Path().apply { moveTo(cx - r * 1.1f, cy - r * 0.2f); lineTo(cx, cy - r * 1.1f); lineTo(cx + r * 1.1f, cy - r * 0.2f); close() }, p)
             p.color = 0xFF2A2018.toInt(); c.drawRect(cx - r * 0.18f, cy + r * 0.2f, cx + r * 0.18f, cy + r, p)
+        }
+        // Sites (camps to clear).
+        for (st in game.world.sites) {
+            val cx = ox + (w.x(st.tile) + 0.5f) * cell; val cy = oy + (w.y(st.tile) + 0.5f) * cell; val r = cell * 0.3f
+            p.style = Paint.Style.FILL; p.color = Color.BLACK; c.drawCircle(cx, cy, r + 2, p)
+            p.color = 0xFFE05050.toInt(); c.drawCircle(cx, cy, r, p)
+            p.color = Color.WHITE; p.strokeWidth = max(2f, cell * 0.08f); p.style = Paint.Style.STROKE
+            c.drawLine(cx - r * 0.5f, cy - r * 0.5f, cx + r * 0.5f, cy + r * 0.5f, p); c.drawLine(cx - r * 0.5f, cy + r * 0.5f, cx + r * 0.5f, cy - r * 0.5f, p)
         }
         // Home.
         run {
@@ -211,9 +238,13 @@ fun Dialogs.worldMap(focus: Caravan? = null) {
             info.addView(ui.label(title, 13.5f, ui.accent, true))
             info.addView(ui.label("${w.biome[sel].label} · ${w.hills[sel].label}${if (w.water[sel]) " · water" else ""}${if (w.road[sel]) " · road" else ""} · difficulty ${f1(w.cost(sel))}", 11f, ui.dim))
             if (s != null) {
-                val gw = w.goodwill[s.faction.ordinal]
-                val mood = if (s.faction.permanentEnemy) "hostile" else if (gw <= -75) "hostile" else if (gw < 0) "wary" else if (gw < 40) "neutral" else "friendly"
-                info.addView(ui.label("${s.faction.label} · goodwill $gw ($mood)", 11.5f, if (s.faction.permanentEnemy) ui.bad else ui.good))
+                val gw = w.goodwill[s.faction.id]
+                val st = game.standing(s.faction)
+                info.addView(ui.label("${s.faction.label} (${s.faction.kindLabel}) · goodwill $gw (${st.label})${if (s.destroyedUntil > game.tick) " · in ruins" else ""}", 11.5f, if (st == io.github.teamomuito.colony.sim.Standing.HOSTILE) ui.bad else ui.good))
+            }
+            val site = w.siteAt(sel)
+            if (site != null) {
+                info.addView(ui.label("${site.name}: clear it for ${site.reward} silver. Strength ${site.strength.toInt()}, expires in ${f1((site.expires - game.tick).toFloat() / TICKS_PER_DAY)} days.", 11.5f, ui.warn))
             }
         }
         val a2 = active
@@ -258,7 +289,10 @@ fun Dialogs.worldMap(focus: Caravan? = null) {
     val h = (a.resources.displayMetrics.heightPixels * 0.55f).toInt()
     box.addView(map, ui.lin(-1, h, 0f, 0, 6, 0, 0))
     box.addView(info, ui.lin(-1, -2, 0f, 0, 6, 0, 0))
-    box.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 6, 0, 0))
+    val bottom = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+    bottom.addView(ui.button("Factions", 12f) { d.dismiss(); factionsDialog() }, ui.lin(0, -2, 1f, 0, 0, 4, 0))
+    bottom.addView(closeRow(d), ui.lin(0, -2, 1f, 4, 0, 0, 0))
+    box.addView(bottom, ui.lin(-1, -2, 0f, 0, 6, 0, 0))
     render()
     d.setContentView(box)
     val prev = a.speed
@@ -366,7 +400,7 @@ fun Dialogs.caravanDialog(c: Caravan) {
             if (c.inventory.isEmpty()) body.addView(ui.label("Empty.", 11.5f, ui.dim))
             for ((t, n) in c.inventory) body.addView(ui.label("${t.label} ×$n  (${f1(t.mass() * n)} kg)", 11.5f))
             val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
-            if (s != null && s.faction.trades && w.goodwill[s.faction.ordinal] > -75 && c.tile == s.tile && c.route.isEmpty())
+            if (s != null && s.faction.trades && !game.hostileTo(s.faction) && c.tile == s.tile && c.route.isEmpty())
                 row.addView(ui.button("Trade at ${s.name}", 12f) { d.dismiss(); caravanTrade(c, s) }, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
             if (c.tile != w.homeTile) row.addView(ui.button("Come home", 12f) {
                 val err = game.orderCaravan(c, w.homeTile)
@@ -425,6 +459,37 @@ fun Dialogs.caravanTrade(c: Caravan, s: Settlement) {
             body.addView(ui.label("Buying adds weight; load animals or leave things behind if you run out of room.", 10.5f, ui.dim), ui.lin(-2, -2, 0f, 0, 8, 0, 0))
             body.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 8, 0, 0))
             (body.parent as? android.widget.ScrollView)?.post { (body.parent as? android.widget.ScrollView)?.scrollTo(0, y) }
+        }
+        render()
+    })
+}
+
+// ====================================================================== factions and diplomacy
+fun Dialogs.factionsDialog() {
+    dialog("Factions", { body, d ->
+        fun render() {
+            body.removeAllViews()
+            val w = game.world
+            body.addView(ui.label("Silver in stockpiles: ${game.silverInStockpiles()}", 12f, ui.accent, true))
+            for (f in w.factions) {
+                val st = game.standing(f)
+                val col = if (st == io.github.teamomuito.colony.sim.Standing.HOSTILE) ui.bad else if (st == io.github.teamomuito.colony.sim.Standing.WARY) ui.warn else ui.good
+                body.addView(ui.label("${f.name} · ${f.kindLabel}", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 10, 0, 0))
+                body.addView(ui.label("Goodwill ${w.goodwill[f.id]} · ${st.label} · ${w.settlements.count { it.faction.id == f.id }} settlements", 11.5f, col))
+                val rel = w.factions.filter { it.id != f.id && w.relation[f.id][it.id] != 0 }.joinToString { (if (w.relation[f.id][it.id] > 0) "allied with " else "at war with ") + it.name }
+                if (rel.isNotEmpty()) body.addView(ui.label(rel, 10.5f, ui.dim))
+                if (!f.permanentEnemy) {
+                    val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                    if (st == io.github.teamomuito.colony.sim.Standing.HOSTILE || st == io.github.teamomuito.colony.sim.Standing.WARY)
+                        row.addView(ui.button("Peace talks (${game.peaceCost(f)} silver)", 11f) { val e = game.peaceTalks(f); a.toast(e ?: "Relations improved."); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
+                    if (f.trades && st != io.github.teamomuito.colony.sim.Standing.HOSTILE)
+                        row.addView(ui.button("Request traders (150)", 11f) { val e = game.requestTraders(f); a.toast(e ?: "A trade caravan is on its way."); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
+                    if (st == io.github.teamomuito.colony.sim.Standing.ALLY)
+                        row.addView(ui.button("Military aid", 11f) { val e = game.requestAid(f); a.toast(e ?: "Soldiers are coming."); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
+                    body.addView(ui.hscroll(row))
+                }
+            }
+            body.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 10, 0, 0))
         }
         render()
     })

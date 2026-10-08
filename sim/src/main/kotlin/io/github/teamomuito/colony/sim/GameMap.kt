@@ -324,7 +324,11 @@ class GameMap(val w: Int, val h: Int) {
         val DX8 = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
         val DY8 = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
 
-        fun generate(w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE): GameMap {
+        /** A map whose river, lake and ruggedness follow the world tile the colony sits on. */
+        fun generateFor(w: Int, h: Int, seed: Long, biome: Biome): GameMap =
+            generate(w, h, seed, biome, World.generate(seed, biome).localTerrain())
+
+        fun generate(w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null): GameMap {
             val m = GameMap(w, h)
             m.biome = biome
             val rng = Rng(seed)
@@ -340,7 +344,15 @@ class GameMap(val w: Int, val h: Int) {
             // A river meanders across the map for most seeds.
             val riverY = FloatArray(w)
             val riverNoise = Noise(seed.toInt() xor 0x77)
-            val riverOn = rng.chance(0.65f) && !desert
+            val riverRoll = rng.chance(0.65f) && !desert
+            val riverOn = if (local != null) local.river else riverRoll
+            val rockThr = when (local?.hills) { Hills.FLAT -> 0.70f; Hills.SMALL -> 0.64f; Hills.LARGE -> 0.58f; Hills.MOUNTAIN -> 0.5f; null -> 0.62f }
+            // A lake when the world tile borders water.
+            val lakeAng = rng.float() * 6.283f
+            val lakeR = 8f + rng.float() * 5f
+            val lakeX = cx + (Math.cos(lakeAng.toDouble()) * (w * 0.3)).toFloat()
+            val lakeY = cy + (Math.sin(lakeAng.toDouble()) * (h * 0.3)).toFloat()
+            val lakeOn = local?.lake == true
             val horizontal = rng.chance(0.5f)
             for (x in 0 until w) riverY[x] = (if (horizontal) h * 0.22f else w * 0.22f) + (riverNoise.fractal(x.toFloat(), 0f, 24f) - 0.5f) * 30f
             for (y in 0 until h) for (x in 0 until w) {
@@ -353,7 +365,7 @@ class GameMap(val w: Int, val h: Int) {
                 val ee = e - calm
                 val ww = wt + calm
                 var t = when {
-                    ee > 0.62f -> Terrain.ROCK
+                    ee > rockThr -> Terrain.ROCK
                     !desert && ww < 0.22f -> Terrain.WATER_DEEP
                     !desert && ww < 0.29f -> Terrain.WATER_SHALLOW
                     ww < 0.32f -> if (cold) Terrain.MUD else Terrain.SAND
@@ -369,6 +381,10 @@ class GameMap(val w: Int, val h: Int) {
                     val dist = abs(across - riverY[along])
                     if (dist < 1.6f && d > 6) t = Terrain.WATER_DEEP
                     else if (dist < 3.2f && d > 6) t = Terrain.WATER_SHALLOW
+                }
+                if (lakeOn && t != Terrain.ROCK) {
+                    val dl = Math.hypot((x - lakeX).toDouble(), (y - lakeY).toDouble()).toFloat() + (e - 0.5f) * 8f
+                    if (dl < lakeR * 0.6f) t = Terrain.WATER_DEEP else if (dl < lakeR) t = Terrain.WATER_SHALLOW
                 }
                 if (biome == Biome.TUNDRA && (t == Terrain.SOIL || t == Terrain.RICH_SOIL) && rng.chance(0.3f)) t = Terrain.GRAVEL
                 m.terrain[i] = t

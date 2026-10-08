@@ -657,3 +657,78 @@ class CaravanTest {
         assertEquals(g.caravans[0].members.size, l.caravans[0].members.size)
     }
 }
+
+class FactionTest {
+    @Test fun worldHasRiversLakesAndSixFactions() {
+        var rivers = 0
+        for (seed in 1L..6L) {
+            val w = World.generate(seed, Biome.TEMPERATE)
+            rivers += w.river.count { it }
+            assertEquals(6, w.factions.size)
+            assertTrue(w.settlements.size >= 14)
+            assertTrue(w.settlements.all { w.passable(it.tile) })
+        }
+        assertTrue("rivers appear", rivers > 20)
+    }
+
+    @Test fun relationsSymmetricAndPiratesHostile() {
+        val w = World.generate(3, Biome.BOREAL)
+        for (a in w.factions) for (b in w.factions) assertEquals(w.relation[a.id][b.id], w.relation[b.id][a.id])
+        for (f in w.factions.filter { it.kind == 2 }) assertEquals(-100, w.goodwill[f.id])
+    }
+
+    @Test fun giftSpillsOverToAlliesAndEnemies() {
+        val g = newGame()
+        val a = g.world.factions.first { it.kind == 0 }
+        g.world.goodwill[a.id] = 0
+        val ally = g.world.factions.firstOrNull { !it.permanentEnemy && it.id != a.id && g.world.relation[a.id][it.id] == 1 }
+        val foe = g.world.factions.firstOrNull { !it.permanentEnemy && it.id != a.id && g.world.relation[a.id][it.id] == -1 }
+        val ag = ally?.let { g.world.goodwill[it.id] }; val fg = foe?.let { g.world.goodwill[it.id] }
+        g.adjustGoodwill(a, 40)
+        assertEquals(40, g.world.goodwill[a.id])
+        if (ally != null) assertTrue(g.world.goodwill[ally.id] > ag!!)
+        if (foe != null) assertTrue(g.world.goodwill[foe.id] < fg!!)
+    }
+
+    @Test fun peaceTalksCostSilverAndImprove() {
+        val g = newGame()
+        val f = g.world.factions.first { it.kind == 1 }
+        g.world.goodwill[f.id] = -80
+        assertNotNull(g.peaceTalks(f))
+        g.map.drop(ItemType.SILVER, 2000, g.homeX, g.homeY)
+        g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY + 3, ZoneKind.STOCKPILE)
+        g.map.drop(ItemType.SILVER, 2000, g.homeX, g.homeY)
+        assertNull(g.peaceTalks(f))
+        assertTrue(g.world.goodwill[f.id] > -80)
+    }
+
+    @Test fun alliedAidFightsRaiders() {
+        val g = newGame(); g.quiet()
+        val f = g.world.factions.first { it.kind == 1 }
+        g.world.goodwill[f.id] = 95
+        assertNull(g.requestAid(f))
+        assertTrue(g.pawns.count { it.ally } >= 4)
+        assertTrue(g.colonists.none { it.ally })
+        g.run(300)
+        val save = SaveGame.read(SaveGame.write(g))
+        assertEquals(g.pawns.count { it.ally && it.alive }, save.pawns.count { it.ally })
+    }
+
+    @Test fun saveKeepsFactionState() {
+        val g = newGame()
+        g.world.goodwill[0] = 33
+        val l = SaveGame.read(SaveGame.write(g))
+        assertEquals(33, l.world.goodwill[0])
+    }
+}
+
+class MapSizeTest {
+    @Test fun largeMapRunsAndSaves() {
+        val g = Game(11, GameMap.generateFor(150, 150, 11, Biome.BOREAL))
+        g.startNewColony(Scenario.CRASHLANDED)
+        g.run(24000)
+        assertEquals(150, g.map.w)
+        val l = SaveGame.read(SaveGame.write(g))
+        assertEquals(150, l.map.h)
+    }
+}

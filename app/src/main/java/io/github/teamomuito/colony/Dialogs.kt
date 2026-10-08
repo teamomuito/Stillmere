@@ -184,7 +184,8 @@ class Dialogs(val a: MainActivity) {
         var biome = Biome.TEMPERATE
         var story = Storyteller.MARLOWE
         var diff = Difficulty.RANDY
-        var g = Game(seed, GameMap.generate(Game.MAP_SIZE, Game.MAP_SIZE, seed, biome))
+        var size = Game.MAP_SIZE
+        var g = Game(seed, GameMap.generateFor(size, size, seed, biome))
         val crew = ArrayList<Pawn>()
         fun crewSize() = when (scenario) { Scenario.CRASHLANDED -> 3; Scenario.LOST_TRIBE -> 5; Scenario.RICH_EXPLORER -> 1; Scenario.SOLO -> 1 }
         fun roll(): Pawn = g.newHuman(0, 0, Faction.PLAYER, scenario == Scenario.LOST_TRIBE)
@@ -193,6 +194,7 @@ class Dialogs(val a: MainActivity) {
 
         dialog("New colony", { body, d ->
             val scenarioBox = ui.column(); val biomeBox = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            val sizeBox = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             val storyBox = ui.column(); val diffBox = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             val crewBox = ui.column()
             fun renderCrew() {
@@ -217,7 +219,13 @@ class Dialogs(val a: MainActivity) {
             fun renderBiome() {
                 biomeBox.removeAllViews()
                 for (b in Biome.entries) biomeBox.addView(ui.button(b.label, 11f, selected = biome == b) {
-                    biome = b; seed = System.currentTimeMillis(); g = Game(seed, GameMap.generate(Game.MAP_SIZE, Game.MAP_SIZE, seed, biome)); resetCrew(); renderBiome(); renderCrew()
+                    biome = b; seed = System.currentTimeMillis(); g = Game(seed, GameMap.generateFor(size, size, seed, biome)); resetCrew(); renderBiome(); renderCrew()
+                }, ui.lin(-2, -2, 0f, 0, 3, 4, 0))
+            }
+            fun renderSize() {
+                sizeBox.removeAllViews()
+                for ((label, n) in listOf("Small 75" to 75, "Medium 100" to 100, "Large 150" to 150, "Huge 200" to 200)) sizeBox.addView(ui.button(label, 11f, selected = size == n) {
+                    size = n; g = Game(seed, GameMap.generateFor(size, size, seed, biome)); resetCrew(); renderSize(); renderCrew()
                 }, ui.lin(-2, -2, 0f, 0, 3, 4, 0))
             }
             fun renderStory() {
@@ -230,10 +238,11 @@ class Dialogs(val a: MainActivity) {
             }
             body.addView(ui.label("Scenario", 13f, ui.accent, true)); body.addView(scenarioBox)
             body.addView(ui.label("Biome", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 0)); body.addView(ui.hscroll(biomeBox))
+            body.addView(ui.label("Map size", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 0)); body.addView(ui.hscroll(sizeBox))
             body.addView(ui.label("Storyteller", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 0)); body.addView(storyBox)
             body.addView(ui.label("Difficulty", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 0)); body.addView(ui.hscroll(diffBox))
             body.addView(ui.label("Your colonists", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 0)); body.addView(crewBox)
-            renderScenario(); renderBiome(); renderStory(); renderDiff(); renderCrew()
+            renderScenario(); renderBiome(); renderSize(); renderStory(); renderDiff(); renderCrew()
             val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             row.addView(ui.button("Start", 14f, selected = true) {
                 g.storyteller = story; g.difficulty = diff

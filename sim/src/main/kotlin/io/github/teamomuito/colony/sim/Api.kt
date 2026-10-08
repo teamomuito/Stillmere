@@ -31,6 +31,7 @@ fun Game.releasePrisoner(p: Pawn) {
     p.retreating = true
     p.escapeTick = tick
     p.homeTile = -1
+    if (p.wfaction >= 0) world.factions.getOrNull(p.wfaction)?.let { adjustGoodwill(it, 12) }
     endJob(p)
     say("${p.name} was released.", 0)
 }

@@ -30,7 +30,7 @@ enum class Scenario(val label: String, val desc: String) {
     SOLO("Naked brutality", "One person, nothing but their clothes."),
 }
 
-class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZE, seed)) {
+class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_SIZE, seed, Biome.TEMPERATE)) {
     var rng = Rng(seed + 1)
     val finder = Pathfinder(map)
     var tick = 6L * TICKS_PER_HOUR
@@ -616,6 +616,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
     // ------------------------------------------------------------------ hourly
     private fun hourlyTick() {
         hourlyEvents()
+        alliesHourly()
+        if (hour == 0) factionsDaily()
         autosaveHook?.invoke()
     }
 
