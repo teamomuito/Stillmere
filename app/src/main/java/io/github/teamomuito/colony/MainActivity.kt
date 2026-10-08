@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var banner: TextView
     private lateinit var toolChip: TextView
     private lateinit var rotChip: TextView
+    private lateinit var materialChip: TextView
     lateinit var tileCard: LinearLayout
     private lateinit var tileText: TextView
     private lateinit var tileActions: LinearLayout
@@ -230,6 +231,8 @@ class MainActivity : Activity() {
         bar.addView(toolChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
         rotChip = ui.button("Rotate ⟳", 12f) { view.buildRot = !view.buildRot; view.invalidate() }.apply { visibility = View.GONE }
         bar.addView(rotChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
+        materialChip = ui.button("", 12f) { cycleMaterial() }.apply { visibility = View.GONE }
+        bar.addView(materialChip, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
         val items = listOf<Pair<String, () -> Unit>>(
             "Architect" to { panels.toggle("architect") },
             "Work" to { panels.toggle("work") },
@@ -400,11 +403,39 @@ class MainActivity : Activity() {
         if (p != null) { tileCard.visibility = View.GONE; view.selectedCell = -1 }
     }
 
+    /** Materials the current build tool may use right now (research done). */
+    private fun usableMaterials(def: io.github.teamomuito.colony.sim.BuildDef): List<io.github.teamomuito.colony.sim.ItemType> =
+        (def.stuff ?: emptyList()).filter { m -> io.github.teamomuito.colony.sim.Materials.of(m)?.research.let { it == null || it in game.researchDone } }
+
+    private fun updateMaterialChip() {
+        val t = view.tool as? Tool.Build ?: return
+        val options = usableMaterials(t.def)
+        val chosen = view.buildMaterial ?: t.def.stuff?.first() ?: return
+        materialChip.text = "Material: ${chosen.label} (${game.map.countItems(chosen)} in stock) ⟳"
+        if (options.size < 2) materialChip.alpha = 0.6f else materialChip.alpha = 1f
+    }
+
+    /** Each tap picks the next material the colony has researched; the next placed structure uses it. */
+    private fun cycleMaterial() {
+        val t = view.tool as? Tool.Build ?: return
+        val options = usableMaterials(t.def)
+        if (options.isEmpty()) return
+        val cur = view.buildMaterial ?: t.def.stuff?.first()
+        val next = options[(options.indexOf(cur) + 1).let { if (it < 0 || it >= options.size) 0 else it }]
+        view.buildMaterial = next
+        updateMaterialChip()
+        view.invalidate()
+    }
+
     fun setTool(t: Tool) {
         view.tool = t
         toolChip.visibility = if (t === Tool.Select) View.GONE else View.VISIBLE
         toolChip.text = "${t.label}  ✕"
         rotChip.visibility = if (t is Tool.Build && t.def.w != t.def.h) View.VISIBLE else View.GONE
+        val stuff = (t as? Tool.Build)?.def?.stuff
+        if (stuff == null || view.buildMaterial !in stuff) view.buildMaterial = null
+        materialChip.visibility = if (stuff != null) View.VISIBLE else View.GONE
+        updateMaterialChip()
         tileCard.visibility = View.GONE
         view.selectedCell = -1
         view.invalidate()
@@ -437,13 +468,13 @@ class MainActivity : Activity() {
         m.floor[i]?.let { sb.append("\n${it.label}") }
         if (m.conduit[i]) sb.append("\nPower conduit")
         m.building[i]?.let { b ->
-            sb.append("\n${b.def.label}${if (b.built && b.quality != io.github.teamomuito.colony.sim.Quality.NORMAL) " (${b.quality.label})" else ""}")
+            sb.append("\n${b.displayName}${if (b.built && b.quality != io.github.teamomuito.colony.sim.Quality.NORMAL) " (${b.quality.label})" else ""}")
             if (!b.built) {
                 var done = 0; var tot = 0
-                for (k in b.def.cost.indices) { done += b.delivered[k]; tot += b.def.cost[k].second }
+                for (k in b.cost.indices) { done += b.delivered[k]; tot += b.cost[k].second }
                 sb.append(" (blueprint $done/$tot materials)")
             } else {
-                sb.append("  HP ${b.hp.toInt()}/${b.def.hp.toInt()}")
+                sb.append("  HP ${b.hp.toInt()}/${b.maxHp.toInt()}")
                 if (b.def.fuelCap > 0f) sb.append("\nFuel ${b.fuel.toInt()}/${b.def.fuelCap.toInt()}")
                 if (b.def.consumesPower) sb.append(if (b.powered) "\nPowered" else "\nNo power")
                 if (b.def.sleeps && b.ownerId >= 0) sb.append("\nOwner: ${g.pawnById(b.ownerId)?.name ?: "?"}")
@@ -536,7 +567,7 @@ class MainActivity : Activity() {
                             if (g.map.building[g.map.idx(x, y)]?.built == false) g.designate(x, y, Desig.DECON) else true
                         }
                         Tool.ClearZone -> { g.setZone(x, y, ZoneKind.NONE); true }
-                        is Tool.Build -> g.placeBlueprint(t.def, x, y, view.buildRot)
+                        is Tool.Build -> g.placeBlueprint(t.def, x, y, view.buildRot, view.buildMaterial)
                         else -> false
                     }
                     if (ok) n++

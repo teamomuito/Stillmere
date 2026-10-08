@@ -258,12 +258,12 @@ class Dialogs(val a: MainActivity) {
 
     // ================================================================== building dialog
     fun building(b: Building) {
-        dialog(b.def.label, { body, d ->
+        dialog(b.displayName, { body, d ->
             fun render() {
                 body.removeAllViews()
                 val i = game.map.idx(b.x, b.y)
                 if (game.map.building[i] !== b) { d.dismiss(); return }
-                body.addView(ui.label("HP ${b.hp.toInt()}/${b.def.hp.toInt()}${if (b.quality != Quality.NORMAL) " · ${b.quality.label}" else ""}${if (b.def.fuelCap > 0f) " · fuel ${b.fuel.toInt()}/${b.def.fuelCap.toInt()}" else ""}${if (b.def.consumesPower) if (b.powered) " · powered" else " · NO POWER" else ""}", 12f, ui.dim))
+                body.addView(ui.label("HP ${b.hp.toInt()}/${b.maxHp.toInt()}${if (b.quality != Quality.NORMAL) " · ${b.quality.label}" else ""}${if (b.def.fuelCap > 0f) " · fuel ${b.fuel.toInt()}/${b.def.fuelCap.toInt()}" else ""}${if (b.def.consumesPower) if (b.powered) " · powered" else " · NO POWER" else ""}", 12f, ui.dim))
                 val actions = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
                 actions.addView(ui.button(if (b.forbidden) "Allow use" else "Forbid", 11.5f, selected = b.forbidden) { b.forbidden = !b.forbidden; render() }, ui.lin(-2, -2, 0f, 0, 6, 4, 0))
                 actions.addView(ui.button("Repair", 11.5f) { game.designate(b.x, b.y, Desig.REPAIR); d.dismiss() }, ui.lin(-2, -2, 0f, 0, 6, 4, 0))

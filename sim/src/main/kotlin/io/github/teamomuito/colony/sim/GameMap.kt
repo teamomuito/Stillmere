@@ -11,7 +11,9 @@ class Plant(val type: PlantType, val x: Int, val y: Int, var growth: Float) {
 }
 
 class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
-    /** Materials delivered so far, indexed like def.cost. */
+    /** The material this structure is made of (only for [BuildDef.stuff] structures); null means the default. */
+    var material: ItemType? = null
+    /** Materials delivered so far, indexed like [cost]. */
     val delivered = IntArray(def.cost.size)
     var progress = 0f
     var hp = def.hp
@@ -34,11 +36,44 @@ class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
     val fh get() = if (rot) def.w else def.h
     fun covers(px: Int, py: Int) = px >= x && px < x + fw && py >= y && py < y + fh
     val lit get() = built && fuel > 0f && def.fuelCap > 0f
+    /** Items this building needs, with the chosen material swapped in for the structure's main cost entry. */
+    val cost: List<Pair<ItemType, Int>>
+        get() {
+            val m = material ?: return def.cost
+            return def.cost.mapIndexed { i, c -> if (i == 0 && def.stuff != null) m to c.second else c }
+        }
+
+    private val defaultStuff get() = Materials.of(def.stuff?.first())
+    private val chosenStuff get() = Materials.of(material ?: def.stuff?.first())
+
+    /** Hit points of this structure in its material. */
+    val maxHp: Float get() {
+        val base = defaultStuff ?: return def.hp
+        val now = chosenStuff ?: return def.hp
+        return def.hp * now.hpMult / base.hpMult
+    }
+
+    val flam: Float get() = chosenStuff?.flam ?: def.flam
+
+    val beauty: Float get() {
+        val base = defaultStuff ?: return def.beauty
+        val now = chosenStuff ?: return def.beauty
+        return def.beauty + now.beauty - base.beauty
+    }
+
+    /** "Wall (steel)" for a structure built from a material; the plain name otherwise. */
+    val displayName: String get() = if (def.stuff != null) "${def.label} (${(chosenStuff?.item?.label ?: def.label).lowercase()})" else def.label
+
+    /** A material that needs research must be researched before it can be used for this structure. */
+    fun researchMet(done: Set<Research>): Boolean =
+        (def.research == null || def.research in done) && (chosenStuff?.research?.let { it in done } ?: true)
+
     fun materialsComplete(): Boolean {
-        for (i in def.cost.indices) if (delivered[i] < def.cost[i].second) return false
+        val c = cost
+        for (i in c.indices) if (delivered[i] < c[i].second) return false
         return true
     }
-    fun missing(i: Int) = max(0, def.cost[i].second - delivered[i])
+    fun missing(i: Int) = max(0, cost[i].second - delivered[i])
 }
 
 class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var y: Int) {

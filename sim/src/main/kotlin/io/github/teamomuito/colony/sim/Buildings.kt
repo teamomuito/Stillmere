@@ -11,15 +11,19 @@ enum class BuildDef(
     val flam: Float = 0.4f, val isWall: Boolean = false, val cover: Float = 0f, val sleeps: Boolean = false,
     val medical: Boolean = false, val skillRequirement: Int = 0, val trap: Boolean = false, val art: Boolean = false,
     val desc: String = "", val w: Int = 1, val h: Int = 1,
+    /** Materials this structure can be built from. The first one is the default and is the item in [cost]'s first entry. */
+    val stuff: List<ItemType>? = null,
+    /** Kept so saves from before a change still load; hidden from the build menu. */
+    val legacy: Boolean = false,
 ) {
     // Structure
-    WOOD_WALL("Wooden wall", listOf(c(ItemType.WOOD, 5)), 160, 150f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 1f, beauty = -1f),
-    STONE_WALL("Stone wall", listOf(c(ItemType.STONE, 5)), 280, 300f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = null),
-    STEEL_WALL("Steel wall", listOf(c(ItemType.STEEL, 5)), 200, 400f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = Research.SMITHING),
-    STEEL_DOOR("Steel door", listOf(c(ItemType.STEEL, 25)), 260, 250f, "Structure", isDoor = true, flam = 0f, research = Research.SMITHING),
+    WOOD_WALL("Wall", listOf(c(ItemType.WOOD, 5)), 160, 150f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 1f, beauty = -1f, stuff = listOf(ItemType.WOOD, ItemType.STONE, ItemType.STEEL, ItemType.PLASTEEL)),
+    STONE_WALL("Stone wall", listOf(c(ItemType.STONE, 5)), 280, 300f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = null, legacy = true),
+    STEEL_WALL("Steel wall", listOf(c(ItemType.STEEL, 5)), 200, 400f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = Research.SMITHING, legacy = true),
+    STEEL_DOOR("Steel door", listOf(c(ItemType.STEEL, 25)), 260, 250f, "Structure", isDoor = true, flam = 0f, research = Research.SMITHING, legacy = true),
     AUTODOOR("Autodoor", listOf(c(ItemType.STEEL, 40), c(ItemType.COMPONENT, 1)), 320, 220f, "Structure", isDoor = true, flam = 0f, power = -50f, research = Research.AUTODOORS),
-    PLASTEEL_WALL("Plasteel wall", listOf(c(ItemType.PLASTEEL, 5)), 320, 500f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = Research.FABRICATION),
-    DOOR("Wooden door", listOf(c(ItemType.WOOD, 15)), 220, 120f, "Structure", isDoor = true, flam = 1f),
+    PLASTEEL_WALL("Plasteel wall", listOf(c(ItemType.PLASTEEL, 5)), 320, 500f, "Structure", blocksMove = true, blocksSight = true, isWall = true, flam = 0f, research = Research.FABRICATION, legacy = true),
+    DOOR("Door", listOf(c(ItemType.WOOD, 15)), 220, 120f, "Structure", isDoor = true, flam = 1f, stuff = listOf(ItemType.WOOD, ItemType.STEEL)),
     SANDBAGS("Sandbags", listOf(c(ItemType.CLOTH, 5)), 80, 60f, "Security", cover = 0.55f, flam = 0.3f),
     WOOD_FLOOR("Wood floor", listOf(c(ItemType.WOOD, 3)), 70, 1f, "Floors", isFloor = true, beauty = 0.3f, flam = 1f),
     STONE_FLOOR("Stone tiles", listOf(c(ItemType.STONE, 2)), 100, 1f, "Floors", isFloor = true, beauty = 0.6f, flam = 0f, research = Research.STONECUTTING),
@@ -100,4 +104,21 @@ enum class BuildDef(
     val consumesPower get() = power < 0f
     val isShip get() = category == "Ship"
     val totalCost get() = cost.sumOf { (t, n) -> (t.value * n).toDouble() }.toFloat()
+}
+
+/**
+ * What a building material changes compared with plain wood: hit points, flammability and beauty. Hit points are a
+ * multiplier on the structure's own base HP, which is tuned for wood. Flammability is absolute; beauty is a difference.
+ */
+class Material(val item: ItemType, val hpMult: Float, val flam: Float, val beauty: Float, val research: Research?)
+
+object Materials {
+    private val table = listOf(
+        Material(ItemType.WOOD, 1f, 1f, 0f, null),
+        Material(ItemType.STONE, 2f, 0f, 1f, null),
+        Material(ItemType.STEEL, 8f / 3f, 0f, 1f, Research.SMITHING),
+        Material(ItemType.PLASTEEL, 3.5f, 0f, 1.5f, Research.FABRICATION),
+    ).associateBy { it.item }
+
+    fun of(t: ItemType?): Material? = t?.let { table[it] }
 }

@@ -139,7 +139,7 @@ class Panels(private val a: MainActivity) {
                     }
                 }
                 else -> {
-                    val defs = BuildDef.entries.filter { it.category == name }
+                    val defs = BuildDef.entries.filter { it.category == name && !it.legacy }
                     for (d in defs) {
                         val locked = d.research?.takeIf { it !in game.researchDone }?.label
                         val cost = if (d.cost.isEmpty()) "free" else d.cost.joinToString(", ") { "${it.second} ${shortName(it.first)}" }

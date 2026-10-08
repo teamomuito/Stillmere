@@ -16,7 +16,7 @@ class PowerState {
 fun Game.cellFlammability(i: Int): Float {
     var f = 0f
     val b = map.building[i]
-    if (b != null) f = max(f, b.def.flam)
+    if (b != null) f = max(f, b.flam)
     val pl = map.plant[i]
     if (pl != null) f = max(f, pl.type.flammable * (if (weather == Weather.RAIN) 0.4f else 1f))
     val it = map.items[i]
@@ -59,11 +59,11 @@ fun Game.fireTick() {
         if (flam <= 0.01f) f.intensity -= 0.006f else f.intensity = min(1.2f, f.intensity + 0.002f * flam)
         if (f.age % 20 == 0) {
             val b = map.building[i]
-            if (b != null && b.def.flam > 0f) {
-                b.hp -= 4f * f.intensity * b.def.flam
+            if (b != null && b.flam > 0f) {
+                b.hp -= 4f * f.intensity * b.flam
                 if (b.hp <= 0f) {
                     map.removeBuilding(b)
-                    say("A ${b.def.label.lowercase()} burned down.", 2)
+                    say("A ${b.displayName.lowercase()} burned down.", 2)
                 }
             }
             val pl = map.plant[i]
@@ -477,7 +477,7 @@ private fun Game.roomStats() {
         b += fl?.beauty ?: -0.2f
         val bd = m.building[i]
         if (bd != null && bd.built && bd.x == i % m.w && bd.y == i / m.w) {
-            b += bd.def.beauty * bd.quality.mult
+            b += bd.beauty * bd.quality.mult
             wealth[r] += bd.def.totalCost
             when {
                 bd.def.sleeps -> { beds[r]++; if (bd.ownerId >= 0) ownedBeds[r]++; if (bd.def.medical) hosp[r]++; if (bd.prisonerBed) prison[r]++ }

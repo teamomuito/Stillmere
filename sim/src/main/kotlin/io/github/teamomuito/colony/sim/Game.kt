@@ -445,7 +445,18 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     fun clearDesignation(x: Int, y: Int) { val i = cell(x, y); if (i >= 0) map.desig[i] = 0 }
 
     /** Whether the whole footprint (rotated or not) is buildable. */
-    fun canBuildAt(def: BuildDef, x: Int, y: Int, rot: Boolean = false): Boolean {
+    /** The material a new structure of [def] would be made of, or null if the choice is not valid. */
+    fun materialFor(def: BuildDef, material: ItemType?): ItemType? {
+        val options = def.stuff ?: return null
+        val m = material ?: options.first()
+        if (m !in options) return null
+        if (Materials.of(m)?.research?.let { it !in researchDone } == true) return null
+        return m
+    }
+
+    fun canBuildAt(def: BuildDef, x: Int, y: Int, rot: Boolean = false, material: ItemType? = null): Boolean {
+        if (def.stuff != null && materialFor(def, material) == null) return false
+        if (def.stuff == null && material != null) return false
         val fw = if (rot) def.h else def.w; val fh = if (rot) def.w else def.h
         for (yy in y until y + fh) for (xx in x until x + fw) if (!canBuildCell(def, xx, yy)) return false
         return true
@@ -465,10 +476,13 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         return true
     }
 
-    fun placeBlueprint(def: BuildDef, x: Int, y: Int, rot: Boolean = false): Boolean {
-        if (!canBuildAt(def, x, y, rot)) return false
+    /** Places a blueprint. [material] chooses what a material-based structure is made of, for this order only. */
+    fun placeBlueprint(def: BuildDef, x: Int, y: Int, rot: Boolean = false, material: ItemType? = null): Boolean {
+        if (!canBuildAt(def, x, y, rot, material)) return false
         val b = Building(def, x, y, false)
         b.rot = rot
+        if (def.stuff != null) b.material = materialFor(def, material)
+        b.hp = b.maxHp
         for (yy in y until y + b.fh) for (xx in x until x + b.fw) {
             val i = map.idx(xx, yy)
             if (map.plant[i] != null) map.plant[i] = null
@@ -480,7 +494,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     private fun removeBlueprint(i: Int) {
         val b = map.building[i] ?: return
-        if (!b.built) for ((k, c) in b.def.cost.withIndex()) if (b.delivered[k] > 0) map.drop(c.first, b.delivered[k], b.x, b.y)
+        if (!b.built) for ((k, c) in b.cost.withIndex()) if (b.delivered[k] > 0) map.drop(c.first, b.delivered[k], b.x, b.y)
         map.removeBuilding(b)
     }
 

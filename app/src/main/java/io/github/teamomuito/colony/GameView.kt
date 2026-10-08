@@ -54,6 +54,8 @@ class GameView(context: Context) : View(context) {
     var selectedId: Int = -1
     var selectedCell: Int = -1
     var buildRot = false
+    /** Material picked for the next material-based structure; null means the structure's default. */
+    var buildMaterial: io.github.teamomuito.colony.sim.ItemType? = null
 
     var onTileTap: ((Int, Int) -> Unit)? = null
     var onArea: ((Int, Int, Int, Int) -> Unit)? = null
@@ -316,15 +318,15 @@ class GameView(context: Context) : View(context) {
             val b = m.building[i]?.takeIf { it.x == x && it.y == y }
             if (b != null) {
                 val a = if (b.built) 255 else 110
-                if (!b.def.isFloor && !b.def.isDoor && b.def != BuildDef.WOOD_WALL && b.def != BuildDef.STONE_WALL && b.def != BuildDef.STEEL_WALL && b.def != BuildDef.CONDUIT && b.def != BuildDef.TRAP_SPIKE && b.def != BuildDef.TRAP_DEADFALL && a > 200) sprites.furnitureShadow(c, sx, sy, s)
+                if (!b.def.isFloor && !b.def.isDoor && !b.def.isWall && b.def != BuildDef.CONDUIT && b.def != BuildDef.TRAP_SPIKE && b.def != BuildDef.TRAP_DEADFALL && a > 200) sprites.furnitureShadow(c, sx, sy, s)
                 drawBig(c, m, b, sx, sy, s, a)
                 if (!b.built && s >= 26f) {
                     var done = 0; var tot = 0
-                    for (k in b.def.cost.indices) { done += b.delivered[k]; tot += b.def.cost[k].second }
+                    for (k in b.cost.indices) { done += b.delivered[k]; tot += b.cost[k].second }
                     if (tot > 0) { text.textSize = s * 0.22f; text.color = Color.WHITE; c.drawText("$done/$tot", sx + s / 2, sy + s * 0.9f, text) }
                 }
-                if (b.built && b.hp < b.def.hp * 0.99f && b.def.hp > 10f) {
-                    fill.color = 0xFFCC3333.toInt(); c.drawRect(sx, sy + s - 3, sx + s * (b.hp / b.def.hp), sy + s, fill)
+                if (b.built && b.hp < b.maxHp * 0.99f && b.maxHp > 10f) {
+                    fill.color = 0xFFCC3333.toInt(); c.drawRect(sx, sy + s - 3, sx + s * (b.hp / b.maxHp), sy + s, fill)
                 }
                 if (b.forbidden) { fill.color = 0x88B02020.toInt(); c.drawRect(sx, sy, sx + s * b.fw, sy + s * b.fh, fill) }
                 if (b.built && b.def.consumesPower && !b.powered && s >= 22f) {
@@ -430,7 +432,7 @@ class GameView(context: Context) : View(context) {
             for (y in ly..hy step fhp) for (x in lx..hx step fwp) {
                 if (!m.inB(x, y)) continue
                 val ok = when (tl) {
-                    is Tool.Build -> g.canBuildAt(tl.def, x, y, buildRot)
+                    is Tool.Build -> g.canBuildAt(tl.def, x, y, buildRot, buildMaterial)
                     else -> true
                 }
                 fill.color = if (ok) 0x5560E0A0 else 0x55E05050
@@ -526,25 +528,33 @@ class GameView(context: Context) : View(context) {
         if (rot > 0.4f) { fill.color = Color.argb((rot * 140).toInt(), 90, 110, 30); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.36f, fill) }
     }
 
+    /** The material a structure from before materials were chosen was made of. */
+    private fun legacyMaterial(def: BuildDef) = when (def) {
+        BuildDef.STONE_WALL -> io.github.teamomuito.colony.sim.ItemType.STONE
+        BuildDef.STEEL_WALL, BuildDef.STEEL_DOOR, BuildDef.AUTODOOR -> io.github.teamomuito.colony.sim.ItemType.STEEL
+        BuildDef.PLASTEEL_WALL -> io.github.teamomuito.colony.sim.ItemType.PLASTEEL
+        else -> io.github.teamomuito.colony.sim.ItemType.WOOD
+    }
+
     /** Draws a building over its whole footprint: stretched for furniture, cell by cell on a slab for long workbenches. */
     private fun drawBig(c: Canvas, m: io.github.teamomuito.colony.sim.GameMap, b: io.github.teamomuito.colony.sim.Building, sx: Float, sy: Float, s: Float, alpha: Int) {
         val def = b.def
         val lit = b.lit || (b.powered && def.light > 0f)
         val fw = b.fw; val fh = b.fh
-        if (fw == 1 && fh == 1) { drawBuilding(c, m, b.x, b.y, def, sx, sy, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap); return }
+        if (fw == 1 && fh == 1) { drawBuilding(c, m, b.x, b.y, def, sx, sy, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap, b.material); return }
         // Shadow under the whole piece.
         if (alpha > 200) { fill.color = 0x33000000; rect.set(sx + s * 0.1f, sy + s * 0.12f, sx + s * (fw - 0.02f), sy + s * (fh - 0.02f)); c.drawRoundRect(rect, s * 0.12f, s * 0.12f, fill) }
         val perCell = def.workbench && maxOf(fw, fh) >= 3
         if (perCell) {
             fill.color = (sprites.slabColor(def) and 0x00FFFFFF) or (alpha shl 24)
             rect.set(sx + s * 0.04f, sy + s * 0.08f, sx + s * (fw - 0.04f), sy + s * (fh - 0.08f)); c.drawRoundRect(rect, s * 0.1f, s * 0.1f, fill)
-            for (iy in 0 until fh) for (ix in 0 until fw) drawBuilding(c, m, b.x, b.y, def, sx + ix * s, sy + iy * s, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap)
+            for (iy in 0 until fh) for (ix in 0 until fw) drawBuilding(c, m, b.x, b.y, def, sx + ix * s, sy + iy * s, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap, b.material)
         } else {
             c.save()
             c.translate(sx + s * fw / 2f, sy + s * fh / 2f)
             if (b.rot) c.rotate(90f)
             c.scale(def.w.toFloat(), def.h.toFloat())
-            drawBuilding(c, m, b.x, b.y, def, -s / 2f, -s / 2f, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap)
+            drawBuilding(c, m, b.x, b.y, def, -s / 2f, -s / 2f, s, alpha, lit, b.built, b.fuel > 0f, def.fuelCap, b.material)
             c.restore()
         }
     }
@@ -553,12 +563,12 @@ class GameView(context: Context) : View(context) {
     private fun oval(x0: Float, y0: Float, x1: Float, y1: Float, color: Int) { fill.color = color; rect.set(x0, y0, x1, y1); canvasRef?.drawOval(rect, fill) }
     private var canvasRef: Canvas? = null
 
-    private fun drawBuilding(c: Canvas, m: io.github.teamomuito.colony.sim.GameMap, bx: Int, by: Int, def: BuildDef, sx: Float, sy: Float, s: Float, alpha: Int, lit: Boolean, built: Boolean, hasFuel: Boolean, fuelCap: Float) {
+    private fun drawBuilding(c: Canvas, m: io.github.teamomuito.colony.sim.GameMap, bx: Int, by: Int, def: BuildDef, sx: Float, sy: Float, s: Float, alpha: Int, lit: Boolean, built: Boolean, hasFuel: Boolean, fuelCap: Float, material: io.github.teamomuito.colony.sim.ItemType? = null) {
         fun col(argb: Int): Int = (argb and 0x00FFFFFF) or (alpha shl 24)
         canvasRef = c
         when (def) {
-            BuildDef.WOOD_WALL, BuildDef.STONE_WALL, BuildDef.STEEL_WALL, BuildDef.PLASTEEL_WALL -> sprites.wall(c, m, bx, by, def, sx, sy, s, alpha)
-            BuildDef.DOOR, BuildDef.STEEL_DOOR, BuildDef.AUTODOOR -> sprites.door(c, m, bx, by, sx, sy, s, alpha, def)
+            BuildDef.WOOD_WALL, BuildDef.STONE_WALL, BuildDef.STEEL_WALL, BuildDef.PLASTEEL_WALL -> sprites.wall(c, m, bx, by, material ?: legacyMaterial(def), sx, sy, s, alpha)
+            BuildDef.DOOR, BuildDef.STEEL_DOOR, BuildDef.AUTODOOR -> sprites.door(c, m, bx, by, sx, sy, s, alpha, def, material ?: legacyMaterial(def))
             BuildDef.SANDBAGS -> { fill.color = col(0xFFBFA878.toInt()); rect.set(sx + s * 0.05f, sy + s * 0.25f, sx + s * 0.95f, sy + s * 0.75f); c.drawRoundRect(rect, s * 0.2f, s * 0.2f, fill) }
             BuildDef.WOOD_FLOOR, BuildDef.STONE_FLOOR, BuildDef.STEEL_FLOOR, BuildDef.CARPET -> sprites.floor(c, def, bx, by, sx, sy, s)
             BuildDef.CONDUIT -> { stroke.color = col(0xFFD28F3A.toInt()); stroke.strokeWidth = max(2f, s * 0.1f); c.drawLine(sx + s * 0.2f, sy + s * 0.5f, sx + s * 0.8f, sy + s * 0.5f, stroke) }

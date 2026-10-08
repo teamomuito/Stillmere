@@ -554,7 +554,7 @@ internal fun Game.findArt(p: Pawn): Job? {
 }
 
 private fun Game.materialsAvailable(b: Building): Boolean {
-    for ((k, c) in b.def.cost.withIndex()) {
+    for ((k, c) in b.cost.withIndex()) {
         val need = b.missing(k)
         if (need > 0 && map.countItems(c.first) < need) return false
     }
@@ -567,15 +567,15 @@ internal fun Game.findConstruct(p: Pawn): Job? {
         val oj = o.job ?: continue
         if (o === p || o.dead || oj.type != JobType.BUILD || oj.stage >= 3) continue
         val ob = map.building[map.idx(oj.tx, oj.ty)] ?: continue
-        for ((k, c) in ob.def.cost.withIndex()) claims[c.first] = (claims[c.first] ?: 0) + ob.missing(k)
+        for ((k, c) in ob.cost.withIndex()) claims[c.first] = (claims[c.first] ?: 0) + ob.missing(k)
     }
     val stock = ItemType.entries.associateWith { map.countItems(it) - (claims[it] ?: 0) }
     val i = nearestCell(p, K_BUILD) {
         val b = map.building[it]
         if (b == null || b.built || b.forbidden) return@nearestCell false
-        if (b.def.research != null && b.def.research !in researchDone) return@nearestCell false
+        if (!b.researchMet(researchDone)) return@nearestCell false
         if (b.def.art) return@nearestCell false
-        for ((k, c) in b.def.cost.withIndex()) if (b.missing(k) > 0 && (stock[c.first] ?: 0) < b.missing(k)) return@nearestCell false
+        for ((k, c) in b.cost.withIndex()) if (b.missing(k) > 0 && (stock[c.first] ?: 0) < b.missing(k)) return@nearestCell false
         true
     }
     if (i >= 0) {
@@ -591,7 +591,7 @@ internal fun Game.findConstruct(p: Pawn): Job? {
     }
     val r = nearestCell(p, K_DESIG) {
         val b = map.building[it]
-        map.desig[it].toInt() == Desig.REPAIR && b != null && b.built && b.hp < b.def.hp
+        map.desig[it].toInt() == Desig.REPAIR && b != null && b.built && b.hp < b.maxHp
     }
     if (r >= 0) {
         reserve(p, key(r, K_DESIG))

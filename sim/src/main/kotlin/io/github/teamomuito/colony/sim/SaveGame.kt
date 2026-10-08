@@ -7,15 +7,18 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 14
+    /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
+    private const val VERSION = 15
+    private const val OLDEST_READABLE = 14
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
 
-    fun write(g: Game): ByteArray {
+    /** [version] other than the current one exists only so tests can check that older saves still load. */
+    fun write(g: Game, version: Int = VERSION): ByteArray {
         val bytes = ByteArrayOutputStream()
         val o = DataOutputStream(bytes)
-        o.writeInt(VERSION)
+        o.writeInt(version)
         o.writeLong(g.seed); o.writeLong(g.tick); o.writeUTF(g.colonyName)
         o.writeInt(g.scenario.ordinal); o.writeInt(g.storyteller.ordinal); o.writeInt(g.difficulty.ordinal)
         o.writeInt(g.nextPawnId); o.writeInt(g.raidCounter); o.writeInt(g.raidsSurvived)
@@ -56,6 +59,7 @@ object SaveGame {
         o.writeInt(builds.size)
         for (b in builds) {
             o.writeInt(b.def.ordinal); o.writeShort(b.x); o.writeShort(b.y); o.writeBoolean(b.built); o.writeBoolean(b.rot)
+            if (version >= 15) o.writeInt(b.material?.ordinal ?: -1)
             for (d in b.delivered) o.writeInt(d)
             o.writeFloat(b.progress); o.writeFloat(b.hp); o.writeInt(b.ownerId); o.writeFloat(b.fuel)
             o.writeByte(b.quality.ordinal); o.writeBoolean(b.forbidden); o.writeFloat(b.charge); o.writeInt(b.shells)
@@ -158,7 +162,8 @@ object SaveGame {
 
     fun read(data: ByteArray): Game {
         val i = DataInputStream(ByteArrayInputStream(data))
-        require(i.readInt() == VERSION) { "Unsupported save version" }
+        val version = i.readInt()
+        require(version in OLDEST_READABLE..VERSION) { "Unsupported save version" }
         val seed = i.readLong(); val tick = i.readLong(); val name = i.readUTF()
         val scenario = Scenario.entries[i.readInt()]; val story = Storyteller.entries[i.readInt()]; val diff = Difficulty.entries[i.readInt()]
         val nextPawn = i.readInt(); val raidCounter = i.readInt(); val survived = i.readInt()
@@ -207,6 +212,7 @@ object SaveGame {
             val x = i.readShort().toInt(); val y = i.readShort().toInt()
             val b = Building(def, x, y, i.readBoolean())
             b.rot = i.readBoolean()
+            if (version >= 15) { val mi = i.readInt(); if (mi >= 0) b.material = ItemType.entries[mi] }
             for (k in b.delivered.indices) b.delivered[k] = i.readInt()
             b.progress = i.readFloat(); b.hp = i.readFloat(); b.ownerId = i.readInt(); b.fuel = i.readFloat()
             b.quality = Quality.entries[i.readByte().toInt()]; b.forbidden = i.readBoolean(); b.charge = i.readFloat(); b.shells = i.readInt()

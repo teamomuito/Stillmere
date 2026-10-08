@@ -585,9 +585,11 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
     when (j.stage) {
         0 -> {
             var k = -1
-            for (c in b.def.cost.indices) if (b.missing(c) > 0) { k = c; break }
+            for (c in b.cost.indices) if (b.missing(c) > 0) { k = c; break }
             if (k < 0) { j.stage = 3; return }
-            val type = b.def.cost[k].first
+            // Checked when the job starts: if the stock is gone (used by another order, or never there), wait instead of walking.
+            if (map.countItems(b.cost[k].first) < b.missing(k)) { endJob(p); return }
+            val type = b.cost[k].first
             val s = nearestItem(p) { it.type == type }
             if (s == null) { abort(p, true); return }
             reserve(p, key(map.idx(s.x, s.y), K_ITEM))
@@ -597,7 +599,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
         1 -> {
             val ii = map.idx(j.dx, j.dy)
             val s = map.items[ii]
-            val type = b.def.cost[j.aux].first
+            val type = b.cost[j.aux].first
             if (s == null || s.type != type) { j.stage = 0; return }
             val r = goTo(p, j.dx, j.dy)
             if (r == -1) abort(p, true)
@@ -614,7 +616,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                 b.delivered[j.aux] += p.carryCount
                 p.carryCount = 0; p.carryType = null
                 var done = true
-                for (c in b.def.cost.indices) if (b.missing(c) > 0) done = false
+                for (c in b.cost.indices) if (b.missing(c) > 0) done = false
                 j.stage = if (done) 3 else 0
             }
         }
@@ -635,7 +637,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                     map.removeBuilding(b)
                 } else {
                     b.built = true
-                    b.hp = b.def.hp
+                    b.hp = b.maxHp
                     b.quality = q
                     if (b.def.blocksMove || b.def.isWall || b.def.isDoor) ejectPawns(i)
                     if (b.def == BuildDef.GRAVE) b.occupant = -1
@@ -663,7 +665,7 @@ private fun Game.driveDecon(p: Pawn, j: Job) {
     }
     val def = b?.def ?: fl ?: BuildDef.CONDUIT
     if (doWork(p, j, SkillType.CONSTRUCTION, def.work * 0.5f)) {
-        for ((t, n) in def.cost) map.drop(t, max(1, n / 2), p.x, p.y)
+        for ((t, n) in b?.cost ?: def.cost) map.drop(t, max(1, n / 2), p.x, p.y)
         if (b != null) map.removeBuilding(b) else if (fl != null) map.floor[i] = null else map.conduit[i] = false
         map.desig[i] = 0
         map.roomDirty = true
@@ -674,15 +676,15 @@ private fun Game.driveDecon(p: Pawn, j: Job) {
 private fun Game.driveRepair(p: Pawn, j: Job) {
     val i = map.idx(j.tx, j.ty)
     val b = map.building[i]
-    if (b == null || !b.built || b.hp >= b.def.hp || map.desig[i].toInt() != Desig.REPAIR) { map.desig[i] = 0; endJob(p); return }
+    if (b == null || !b.built || b.hp >= b.maxHp || map.desig[i].toInt() != Desig.REPAIR) { map.desig[i] = 0; endJob(p); return }
     if (j.stage == 0) {
         val r = goTo(p, j.tx, j.ty, adjacent = true)
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    b.hp = min(b.def.hp, b.hp + 0.4f * p.workSpeed(SkillType.CONSTRUCTION))
+    b.hp = min(b.maxHp, b.hp + 0.4f * p.workSpeed(SkillType.CONSTRUCTION))
     p.gainXp(SkillType.CONSTRUCTION, 0.04f)
-    if (b.hp >= b.def.hp) { map.desig[i] = 0; endJob(p) }
+    if (b.hp >= b.maxHp) { map.desig[i] = 0; endJob(p) }
 }
 
 private fun Game.driveClean(p: Pawn, j: Job) {

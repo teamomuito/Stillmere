@@ -234,10 +234,10 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         return b.def.isWall || b.def.isDoor
     }
 
-    fun wall(c: Canvas, m: GameMap, x: Int, y: Int, def: BuildDef, sx: Float, sy: Float, s: Float, alpha: Int) {
+    fun wall(c: Canvas, m: GameMap, x: Int, y: Int, mat: ItemType, sx: Float, sy: Float, s: Float, alpha: Int) {
         fun col(argb: Int): Int = (argb and 0x00FFFFFF) or (alpha shl 24)
         val l = wallish(m, x - 1, y); val r = wallish(m, x + 1, y); val u = wallish(m, x, y - 1); val d = wallish(m, x, y + 1)
-        val base = when (def) { BuildDef.WOOD_WALL -> 0xFF8E6A3A.toInt(); BuildDef.STONE_WALL -> 0xFF93939A.toInt(); BuildDef.PLASTEEL_WALL -> 0xFF9FD0CC.toInt(); else -> 0xFFB6C0CA.toInt() }
+        val base = when (mat) { ItemType.WOOD -> 0xFF8E6A3A.toInt(); ItemType.STONE -> 0xFF93939A.toInt(); ItemType.PLASTEEL -> 0xFF9FD0CC.toInt(); else -> 0xFFB6C0CA.toInt() }
         // Soft drop shadow on the ground to the south-east.
         if (alpha > 200) {
             if (!d) box(c, sx + s * 0.08f, sy + s, sx + s * 1.1f, sy + s * 1.14f, 0x33000000)
@@ -248,12 +248,12 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         val inset = s * 0.1f
         box(c, sx + (if (l) 0f else inset), sy + (if (u) 0f else inset), sx + s + 1 - (if (r) 0f else inset), sy + s + 1 - (if (d) 0f else inset), col(shade(base, 1.06f + 0.08f * h(x, y, 2))))
         val lw = max(1f, s * 0.03f)
-        when (def) {
-            BuildDef.WOOD_WALL -> for (k in 1..3) {
+        when (mat) {
+            ItemType.WOOD -> for (k in 1..3) {
                 val py = sy + s * k / 4f
                 line(c, sx + (if (l) 0f else inset), py, sx + s - (if (r) 0f else inset), py, col(0x553A2410), lw)
             }
-            BuildDef.STONE_WALL -> {
+            ItemType.STONE -> {
                 val m0 = sy + s * (0.38f + 0.2f * h(x, y, 3)); val m1 = sy + s * 0.72f
                 line(c, sx, m0, sx + s, m0, col(0x55202024), lw); line(c, sx, m1, sx + s, m1, col(0x55202024), lw)
                 line(c, sx + s * (0.3f + 0.2f * h(x, y, 4)), sy, sx + s * 0.5f, m0, col(0x44202024), lw)
@@ -275,8 +275,8 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         if (!u) box(c, sx + (if (l) 0f else ow), sy + ow, sx + s - (if (r) 0f else ow), sy + ow + max(1f, s * 0.04f), col(0x44FFFFFF))
     }
 
-    fun door(c: Canvas, m: GameMap, x: Int, y: Int, sx: Float, sy: Float, s: Float, alpha: Int, def: BuildDef = BuildDef.DOOR) {
-        val steel = def != BuildDef.DOOR
+    fun door(c: Canvas, m: GameMap, x: Int, y: Int, sx: Float, sy: Float, s: Float, alpha: Int, def: BuildDef, mat: ItemType) {
+        val steel = mat != ItemType.WOOD
         fun col(argb: Int): Int = (argb and 0x00FFFFFF) or (alpha shl 24)
         val horizontalWalls = wallish(m, x - 1, y) && wallish(m, x + 1, y)
         val ow = max(2f, s * 0.08f)

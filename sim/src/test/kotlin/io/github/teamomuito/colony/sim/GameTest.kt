@@ -1023,3 +1023,169 @@ class RulesTest {
         assertTrue((a.opinion[kid.id] ?: 0) >= 40)
     }
 }
+
+class MaterialTest {
+    private fun Game.clear(x0: Int, y0: Int, x1: Int, y1: Int) {
+        for (yy in y0..y1) for (xx in x0..x1) { val i = map.idx(xx, yy); map.terrain[i] = Terrain.SOIL; map.plant[i] = null }
+    }
+    private fun Game.stock(t: ItemType, n: Int, x: Int, y: Int) = map.drop(t, n, x, y)
+    private fun Game.wallAt(x: Int, y: Int) = map.building[map.idx(x, y)]!!
+    private fun preparedGame(seed: Long, vararg research: Research): Game {
+        val g = newGame(seed); g.quiet()
+        g.researchDone.addAll(research)
+        for (c in g.colonists) c.priority[WorkType.CONSTRUCT.ordinal] = 1
+        return g
+    }
+
+    @Test fun simultaneousOrdersUseTheirOwnMaterials() {
+        val g = preparedGame(71, Research.SMITHING, Research.FABRICATION)
+        val y = g.homeY - 7
+        g.clear(g.homeX + 6, y - 1, g.homeX + 20, y + 1)
+        g.stock(ItemType.STEEL, 20, g.homeX, g.homeY - 3)
+        g.stock(ItemType.STONE, 20, g.homeX, g.homeY - 3)
+        g.stock(ItemType.PLASTEEL, 20, g.homeX, g.homeY - 3)
+        val steel0 = g.map.countItems(ItemType.STEEL); val stone0 = g.map.countItems(ItemType.STONE)
+        val plast0 = g.map.countItems(ItemType.PLASTEEL); val wood0 = g.map.countItems(ItemType.WOOD)
+
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 8, y, material = ItemType.STONE))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 10, y, material = ItemType.STEEL))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 12, y, material = ItemType.PLASTEEL))
+        g.run(TICKS_PER_DAY * 2)
+
+        val wood = g.wallAt(g.homeX + 6, y); val stone = g.wallAt(g.homeX + 8, y)
+        val steel = g.wallAt(g.homeX + 10, y); val plast = g.wallAt(g.homeX + 12, y)
+        assertTrue(wood.built && stone.built && steel.built && plast.built)
+        assertEquals(ItemType.WOOD, wood.material)
+        assertEquals(400f, steel.maxHp, 0.5f)
+        assertEquals(300f, stone.maxHp, 0.5f)
+        assertEquals(150f, wood.maxHp, 0.5f)
+        assertEquals(525f, plast.maxHp, 0.5f)
+        assertEquals(1f, wood.flam, 0.001f); assertEquals(0f, steel.flam, 0.001f)
+        assertEquals("Wall (steel)", steel.displayName)
+        // Exactly one wall's worth of each material was spent, no more.
+        assertEquals(steel0 - 5, g.map.countItems(ItemType.STEEL))
+        assertEquals(stone0 - 5, g.map.countItems(ItemType.STONE))
+        assertEquals(plast0 - 5, g.map.countItems(ItemType.PLASTEEL))
+        assertEquals(wood0 - 5, g.map.countItems(ItemType.WOOD))
+    }
+
+    @Test fun insufficientMaterialWaitsWithoutSpendingAnything() {
+        val g = preparedGame(72, Research.FABRICATION)
+        val y = g.homeY - 7
+        g.clear(g.homeX + 6, y - 1, g.homeX + 12, y + 1)
+        assertEquals(0, g.map.countItems(ItemType.PLASTEEL))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.PLASTEEL))
+        g.run(TICKS_PER_DAY * 2)
+        val w = g.wallAt(g.homeX + 6, y)
+        assertFalse(w.built)
+        assertEquals(0, w.delivered.sum())
+        // Four plasteel arrive: still not enough for five.
+        g.stock(ItemType.PLASTEEL, 4, g.homeX, g.homeY - 3)
+        g.run(TICKS_PER_DAY * 2)
+        assertFalse(w.built)
+        assertEquals(0, w.delivered.sum())
+        g.stock(ItemType.PLASTEEL, 1, g.homeX, g.homeY - 3)
+        g.run(TICKS_PER_DAY * 2)
+        assertTrue(w.built)
+        assertEquals(525f, w.maxHp, 0.5f)
+    }
+
+    @Test fun researchGatesEachMaterial() {
+        val g = preparedGame(73)
+        val y = g.homeY - 7
+        g.clear(g.homeX + 6, y - 1, g.homeX + 10, y + 1)
+        assertFalse(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.STEEL))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.STONE))
+        assertFalse(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 8, y, material = ItemType.GOLD))
+        assertFalse(g.placeBlueprint(BuildDef.TABLE, g.homeX + 8, y, material = ItemType.STONE))
+    }
+
+    @Test fun cancellingReturnsTheChosenMaterialAndRebuildUsesTheNewChoice() {
+        val g = preparedGame(74, Research.SMITHING)
+        val y = g.homeY - 7
+        g.clear(g.homeX + 6, y - 1, g.homeX + 10, y + 1)
+        g.stock(ItemType.STEEL, 5, g.homeX, g.homeY - 3)
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.STEEL))
+        val w = g.wallAt(g.homeX + 6, y)
+        // Pretend two steel were delivered, then cancel: they come back as steel, not wood.
+        w.delivered[0] = 2
+        val before = g.map.countItems(ItemType.STEEL)
+        g.designate(g.homeX + 6, y, Desig.DECON)
+        assertNull(g.map.building[g.map.idx(g.homeX + 6, y)])
+        assertEquals(before + 2, g.map.countItems(ItemType.STEEL))
+        // Rebuild on the same tile with stone.
+        g.stock(ItemType.STONE, 5, g.homeX, g.homeY - 3)
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.STONE))
+        g.run(TICKS_PER_DAY * 2)
+        val again = g.wallAt(g.homeX + 6, y)
+        assertTrue(again.built)
+        assertEquals(ItemType.STONE, again.material)
+        assertEquals(300f, again.maxHp, 0.5f)
+    }
+
+    @Test fun saveKeepsMaterialsDeliveriesAndDamage() {
+        val g = preparedGame(75, Research.SMITHING)
+        val y = g.homeY - 7
+        g.clear(g.homeX + 6, y - 1, g.homeX + 12, y + 1)
+        g.stock(ItemType.STEEL, 3, g.homeX, g.homeY - 3)
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.STEEL))
+        assertTrue(g.placeBlueprint(BuildDef.DOOR, g.homeX + 8, y, material = ItemType.STEEL))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 10, y))
+        g.wallAt(g.homeX + 6, y).delivered[0] = 2
+        g.wallAt(g.homeX + 10, y).hp = 77f
+        val l = SaveGame.read(SaveGame.write(g))
+        val s = l.map.building[l.map.idx(g.homeX + 6, y)]!!
+        assertEquals(ItemType.STEEL, s.material)
+        assertEquals(2, s.delivered[0])
+        assertEquals(400f, s.maxHp, 0.5f)
+        assertEquals(ItemType.STEEL, l.map.building[l.map.idx(g.homeX + 8, y)]!!.material)
+        assertEquals(77f, l.map.building[l.map.idx(g.homeX + 10, y)]!!.hp, 0.01f)
+        assertEquals(ItemType.WOOD, l.map.building[l.map.idx(g.homeX + 10, y)]!!.material)
+        // The loaded blueprint keeps being built from the right material.
+        l.run(TICKS_PER_DAY)
+        assertEquals(ItemType.STEEL, l.map.building[l.map.idx(g.homeX + 6, y)]!!.material)
+    }
+
+    @Test fun savesFromBeforeMaterialsStillLoad() {
+        val g = preparedGame(76, Research.SMITHING)
+        g.clear(g.homeX + 6, g.homeY - 8, g.homeX + 12, g.homeY - 6)
+        // A legacy fixed-material wall from the old separate defs, and an ordinary wood wall.
+        g.map.setBuilding(Building(BuildDef.STONE_WALL, g.homeX + 6, g.homeY - 7, true))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 8, g.homeY - 7))
+        val old = SaveGame.read(SaveGame.write(g, 14))
+        val legacy = old.map.building[old.map.idx(g.homeX + 6, g.homeY - 7)]!!
+        assertEquals(BuildDef.STONE_WALL, legacy.def)
+        assertEquals(300f, legacy.maxHp, 0.5f)
+        assertEquals(listOf(ItemType.STONE to 5), legacy.cost)
+        val wood = old.map.building[old.map.idx(g.homeX + 8, g.homeY - 7)]!!
+        assertNull(wood.material)
+        assertEquals(150f, wood.maxHp, 0.5f)
+        // And a current save of the same game loads too.
+        val now = SaveGame.read(SaveGame.write(g))
+        assertEquals(BuildDef.WOOD_WALL, now.map.building[now.map.idx(g.homeX + 8, g.homeY - 7)]!!.def)
+    }
+
+    @Test fun severalOrdersAtOnceAllFinishWithTheRightMaterials() {
+        val g = preparedGame(77, Research.SMITHING, Research.FABRICATION)
+        val y = g.homeY - 7
+        g.clear(g.homeX + 6, y - 1, g.homeX + 30, y + 1)
+        g.stock(ItemType.STEEL, 30, g.homeX, g.homeY - 3)
+        g.stock(ItemType.STONE, 30, g.homeX, g.homeY - 3)
+        val plan = listOf(ItemType.WOOD, ItemType.STONE, ItemType.STEEL, ItemType.PLASTEEL, ItemType.STEEL, ItemType.STONE, ItemType.PLASTEEL, ItemType.WOOD)
+        g.stock(ItemType.PLASTEEL, 10, g.homeX, g.homeY - 3)
+        val before = listOf(ItemType.STEEL, ItemType.STONE, ItemType.PLASTEEL, ItemType.WOOD).associateWith { g.map.countItems(it) }
+        for ((k, m) in plan.withIndex()) assertTrue("order $k", g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6 + k * 3, y, material = m))
+        g.run(TICKS_PER_DAY * 3)
+        for ((k, m) in plan.withIndex()) {
+            val w = g.wallAt(g.homeX + 6 + k * 3, y)
+            assertTrue("built $k", w.built)
+            assertEquals("material $k", m, w.material)
+        }
+        // Two steel, two stone, two plasteel and two wood walls: five of the matching item per wall.
+        assertEquals(before[ItemType.STEEL]!! - 10, g.map.countItems(ItemType.STEEL))
+        assertEquals(before[ItemType.STONE]!! - 10, g.map.countItems(ItemType.STONE))
+        assertEquals(before[ItemType.PLASTEEL]!! - 10, g.map.countItems(ItemType.PLASTEEL))
+        assertEquals(before[ItemType.WOOD]!! - 10, g.map.countItems(ItemType.WOOD))
+    }
+}
