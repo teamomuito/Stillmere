@@ -40,11 +40,11 @@ import io.github.teamomuito.colony.sim.setPrisonerBed
 import io.github.teamomuito.colony.sim.trader
 import kotlin.math.min
 
-class Dialogs(private val a: MainActivity) {
-    private val ui get() = a.ui
-    private val game get() = a.game
+class Dialogs(val a: MainActivity) {
+    internal val ui get() = a.ui
+    internal val game get() = a.game
 
-    private fun dialog(title: String, build: (LinearLayout, Dialog) -> Unit, wide: Boolean = true): Dialog {
+    internal fun dialog(title: String, build: (LinearLayout, Dialog) -> Unit, wide: Boolean = true): Dialog {
         val body = ui.column()
         body.setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
         val holder = ui.column()
@@ -68,7 +68,7 @@ class Dialogs(private val a: MainActivity) {
         return d
     }
 
-    private fun closeRow(d: Dialog, label: String = "Close"): View =
+    internal fun closeRow(d: Dialog, label: String = "Close"): View =
         ui.button(label, 12f) { d.dismiss() }.also { (it as TextView).gravity = Gravity.CENTER }
 
     // ================================================================== menu

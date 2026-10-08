@@ -3,8 +3,10 @@
 A RimWorld-style colony simulator for Android, written from scratch in Kotlin. A few survivors land on a hostile
 rimworld; you keep them fed, warm, healthy and sane, fight off raiders, and eventually build a ship to leave.
 
-Everything is original code with no copied assets (the art is drawn on a canvas). It is built to play like the base game
-without any DLC. It is not literally a 1:1 clone: buildings are one tile each, there is a single map and no world map.
+Everything is original code with no copied assets (the art is drawn procedurally on a canvas: textured ground, wall autotiling, shadowed furniture, per-species
+animals, rotating pawns with hair and clothing, item sprites). It is built to play like the base game
+without any DLC. It is not literally a 1:1 clone: buildings are one tile each, and only your home map is played in detail; the rest of the world is a coarse tile map
+you travel across with caravans.
 
 ## what's in it
 
@@ -38,6 +40,16 @@ without any DLC. It is not literally a 1:1 clone: buildings are one tile each, t
 - Day and night with real lighting, four seasons, rain, fog, snow and thunderstorms, wind, cold snaps and heat waves.
 - Crops that grow by temperature, light and soil; frost and blight; spoilage of food and corpses.
 - Wildlife herds: grazers, predators, farm animals. Hunting, taming, slaughtering, butchering, wool, milk, eggs.
+
+**World map and caravans**
+- A generated planet of ~1000 tiles: six biomes, hills, impassable mountains and water, roads that halve travel cost,
+  and 14 settlements of three factions (tribes, outlanders, pirate gangs).
+- Form a caravan from colonists and tame pack animals (35 kg per person, 70 kg muffalo/cow, 140 kg thrumbo), pack goods
+  from your stockpiles by weight, pick a tile and see the ETA. Heavier loads travel slower.
+- On the road: food and rest, resting at night, foraging when supplies run out (with food-poisoning risk), perishables
+  spoiling, medicine used on the wounded, animal and bandit ambushes, ruined caches, getting lost.
+- Settlements: trade with their stock (your best negotiator sets prices), deliver requested goods for silver and goodwill,
+  gift items, and avoid pirate territory. Caravans come home and unload at your map edge. Saved with the game.
 
 **Threats and events**
 - Storytellers (Marlowe, Juniper, Orrin) and difficulty levels.

@@ -68,6 +68,8 @@ class GameView(context: Context) : View(context) {
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
     private val rect = RectF()
     private val path = Path()
+    private val sprites = Sprites(fill, stroke)
+    private val facing = HashMap<Int, Float>()
 
     private var areaStart: IntArray? = null
     private var areaEnd: IntArray? = null
@@ -257,35 +259,26 @@ class GameView(context: Context) : View(context) {
             val sx = (x - camX) * s
             val sy = (y - camY) * s
             val t = m.terrain[i]
-            fill.color = terrainColor(t, m.rockType[i])
-            c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill)
+            sprites.ground(c, m, x, y, sx, sy, s, frame, m.biome)
             if (t == Terrain.ROCK && m.ore[i] != Ore.NONE) {
-                fill.color = oreColor(m.ore[i])
-                c.drawCircle(sx + s * 0.3f, sy + s * 0.35f, s * 0.09f, fill)
-                c.drawCircle(sx + s * 0.65f, sy + s * 0.6f, s * 0.11f, fill)
-                c.drawCircle(sx + s * 0.4f, sy + s * 0.75f, s * 0.07f, fill)
-            } else if (t == Terrain.ROCK) {
-                fill.color = 0x14FFFFFF
-                c.drawRect(sx + 2, sy + 2, sx + s * 0.5f, sy + s * 0.4f, fill)
+                val oc = oreColor(m.ore[i])
+                for ((ox, oy, r) in listOf(Triple(0.3f, 0.35f, 0.1f), Triple(0.65f, 0.55f, 0.12f), Triple(0.4f, 0.75f, 0.075f), Triple(0.72f, 0.25f, 0.06f))) {
+                    fill.color = 0x66000000; c.drawCircle(sx + s * ox + s * 0.02f, sy + s * oy + s * 0.025f, s * r, fill)
+                    fill.color = oc; c.drawCircle(sx + s * ox, sy + s * oy, s * r, fill)
+                    fill.color = 0x66FFFFFF; c.drawCircle(sx + s * (ox - 0.03f), sy + s * (oy - 0.03f), s * r * 0.35f, fill)
+                }
             }
             if (m.natRoof[i] && t != Terrain.ROCK) { fill.color = 0x30101018; c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
             val fl = m.floor[i]
-            if (fl != null) {
-                fill.color = when (fl) {
-                    BuildDef.WOOD_FLOOR -> 0xFFA9824F.toInt()
-                    BuildDef.STONE_FLOOR -> 0xFF9A9A9C.toInt()
-                    BuildDef.STEEL_FLOOR -> 0xFF8896A2.toInt()
-                    else -> 0xFF8A5870.toInt()
-                }
-                c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill)
-                stroke.color = 0x22000000; stroke.strokeWidth = 1f
-                c.drawRect(sx, sy, sx + s, sy + s, stroke)
-            }
+            if (fl != null) sprites.floor(c, fl, x, y, sx, sy, s)
             if (m.snow[i] > 0.05f) { fill.color = Color.argb((m.snow[i] * 190).toInt(), 240, 246, 255); c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
             val z = m.zoneAt(i)
             if (z != null) {
-                fill.color = when (z.kind) { ZoneKind.STOCKPILE -> 0x55E8C547; ZoneKind.GROWING -> 0x4458C45A; else -> 0x558A8A8A }
-                c.drawRect(sx, sy, sx + s, sy + s, fill)
+                when (z.kind) {
+                    ZoneKind.STOCKPILE -> sprites.stockpile(c, sx, sy, s)
+                    ZoneKind.GROWING -> sprites.growing(c, sx, sy, s)
+                    else -> { fill.color = 0x558A8A8A; c.drawRect(sx, sy, sx + s, sy + s, fill) }
+                }
             }
             if (m.filth[i] > 0) {
                 fill.color = 0x66301810
@@ -318,11 +311,12 @@ class GameView(context: Context) : View(context) {
             val sx = (x - camX) * s
             val sy = (y - camY) * s
             val pl = m.plant[i]
-            if (pl != null) drawPlant(c, pl.type, pl.growth, pl.mature, sx, sy, s)
+            if (pl != null) sprites.plant(c, pl.type, pl.growth, pl.mature, x, y, sx, sy, s, frame)
             val b = m.building[i]
             if (b != null) {
                 val a = if (b.built) 255 else 110
-                drawBuilding(c, b.def, sx, sy, s, a, b.lit || (b.powered && b.def.light > 0f), b.built, b.fuel > 0f, b.def.fuelCap)
+                if (!b.def.isFloor && !b.def.isDoor && b.def != BuildDef.WOOD_WALL && b.def != BuildDef.STONE_WALL && b.def != BuildDef.STEEL_WALL && b.def != BuildDef.CONDUIT && b.def != BuildDef.TRAP_SPIKE && b.def != BuildDef.TRAP_DEADFALL && a > 200) sprites.furnitureShadow(c, sx, sy, s)
+                drawBuilding(c, m, x, y, b.def, sx, sy, s, a, b.lit || (b.powered && b.def.light > 0f), b.built, b.fuel > 0f, b.def.fuelCap)
                 if (!b.built && s >= 26f) {
                     var done = 0; var tot = 0
                     for (k in b.def.cost.indices) { done += b.delivered[k]; tot += b.def.cost[k].second }
@@ -359,10 +353,8 @@ class GameView(context: Context) : View(context) {
             val sx = (it.x - camX) * s
             val sy = (it.y - camY) * s
             if (it.corpseOf != null) { drawCorpse(c, it.corpseRace?.color ?: 0xFF888888.toInt(), it.corpseRace?.isAnimal == true, sx, sy, s, it.rot); continue }
-            fill.color = itemColor(it.type)
-            rect.set(sx + s * 0.22f, sy + s * 0.22f, sx + s * 0.78f, sy + s * 0.78f)
-            c.drawRoundRect(rect, s * 0.1f, s * 0.1f, fill)
-            if (it.rot > 0.3f && it.type.spoilDays > 0f) { fill.color = Color.argb((it.rot * 160).toInt(), 80, 100, 30); c.drawRoundRect(rect, s * 0.1f, s * 0.1f, fill) }
+            sprites.item(c, it.type, itemColor(it.type), it.count, sx, sy, s, it.rot, it.x * 31 + it.y)
+            if (it.rot > 0.3f && it.type.spoilDays > 0f) { fill.color = Color.argb((it.rot * 130).toInt(), 80, 100, 30); c.drawCircle(sx + s * 0.5f, sy + s * 0.5f, s * 0.3f, fill) }
             if (it.forbidden) { stroke.color = 0xFFD03030.toInt(); stroke.strokeWidth = 3f; c.drawLine(sx + s * 0.2f, sy + s * 0.2f, sx + s * 0.8f, sy + s * 0.8f, stroke) }
             if (s >= 28f && it.type.stack > 1) {
                 text.textSize = s * 0.26f; text.color = Color.BLACK
@@ -375,9 +367,7 @@ class GameView(context: Context) : View(context) {
             val x = i % m.w; val y = i / m.w
             if (x < x0 || x > x1 || y < y0 || y > y1) continue
             val sx = (x - camX) * s; val sy = (y - camY) * s
-            val flick = 0.85f + 0.15f * sin(frame * 0.5f + i)
-            fill.color = Color.argb(180, 255, 90, 20); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.42f * f.intensity.coerceAtMost(1f) * flick, fill)
-            fill.color = Color.argb(220, 255, 200, 60); c.drawCircle(sx + s / 2, sy + s * 0.55f, s * 0.24f * f.intensity.coerceAtMost(1f) * flick, fill)
+            sprites.fire(c, sx, sy, s, f.intensity, frame, i)
         }
 
         // Pawns.
@@ -533,35 +523,44 @@ class GameView(context: Context) : View(context) {
         if (rot > 0.4f) { fill.color = Color.argb((rot * 140).toInt(), 90, 110, 30); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.36f, fill) }
     }
 
-    private fun drawBuilding(c: Canvas, def: BuildDef, sx: Float, sy: Float, s: Float, alpha: Int, lit: Boolean, built: Boolean, hasFuel: Boolean, fuelCap: Float) {
+    private fun rr(x0: Float, y0: Float, x1: Float, y1: Float, r: Float, color: Int) { fill.color = color; rect.set(x0, y0, x1, y1); canvasRef?.drawRoundRect(rect, r, r, fill) }
+    private fun oval(x0: Float, y0: Float, x1: Float, y1: Float, color: Int) { fill.color = color; rect.set(x0, y0, x1, y1); canvasRef?.drawOval(rect, fill) }
+    private var canvasRef: Canvas? = null
+
+    private fun drawBuilding(c: Canvas, m: io.github.teamomuito.colony.sim.GameMap, bx: Int, by: Int, def: BuildDef, sx: Float, sy: Float, s: Float, alpha: Int, lit: Boolean, built: Boolean, hasFuel: Boolean, fuelCap: Float) {
         fun col(argb: Int): Int = (argb and 0x00FFFFFF) or (alpha shl 24)
+        canvasRef = c
         when (def) {
-            BuildDef.WOOD_WALL, BuildDef.STONE_WALL, BuildDef.STEEL_WALL -> {
-                fill.color = col(when (def) { BuildDef.WOOD_WALL -> 0xFF8A6535.toInt(); BuildDef.STONE_WALL -> 0xFF8D8D90.toInt(); else -> 0xFFAEB8C2.toInt() })
-                c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill)
-                stroke.color = col(0xFF2A2018.toInt()); stroke.strokeWidth = 2f
-                c.drawRect(sx + 1, sy + 1, sx + s, sy + s, stroke)
-            }
-            BuildDef.DOOR -> {
-                fill.color = col(0xFF6B4A22.toInt()); c.drawRect(sx + s * 0.1f, sy + s * 0.3f, sx + s * 0.9f, sy + s * 0.7f, fill)
-                fill.color = col(0xFFE0C070.toInt()); c.drawCircle(sx + s * 0.75f, sy + s * 0.5f, s * 0.05f, fill)
-            }
+            BuildDef.WOOD_WALL, BuildDef.STONE_WALL, BuildDef.STEEL_WALL -> sprites.wall(c, m, bx, by, def, sx, sy, s, alpha)
+            BuildDef.DOOR -> sprites.door(c, m, bx, by, sx, sy, s, alpha)
             BuildDef.SANDBAGS -> { fill.color = col(0xFFBFA878.toInt()); rect.set(sx + s * 0.05f, sy + s * 0.25f, sx + s * 0.95f, sy + s * 0.75f); c.drawRoundRect(rect, s * 0.2f, s * 0.2f, fill) }
-            BuildDef.WOOD_FLOOR, BuildDef.STONE_FLOOR, BuildDef.STEEL_FLOOR, BuildDef.CARPET -> { fill.color = col(0x889A8A6A.toInt()); c.drawRect(sx, sy, sx + s, sy + s, fill) }
+            BuildDef.WOOD_FLOOR, BuildDef.STONE_FLOOR, BuildDef.STEEL_FLOOR, BuildDef.CARPET -> sprites.floor(c, def, bx, by, sx, sy, s)
             BuildDef.CONDUIT -> { stroke.color = col(0xFFD28F3A.toInt()); stroke.strokeWidth = max(2f, s * 0.1f); c.drawLine(sx + s * 0.2f, sy + s * 0.5f, sx + s * 0.8f, sy + s * 0.5f, stroke) }
             BuildDef.SLEEPING_SPOT -> { fill.color = col(0xFF8E8168.toInt()); rect.set(sx + s * 0.18f, sy + s * 0.15f, sx + s * 0.82f, sy + s * 0.85f); c.drawRoundRect(rect, s * 0.15f, s * 0.15f, fill) }
             BuildDef.BED, BuildDef.HOSPITAL_BED -> {
-                fill.color = col(if (def == BuildDef.BED) 0xFF5B7BB8.toInt() else 0xFFE8EEF2.toInt()); rect.set(sx + s * 0.12f, sy + s * 0.08f, sx + s * 0.88f, sy + s * 0.92f)
-                c.drawRoundRect(rect, s * 0.1f, s * 0.1f, fill)
-                fill.color = col(0xFFF4F4FA.toInt()); c.drawRect(sx + s * 0.2f, sy + s * 0.14f, sx + s * 0.8f, sy + s * 0.34f, fill)
-                if (def == BuildDef.HOSPITAL_BED) { fill.color = col(0xFFD03030.toInt()); c.drawRect(sx + s * 0.44f, sy + s * 0.5f, sx + s * 0.56f, sy + s * 0.8f, fill); c.drawRect(sx + s * 0.32f, sy + s * 0.58f, sx + s * 0.68f, sy + s * 0.7f, fill) }
+                val hosp = def == BuildDef.HOSPITAL_BED
+                rr(sx + s * 0.1f, sy + s * 0.04f, sx + s * 0.9f, sy + s * 0.96f, s * 0.08f, col(if (hosp) 0xFF9AA4AE.toInt() else 0xFF6B4A2A.toInt()))
+                rr(sx + s * 0.16f, sy + s * 0.1f, sx + s * 0.84f, sy + s * 0.9f, s * 0.06f, col(if (hosp) 0xFFE8EEF2.toInt() else 0xFF5B7BB8.toInt()))
+                rr(sx + s * 0.22f, sy + s * 0.14f, sx + s * 0.78f, sy + s * 0.34f, s * 0.07f, col(0xFFF6F6FA.toInt()))
+                fill.color = col(if (hosp) 0xFFC7D4DC.toInt() else 0xFF4A6AA4.toInt()); c.drawRect(sx + s * 0.16f, sy + s * 0.5f, sx + s * 0.84f, sy + s * 0.9f, fill)
+                stroke.color = col(0x33000000); stroke.strokeWidth = max(1f, s * 0.03f); c.drawLine(sx + s * 0.16f, sy + s * 0.5f, sx + s * 0.84f, sy + s * 0.5f, stroke)
+                if (hosp) { fill.color = col(0xFFD03030.toInt()); c.drawRect(sx + s * 0.44f, sy + s * 0.56f, sx + s * 0.56f, sy + s * 0.84f, fill); c.drawRect(sx + s * 0.32f, sy + s * 0.64f, sx + s * 0.68f, sy + s * 0.76f, fill) }
             }
             BuildDef.TABLE, BuildDef.CHESS_TABLE, BuildDef.BILLIARDS -> {
-                fill.color = col(if (def == BuildDef.BILLIARDS) 0xFF2F6F46.toInt() else 0xFF8B5E34.toInt()); rect.set(sx + s * 0.08f, sy + s * 0.18f, sx + s * 0.92f, sy + s * 0.82f)
-                c.drawRoundRect(rect, s * 0.08f, s * 0.08f, fill)
-                if (def == BuildDef.CHESS_TABLE) { fill.color = col(0xFFE8E0C8.toInt()); c.drawRect(sx + s * 0.3f, sy + s * 0.3f, sx + s * 0.7f, sy + s * 0.7f, fill) }
+                val felt = def == BuildDef.BILLIARDS
+                rr(sx + s * 0.06f, sy + s * 0.14f, sx + s * 0.94f, sy + s * 0.86f, s * 0.07f, col(if (felt) 0xFF5A3A1E.toInt() else 0xFF8B5E34.toInt()))
+                if (felt) { fill.color = col(0xFF2F7A4A.toInt()); c.drawRect(sx + s * 0.14f, sy + s * 0.22f, sx + s * 0.86f, sy + s * 0.78f, fill); fill.color = col(0xFFF4F4F0.toInt()); c.drawCircle(sx + s * 0.38f, sy + s * 0.5f, s * 0.05f, fill); fill.color = col(0xFFD03030.toInt()); c.drawCircle(sx + s * 0.62f, sy + s * 0.46f, s * 0.05f, fill) }
+                else {
+                    stroke.color = col(0x44281808); stroke.strokeWidth = max(1f, s * 0.025f)
+                    for (k in 1..3) c.drawLine(sx + s * 0.08f, sy + s * (0.14f + 0.18f * k), sx + s * 0.92f, sy + s * (0.14f + 0.18f * k), stroke)
+                    if (def == BuildDef.CHESS_TABLE) { for (qy in 0 until 4) for (qx in 0 until 4) { fill.color = col(if ((qx + qy) % 2 == 0) 0xFFE8E0C8.toInt() else 0xFF3A2A1A.toInt()); c.drawRect(sx + s * (0.3f + 0.1f * qx), sy + s * (0.3f + 0.1f * qy), sx + s * (0.4f + 0.1f * qx), sy + s * (0.4f + 0.1f * qy), fill) } }
+                }
             }
-            BuildDef.STOOL, BuildDef.CHAIR -> { fill.color = col(0xFF9A6A3A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.24f, fill) }
+            BuildDef.STOOL, BuildDef.CHAIR -> {
+                fill.color = col(0xFF9A6A3A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.25f, fill)
+                fill.color = col(0xFFB98650.toInt()); c.drawCircle(sx + s * 0.46f, sy + s * 0.46f, s * 0.17f, fill)
+                if (def == BuildDef.CHAIR) { fill.color = col(0xFF7A4E26.toInt()); c.drawRect(sx + s * 0.2f, sy + s * 0.22f, sx + s * 0.8f, sy + s * 0.32f, fill) }
+            }
             BuildDef.PLANT_POT -> { fill.color = col(0xFF9A5A3A.toInt()); c.drawCircle(sx + s / 2, sy + s * 0.62f, s * 0.2f, fill); fill.color = col(0xFF4C9A3A.toInt()); c.drawCircle(sx + s / 2, sy + s * 0.4f, s * 0.22f, fill) }
             BuildDef.SCULPTURE_SMALL, BuildDef.SCULPTURE_LARGE -> { fill.color = col(0xFFC9C4B8.toInt()); path.reset(); path.moveTo(sx + s * 0.5f, sy + s * 0.1f); path.lineTo(sx + s * 0.8f, sy + s * 0.85f); path.lineTo(sx + s * 0.2f, sy + s * 0.85f); path.close(); c.drawPath(path, fill) }
             BuildDef.TORCH_LAMP, BuildDef.STANDING_LAMP -> {
@@ -572,24 +571,41 @@ class GameView(context: Context) : View(context) {
             BuildDef.TELEVISION -> { fill.color = col(0xFF22252A.toInt()); c.drawRect(sx + s * 0.1f, sy + s * 0.2f, sx + s * 0.9f, sy + s * 0.75f, fill); fill.color = col(if (lit) 0xFF66B8FF.toInt() else 0xFF3A4048.toInt()); c.drawRect(sx + s * 0.18f, sy + s * 0.28f, sx + s * 0.82f, sy + s * 0.65f, fill) }
             BuildDef.CRAFTING_SPOT -> { stroke.color = col(0xFFC9B28A.toInt()); stroke.strokeWidth = 2f; c.drawRect(sx + s * 0.15f, sy + s * 0.15f, sx + s * 0.85f, sy + s * 0.85f, stroke) }
             BuildDef.CAMPFIRE -> {
-                fill.color = col(0xFF5B4A3A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.3f, fill)
-                if (hasFuel) { fill.color = col(0xFFFF9A2E.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * (0.14f + 0.04f * sin(frame * 0.6f)), fill) }
+                for (k in 0 until 8) { val a = k * 0.7854f; fill.color = col(if (k % 2 == 0) 0xFF7A7A7E.toInt() else 0xFF5E5E62.toInt()); c.drawCircle(sx + s / 2 + kotlin.math.cos(a) * s * 0.3f, sy + s / 2 + sin(a) * s * 0.3f, s * 0.09f, fill) }
+                stroke.color = col(0xFF4A3220.toInt()); stroke.strokeWidth = max(2f, s * 0.09f); c.drawLine(sx + s * 0.3f, sy + s * 0.62f, sx + s * 0.7f, sy + s * 0.4f, stroke); c.drawLine(sx + s * 0.3f, sy + s * 0.4f, sx + s * 0.7f, sy + s * 0.62f, stroke)
+                if (hasFuel && built) sprites.fire(c, sx, sy, s * 0.9f, 0.8f, frame, bx * 7 + by)
             }
             BuildDef.STOVE_FUEL, BuildDef.STOVE_ELEC -> {
-                fill.color = col(0xFF55575C.toInt()); rect.set(sx + s * 0.06f, sy + s * 0.1f, sx + s * 0.94f, sy + s * 0.9f); c.drawRoundRect(rect, s * 0.08f, s * 0.08f, fill)
-                fill.color = col(if (def == BuildDef.STOVE_ELEC) 0xFF62B0FF.toInt() else 0xFFE0762E.toInt())
-                c.drawCircle(sx + s * 0.32f, sy + s * 0.35f, s * 0.12f, fill); c.drawCircle(sx + s * 0.68f, sy + s * 0.35f, s * 0.12f, fill)
+                rr(sx + s * 0.05f, sy + s * 0.1f, sx + s * 0.95f, sy + s * 0.9f, s * 0.08f, col(0xFF4A4C52.toInt()))
+                rr(sx + s * 0.1f, sy + s * 0.15f, sx + s * 0.9f, sy + s * 0.85f, s * 0.06f, col(0xFF6A6D74.toInt()))
+                val burner = if (def == BuildDef.STOVE_ELEC) 0xFF62B0FF.toInt() else 0xFFE0762E.toInt()
+                for (k in 0 until 4) { val bx2 = sx + s * (0.32f + 0.36f * (k % 2)); val by2 = sy + s * (0.32f + 0.36f * (k / 2)); fill.color = col(0xFF26272A.toInt()); c.drawCircle(bx2, by2, s * 0.13f, fill); fill.color = col(if (built && (def == BuildDef.STOVE_ELEC || hasFuel)) burner else 0xFF55575C.toInt()); c.drawCircle(bx2, by2, s * 0.07f, fill) }
             }
-            BuildDef.BUTCHER_TABLE -> { fill.color = col(0xFFA87A5A.toInt()); rect.set(sx + s * 0.06f, sy + s * 0.2f, sx + s * 0.94f, sy + s * 0.8f); c.drawRoundRect(rect, s * 0.06f, s * 0.06f, fill); stroke.color = col(0xFFB03030.toInt()); stroke.strokeWidth = 3f; c.drawLine(sx + s * 0.3f, sy + s * 0.35f, sx + s * 0.7f, sy + s * 0.65f, stroke) }
-            BuildDef.TAILOR_BENCH -> { fill.color = col(0xFF9A6AA8.toInt()); rect.set(sx + s * 0.06f, sy + s * 0.2f, sx + s * 0.94f, sy + s * 0.8f); c.drawRoundRect(rect, s * 0.06f, s * 0.06f, fill) }
+            BuildDef.BUTCHER_TABLE -> {
+                rr(sx + s * 0.05f, sy + s * 0.16f, sx + s * 0.95f, sy + s * 0.84f, s * 0.05f, col(0xFFA88A6A.toInt()))
+                rr(sx + s * 0.12f, sy + s * 0.22f, sx + s * 0.88f, sy + s * 0.78f, s * 0.04f, col(0xFFC2A888.toInt()))
+                stroke.color = col(0xFFB8BEC6.toInt()); stroke.strokeWidth = max(2f, s * 0.07f); c.drawLine(sx + s * 0.3f, sy + s * 0.65f, sx + s * 0.62f, sy + s * 0.35f, stroke)
+                fill.color = col(0xFF8A2A24.toInt()); c.drawCircle(sx + s * 0.7f, sy + s * 0.6f, s * 0.07f, fill)
+            }
+            BuildDef.TAILOR_BENCH -> {
+                rr(sx + s * 0.05f, sy + s * 0.16f, sx + s * 0.95f, sy + s * 0.84f, s * 0.05f, col(0xFF8A6A4A.toInt()))
+                fill.color = col(0xFF9A6AA8.toInt()); c.drawRect(sx + s * 0.14f, sy + s * 0.24f, sx + s * 0.58f, sy + s * 0.76f, fill)
+                fill.color = col(0xFFE8E4DC.toInt()); c.drawRect(sx + s * 0.64f, sy + s * 0.3f, sx + s * 0.86f, sy + s * 0.5f, fill)
+                stroke.color = col(0xFF2A2A2E.toInt()); stroke.strokeWidth = max(1f, s * 0.04f); c.drawLine(sx + s * 0.7f, sy + s * 0.64f, sx + s * 0.8f, sy + s * 0.7f, stroke)
+            }
             BuildDef.SMITHY, BuildDef.MACHINING, BuildDef.FAB_BENCH -> {
-                fill.color = col(0xFF4A4E56.toInt()); rect.set(sx + s * 0.06f, sy + s * 0.12f, sx + s * 0.94f, sy + s * 0.88f); c.drawRoundRect(rect, s * 0.06f, s * 0.06f, fill)
-                fill.color = col(if (def == BuildDef.SMITHY) 0xFFE0762E.toInt() else 0xFF62B0FF.toInt()); c.drawRect(sx + s * 0.25f, sy + s * 0.3f, sx + s * 0.75f, sy + s * 0.5f, fill)
+                rr(sx + s * 0.05f, sy + s * 0.1f, sx + s * 0.95f, sy + s * 0.9f, s * 0.06f, col(0xFF3A3D44.toInt()))
+                rr(sx + s * 0.1f, sy + s * 0.15f, sx + s * 0.9f, sy + s * 0.85f, s * 0.05f, col(0xFF565A62.toInt()))
+                if (def == BuildDef.SMITHY) { fill.color = col(if (built) 0xFFE0762E.toInt() else 0xFF55575C.toInt()); c.drawRect(sx + s * 0.18f, sy + s * 0.24f, sx + s * 0.5f, sy + s * 0.46f, fill); fill.color = col(0xFF22242A.toInt()); path.reset(); path.moveTo(sx + s * 0.55f, sy + s * 0.62f); path.lineTo(sx + s * 0.85f, sy + s * 0.62f); path.lineTo(sx + s * 0.78f, sy + s * 0.76f); path.lineTo(sx + s * 0.6f, sy + s * 0.76f); path.close(); c.drawPath(path, fill) }
+                else { fill.color = col(0xFF62B0FF.toInt()); c.drawRect(sx + s * 0.18f, sy + s * 0.24f, sx + s * 0.5f, sy + s * 0.4f, fill); fill.color = col(0xFFC9CED6.toInt()); c.drawCircle(sx + s * 0.7f, sy + s * 0.64f, s * 0.12f, fill); fill.color = col(0xFF22242A.toInt()); c.drawCircle(sx + s * 0.7f, sy + s * 0.64f, s * 0.05f, fill) }
             }
             BuildDef.STONECUTTER, BuildDef.DRUG_LAB -> { fill.color = col(if (def == BuildDef.DRUG_LAB) 0xFF6AAE88.toInt() else 0xFF8E8E92.toInt()); rect.set(sx + s * 0.06f, sy + s * 0.2f, sx + s * 0.94f, sy + s * 0.8f); c.drawRoundRect(rect, s * 0.06f, s * 0.06f, fill) }
             BuildDef.RESEARCH_BENCH, BuildDef.HI_TECH_BENCH -> {
-                fill.color = col(0xFF3F7F86.toInt()); rect.set(sx + s * 0.06f, sy + s * 0.18f, sx + s * 0.94f, sy + s * 0.82f); c.drawRoundRect(rect, s * 0.08f, s * 0.08f, fill)
-                fill.color = col(0xFFBEEAF0.toInt()); c.drawRect(sx + s * 0.3f, sy + s * 0.3f, sx + s * 0.7f, sy + s * 0.5f, fill)
+                rr(sx + s * 0.04f, sy + s * 0.14f, sx + s * 0.96f, sy + s * 0.86f, s * 0.06f, col(if (def == BuildDef.HI_TECH_BENCH) 0xFF2E4A5E.toInt() else 0xFF6B5A44.toInt()))
+                fill.color = col(0xFF1E2A32.toInt()); c.drawRect(sx + s * 0.16f, sy + s * 0.2f, sx + s * 0.62f, sy + s * 0.5f, fill)
+                fill.color = col(if (built) 0xFF7ADCEA.toInt() else 0xFF3A4A52.toInt()); c.drawRect(sx + s * 0.2f, sy + s * 0.24f, sx + s * 0.58f, sy + s * 0.46f, fill)
+                fill.color = col(0xFFD8DCE0.toInt()); c.drawRect(sx + s * 0.2f, sy + s * 0.6f, sx + s * 0.58f, sy + s * 0.76f, fill)
+                fill.color = col(0xFFE8E0C8.toInt()); c.drawRect(sx + s * 0.68f, sy + s * 0.3f, sx + s * 0.88f, sy + s * 0.56f, fill)
             }
             BuildDef.HYDROPONICS -> { fill.color = col(0xFF2E5A8A.toInt()); c.drawRect(sx + s * 0.05f, sy + s * 0.05f, sx + s * 0.95f, sy + s * 0.95f, fill); fill.color = col(0xFF3F8A55.toInt()); c.drawRect(sx + s * 0.15f, sy + s * 0.15f, sx + s * 0.85f, sy + s * 0.85f, fill) }
             BuildDef.WOOD_GENERATOR -> { fill.color = col(0xFF6B5A44.toInt()); c.drawRect(sx + s * 0.08f, sy + s * 0.15f, sx + s * 0.92f, sy + s * 0.85f, fill); fill.color = col(if (hasFuel) 0xFFFF9A2E.toInt() else 0xFF3A3A3A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.16f, fill) }
@@ -598,11 +614,20 @@ class GameView(context: Context) : View(context) {
             BuildDef.BATTERY -> { fill.color = col(0xFF4C5F3A.toInt()); c.drawRect(sx + s * 0.12f, sy + s * 0.2f, sx + s * 0.88f, sy + s * 0.85f, fill); fill.color = col(0xFFE8E8E8.toInt()); c.drawRect(sx + s * 0.4f, sy + s * 0.1f, sx + s * 0.6f, sy + s * 0.2f, fill) }
             BuildDef.HEATER -> { fill.color = col(0xFFB04A2E.toInt()); c.drawRect(sx + s * 0.1f, sy + s * 0.2f, sx + s * 0.9f, sy + s * 0.8f, fill) }
             BuildDef.COOLER -> { fill.color = col(0xFF2E7AB0.toInt()); c.drawRect(sx + s * 0.1f, sy + s * 0.2f, sx + s * 0.9f, sy + s * 0.8f, fill) }
-            BuildDef.TURRET -> { fill.color = col(0xFF3B3E44.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.38f, fill); fill.color = col(0xFF9AA0A8.toInt()); c.drawRect(sx + s * 0.45f, sy + s * 0.05f, sx + s * 0.55f, sy + s * 0.5f, fill) }
+            BuildDef.TURRET -> {
+                rr(sx + s * 0.1f, sy + s * 0.1f, sx + s * 0.9f, sy + s * 0.9f, s * 0.12f, col(0xFF4A4D55.toInt()))
+                fill.color = col(0xFF2C2E34.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.3f, fill)
+                fill.color = col(0xFF70757E.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.22f, fill)
+                rr(sx + s * 0.44f, sy + s * 0.02f, sx + s * 0.56f, sy + s * 0.5f, s * 0.03f, col(0xFF22242A.toInt()))
+            }
             BuildDef.MORTAR -> { fill.color = col(0xFF4A4F3A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.4f, fill); fill.color = col(0xFF22241A.toInt()); c.drawCircle(sx + s / 2, sy + s / 2, s * 0.16f, fill) }
             BuildDef.TRAP_SPIKE -> { stroke.color = col(0xFFB0B4B8.toInt()); stroke.strokeWidth = 2.5f; for (k in 0 until 4) c.drawLine(sx + s * (0.2f + 0.2f * k), sy + s * 0.8f, sx + s * (0.2f + 0.2f * k), sy + s * 0.3f, stroke) }
             BuildDef.TRAP_DEADFALL -> { fill.color = col(0xFF7A7A7E.toInt()); c.drawRect(sx + s * 0.15f, sy + s * 0.15f, sx + s * 0.85f, sy + s * 0.85f, fill) }
-            BuildDef.GRAVE -> { fill.color = col(0xFF8A8A8E.toInt()); c.drawRect(sx + s * 0.3f, sy + s * 0.1f, sx + s * 0.7f, sy + s * 0.9f, fill); fill.color = col(0xFF6A6A6E.toInt()); c.drawRect(sx + s * 0.18f, sy + s * 0.3f, sx + s * 0.82f, sy + s * 0.42f, fill) }
+            BuildDef.GRAVE -> {
+                oval(sx + s * 0.18f, sy + s * 0.1f, sx + s * 0.82f, sy + s * 0.92f, col(0xFF6E5A42.toInt()))
+                oval(sx + s * 0.26f, sy + s * 0.18f, sx + s * 0.7f, sy + s * 0.74f, col(0xFF86704F.toInt()))
+                rr(sx + s * 0.34f, sy + s * 0.08f, sx + s * 0.66f, sy + s * 0.3f, s * 0.08f, col(0xFF9A9A9E.toInt()))
+            }
             BuildDef.SHIP_COMPUTER, BuildDef.SHIP_ENGINE, BuildDef.SHIP_REACTOR, BuildDef.SHIP_CASKET -> {
                 fill.color = col(when (def) { BuildDef.SHIP_ENGINE -> 0xFFB8C0CC.toInt(); BuildDef.SHIP_REACTOR -> 0xFF6CE0A8.toInt(); BuildDef.SHIP_CASKET -> 0xFF9AB8E8.toInt(); else -> 0xFFE6E8EE.toInt() })
                 rect.set(sx + s * 0.06f, sy + s * 0.06f, sx + s * 0.94f, sy + s * 0.94f); c.drawRoundRect(rect, s * 0.2f, s * 0.2f, fill)
@@ -623,56 +648,46 @@ class GameView(context: Context) : View(context) {
     private fun drawPawn(c: Canvas, p: Pawn, sx: Float, sy: Float, s: Float) {
         val cx = sx + s / 2
         val cy = sy + s / 2
+        var ang = facing[p.id] ?: 0f
+        val moving = p.moveCd > 0 && (p.x != p.fromX || p.y != p.fromY)
+        if (moving) {
+            ang = Math.toDegrees(kotlin.math.atan2((p.y - p.fromY).toDouble(), (p.x - p.fromX).toDouble())).toFloat()
+        } else {
+            val tid = p.job?.targetPawn ?: -1
+            val t = if (tid >= 0) game?.pawnById(tid) else null
+            if (t != null && (t.x != p.x || t.y != p.y)) ang = Math.toDegrees(kotlin.math.atan2((t.y - p.y).toDouble(), (t.x - p.x).toDouble())).toFloat()
+        }
+        facing[p.id] = ang
         if (p.isAnimal) {
             val size = p.race.size.coerceIn(0.5f, 2.2f)
-            val len = s * 0.34f * size.coerceAtMost(1.6f)
+            sprites.animal(c, p, cx, cy, s, ang, moving, frame)
             if (p.downed) {
-                fill.color = p.race.color; rect.set(cx - len, cy - len * 0.55f, cx + len, cy + len * 0.55f); c.drawOval(rect, fill)
-                stroke.color = 0xAA000000.toInt(); stroke.strokeWidth = 2f; c.drawLine(cx - len * 0.5f, cy - len * 0.3f, cx + len * 0.5f, cy + len * 0.3f, stroke)
-            } else {
-                fill.color = 0x44000000; rect.set(cx - len, cy - len * 0.45f + s * 0.05f, cx + len, cy + len * 0.55f + s * 0.05f); c.drawOval(rect, fill)
-                fill.color = p.race.color; rect.set(cx - len, cy - len * 0.5f, cx + len, cy + len * 0.5f); c.drawOval(rect, fill)
-                fill.color = Color.argb(255, Color.red(p.race.color) * 8 / 10, Color.green(p.race.color) * 8 / 10, Color.blue(p.race.color) * 8 / 10)
-                val face = if (p.fromX < p.x) 1f else -1f
-                c.drawCircle(cx + len * 0.95f * face, cy - len * 0.1f, len * 0.4f, fill)
+                stroke.color = 0xCC000000.toInt(); stroke.strokeWidth = 3f
+                c.drawLine(cx - s * 0.2f, cy - s * 0.15f, cx + s * 0.2f, cy + s * 0.15f, stroke); c.drawLine(cx - s * 0.2f, cy + s * 0.15f, cx + s * 0.2f, cy - s * 0.15f, stroke)
             }
             if (p.faction == Faction.PLAYER) { stroke.color = 0xFFE8B04A.toInt(); stroke.strokeWidth = 2f; c.drawCircle(cx, cy, s * 0.42f * size.coerceAtMost(1.5f), stroke) }
             if (p.manhunter) { stroke.color = 0xFFD9453B.toInt(); stroke.strokeWidth = 3f; c.drawCircle(cx, cy, s * 0.42f * size.coerceAtMost(1.5f), stroke) }
-            if (p.faction == Faction.PLAYER && s >= 30f) { text.textSize = s * 0.22f; text.color = Color.WHITE; c.drawText(p.name, cx, cy - s * 0.45f, text) }
+            if (p.faction == Faction.PLAYER && s >= 30f) { text.textSize = s * 0.22f; text.color = Color.WHITE; text.setShadowLayer(3f, 0f, 0f, Color.BLACK); c.drawText(p.name, cx, cy - s * 0.45f, text); text.clearShadowLayer() }
             if (p.hp < 99f) hpBar(c, cx, cy, s, p)
             return
         }
-        val skin = Color.rgb(200 - (p.id * 13) % 60, 160 - (p.id * 7) % 40, 130 - (p.id * 5) % 30)
+        val outer = p.apparel.lastOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.OUTER }
+            ?: p.apparel.firstOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.SHIRT }
+        val body = if (outer != null) apparelColor(outer.type) else sprites.shade(sprites.skinOf(p), 0.9f)
         if (p.downed) {
-            fill.color = pawnColor(p); rect.set(cx - s * 0.4f, cy - s * 0.2f, cx + s * 0.4f, cy + s * 0.2f); c.drawRoundRect(rect, s * 0.2f, s * 0.2f, fill)
-            fill.color = skin; c.drawCircle(cx - s * 0.36f, cy, s * 0.13f, fill)
+            sprites.downedHuman(c, p, cx, cy, s, body)
         } else {
-            fill.color = 0x55000000; c.drawCircle(cx + s * 0.04f, cy + s * 0.06f, s * 0.32f, fill)
-            // Body colour comes from the outermost clothing.
-            val outer = p.apparel.lastOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.OUTER } ?: p.apparel.firstOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.SHIRT }
-            fill.color = if (outer != null) apparelColor(outer.type) else skin
-            c.drawCircle(cx, cy, s * 0.3f, fill)
-            fill.color = skin
-            c.drawCircle(cx, cy - s * 0.08f, s * 0.15f, fill)
             val hat = p.apparel.firstOrNull { it.type.apparel?.slot == io.github.teamomuito.colony.sim.ApparelSlot.HEAD }
-            if (hat != null) { fill.color = apparelColor(hat.type); c.drawCircle(cx, cy - s * 0.12f, s * 0.13f, fill) }
-            stroke.color = when {
+            val ring = when {
                 p.drafted -> 0xFFFFD34D.toInt()
                 p.prisoner -> 0xFFE88A30.toInt()
                 p.faction == Faction.ENEMY || p.hostileFlag -> 0xFFD9453B.toInt()
                 p.faction == Faction.VISITOR -> 0xFF5EA8E8.toInt()
-                else -> 0xCC202020.toInt()
+                else -> 0
             }
-            stroke.strokeWidth = if (p.drafted || p.faction != Faction.PLAYER || p.prisoner) 4f else 2f
-            c.drawCircle(cx, cy, s * 0.31f, stroke)
-            if (p.weaponItem != null) {
-                val w = p.weapon
-                stroke.color = 0xFF222222.toInt(); stroke.strokeWidth = max(2f, s * 0.07f)
-                c.drawLine(cx, cy, cx + s * (if (w.ranged) 0.4f else 0.3f), cy - s * 0.1f, stroke)
-            }
+            val carry = if (p.carryCount > 0) itemColor(p.carryType ?: ItemType.WOOD) else if (p.job?.stack != null) 0xFF777777.toInt() else null
+            sprites.human(c, p, cx, cy, s, ang, body, hat?.let { apparelColor(it.type) }, ring, if (ring != 0) max(2.5f, s * 0.07f) else 0f, moving, frame, carry, false)
         }
-        if (p.carryCount > 0) { fill.color = itemColor(p.carryType ?: ItemType.WOOD); c.drawRect(cx - s * 0.1f, cy - s * 0.5f, cx + s * 0.1f, cy - s * 0.3f, fill) }
-        if (p.job?.stack != null) { fill.color = 0xFF555555.toInt(); c.drawRect(cx - s * 0.2f, cy - s * 0.5f, cx + s * 0.2f, cy - s * 0.3f, fill) }
         if (p.hp < 99f) hpBar(c, cx, cy, s, p)
         if (p.breakUntil > 0) { text.textSize = s * 0.5f; text.color = 0xFFFF6B4A.toInt(); c.drawText("!", cx, cy - s * 0.55f, text) }
         if (s >= 26f && (p.colonist || p.prisoner || p.faction == Faction.VISITOR)) {
