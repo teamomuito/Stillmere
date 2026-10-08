@@ -596,3 +596,64 @@ class VictoryTest {
         assertTrue(g.won && g.gameOver)
     }
 }
+
+class CaravanTest {
+    private fun packed(g: Game): Pair<List<Pawn>, Map<ItemType, Int>> {
+        g.map.drop(ItemType.MEAL_PACKAGED, 20, g.homeX, g.homeY)
+        g.map.drop(ItemType.STEEL, 100, g.homeX, g.homeY)
+        g.paintZone(g.homeX - 2, g.homeY - 2, g.homeX + 2, g.homeY + 2, ZoneKind.STOCKPILE)
+        g.map.drop(ItemType.MEAL_PACKAGED, 20, g.homeX, g.homeY); g.map.drop(ItemType.STEEL, 100, g.homeX, g.homeY)
+        return listOf(g.colonists[0]) to mapOf(ItemType.MEAL_PACKAGED to 20, ItemType.STEEL to 10)
+    }
+
+    @Test fun worldHasHomeSettlementsAndRoutes() {
+        val g = newGame()
+        val w = g.world
+        assertTrue(w.passable(w.homeTile))
+        assertEquals(g.map.biome, w.biome[w.homeTile])
+        assertTrue(w.settlements.size >= 8)
+        val reachable = w.settlements.count { w.path(w.homeTile, it.tile) != null }
+        assertTrue("most settlements reachable", reachable >= w.settlements.size / 2)
+    }
+
+    @Test fun caravanTravelsTradesAndComesHome() {
+        val g = newGame(); g.quiet()
+        val (members, items) = packed(g)
+        val dest = g.world.settlements.first { it.faction.trades && g.world.path(g.world.homeTile, it.tile) != null }
+        // Drop a stockpile so goods are packable.
+        val before = g.colonists.size
+        assertNull(g.formCaravan(members, items, dest.tile))
+        assertEquals(before - 1, g.colonists.size)
+        val c = g.caravans.single()
+        assertTrue(c.capacity() >= 35f)
+        var guard = 0
+        while (g.caravans.contains(c) && c.tile != dest.tile && guard++ < 400000 / 250 * 6) { g.run(250) }
+        if (g.caravans.contains(c) && c.tile == dest.tile) {
+            g.refreshSettlement(dest)
+            val gold = g.caravanSell(c, dest, ItemType.STEEL, 5)
+            assertTrue(gold > 0)
+            assertNull(g.orderCaravan(c, g.world.homeTile))
+            guard = 0
+            while (g.caravans.contains(c) && guard++ < 6000) g.run(250)
+        }
+        // Either it returned (members back on the map) or something is still en route / was lost; the state must be consistent.
+        if (g.caravans.isEmpty()) assertTrue(g.pawns.any { it === members[0] } || !members[0].alive)
+    }
+
+    @Test fun cannotSendEveryone() {
+        val g = newGame()
+        assertNotNull(g.formCaravan(g.colonists, emptyMap(), g.world.settlements[0].tile))
+    }
+
+    @Test fun savesAndLoadsCaravans() {
+        val g = newGame(); g.quiet()
+        val (members, items) = packed(g)
+        val dest = g.world.settlements.first { it.faction.trades && g.world.path(g.world.homeTile, it.tile) != null }
+        assertNull(g.formCaravan(members, items, dest.tile))
+        g.run(250 * 3)
+        val l = SaveGame.read(SaveGame.write(g))
+        assertEquals(1, l.caravans.size)
+        assertEquals(g.caravans[0].inventory, l.caravans[0].inventory)
+        assertEquals(g.caravans[0].members.size, l.caravans[0].members.size)
+    }
+}

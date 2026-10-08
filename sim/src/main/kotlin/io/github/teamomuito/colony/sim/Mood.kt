@@ -251,6 +251,7 @@ fun Game.startBreak(p: Pawn, kind: Int) {
 }
 
 fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
+    if (caravanDeath(p, cause)) return
     if (p.race.mech) {
         map.drop(ItemType.STEEL, rng.range(20, 60), p.x, p.y)
         map.drop(ItemType.COMPONENT, rng.range(1, 3), p.x, p.y)

@@ -88,6 +88,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
     val power = PowerState()
     // Trading
     val traders = ArrayList<TraderInfo>()
+    // World map and caravans
+    val world = World.generate(seed, map.biome)
+    val caravans = ArrayList<Caravan>()
+    var nextCaravanId = 1
     var silverEarned = 0
     var autosaveHook: (() -> Unit)? = null
     var debugHook: ((String) -> Unit)? = null
@@ -545,7 +549,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
         if (tick % TICKS_PER_HOUR == 0L) hourlyTick()
         val gone = pawns.filter { it.dead && tick - it.deathTick > 10 }
         if (gone.isNotEmpty()) pawns.removeAll(gone.toSet())
-        if (humansOnSide.none { it.colonist } && !gameOver) {
+        if (humansOnSide.none { it.colonist } && caravans.none { c -> c.members.any { it.colonist && it.alive } } && !gameOver) {
             gameOver = true
             say("Everyone is dead. The colony has fallen.", 3)
         }
@@ -602,6 +606,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
     // ------------------------------------------------------------------ slow tick (every 250)
     private fun slowTick() {
         worldSlowTick()
+        if (caravans.isNotEmpty()) caravansTick()
         for (p in pawns) if (p.alive) {
             if (p.colonist || p.prisoner) moodUpdate(p)
             comfortTick(p)

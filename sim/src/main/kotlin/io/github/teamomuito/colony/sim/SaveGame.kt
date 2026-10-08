@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 7
+    private const val VERSION = 8
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -84,6 +84,26 @@ object SaveGame {
         val pawns = g.pawns.filter { it.alive }
         o.writeInt(pawns.size)
         for (p in pawns) writePawn(o, p, g.tick)
+        // World state
+        for (g2 in g.world.goodwill) o.writeInt(g2)
+        o.writeInt(g.world.settlements.size)
+        for (st in g.world.settlements) {
+            o.writeInt(st.silver); o.writeLong(st.stockTick)
+            o.writeInt(st.stock.size); for ((k, v) in st.stock) { o.writeInt(k.ordinal); o.writeInt(v) }
+            val r = st.request
+            o.writeBoolean(r != null)
+            if (r != null) { o.writeInt(r.type.ordinal); o.writeInt(r.count); o.writeInt(r.reward); o.writeLong(r.expires) }
+        }
+        o.writeInt(g.nextCaravanId)
+        o.writeInt(g.caravans.size)
+        for (c in g.caravans) {
+            o.writeInt(c.id); o.writeUTF(c.name); o.writeInt(c.tile); o.writeInt(c.destination); o.writeFloat(c.progress)
+            o.writeBoolean(c.resting); o.writeBoolean(c.goingHome); o.writeUTF(c.lastEvent); o.writeBoolean(c.forageNote)
+            o.writeInt(c.route.size); for (t in c.route) o.writeInt(t)
+            o.writeInt(c.inventory.size); for ((k, v) in c.inventory) { o.writeInt(k.ordinal); o.writeInt(v) }
+            val ms = c.members.filter { it.alive }
+            o.writeInt(ms.size); for (p in ms) writePawn(o, p, g.tick)
+        }
         val recent = g.log.takeLast(60)
         o.writeInt(recent.size)
         for (l in recent) { o.writeLong(l.tick); o.writeUTF(l.text); o.writeInt(l.level) }
@@ -231,6 +251,26 @@ object SaveGame {
         g.traders.addAll(traderList)
 
         repeat(i.readInt()) { g.pawns.add(readPawn(i, tick)) }
+        run {
+            for (k in g.world.goodwill.indices) g.world.goodwill[k] = i.readInt()
+            repeat(i.readInt()) { idx ->
+                val st = g.world.settlements.getOrNull(idx)
+                val silver = i.readInt(); val stockTick = i.readLong()
+                val stock = List(i.readInt()) { ItemType.entries[i.readInt()] to i.readInt() }
+                val req = if (i.readBoolean()) SettlementRequest(ItemType.entries[i.readInt()], i.readInt(), i.readInt(), i.readLong()) else null
+                if (st != null) { st.silver = silver; st.stockTick = stockTick; st.stock.putAll(stock); st.request = req }
+            }
+            g.nextCaravanId = i.readInt()
+            repeat(i.readInt()) {
+                val c = Caravan(i.readInt(), i.readUTF(), i.readInt())
+                c.destination = i.readInt(); c.progress = i.readFloat(); c.resting = i.readBoolean(); c.goingHome = i.readBoolean()
+                c.lastEvent = i.readUTF(); c.forageNote = i.readBoolean()
+                repeat(i.readInt()) { c.route.add(i.readInt()) }
+                repeat(i.readInt()) { c.inventory[ItemType.entries[i.readInt()]] = i.readInt() }
+                repeat(i.readInt()) { c.members.add(readPawn(i, tick)) }
+                g.caravans.add(c)
+            }
+        }
         g.log.clear()
         repeat(i.readInt()) { g.log.add(LogEntry(i.readLong(), i.readUTF(), i.readInt())) }
         map.rebuildRooms(g.outdoorTemp())
