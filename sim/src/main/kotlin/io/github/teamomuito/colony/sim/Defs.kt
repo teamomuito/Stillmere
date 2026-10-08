@@ -82,9 +82,9 @@ enum class PlantType(
     PINE("Pine tree", 12f, ItemType.WOOD, 20, 400, 0, false, wood = true),
     PALM("Palm tree", 9f, ItemType.WOOD, 14, 300, 0, false, wood = true),
     POPLAR("Poplar", 8f, ItemType.WOOD, 18, 350, 0, false, wood = true),
-    BERRY("Strawberry bush", 0f, ItemType.STRAWBERRIES, 8, 120, 0, false),
+    BERRY("Strawberry bush", 5f, ItemType.STRAWBERRIES, 8, 120, 0, false),
     BRAMBLE("Brambles", 0f, null, 0, 150, 0, false),
-    WILD_HEALROOT("Wild healroot", 0f, ItemType.HEALROOT, 3, 120, 0, false),
+    WILD_HEALROOT("Wild healroot", 6f, ItemType.HEALROOT, 3, 120, 0, false),
     RICE("Rice", 5.8f, ItemType.RICE, 12, 110, 170, true),
     POTATO("Potatoes", 5.8f, ItemType.POTATOES, 11, 110, 170, true),
     CORN("Corn", 11.5f, ItemType.CORN, 40, 110, 170, true),
@@ -96,6 +96,7 @@ enum class PlantType(
     HAYGRASS("Hay grass", 3.5f, ItemType.HAY, 20, 90, 120, true, minTemp = 3f);
 
     val isTree get() = wood
+    val regrows get() = this == BERRY || this == WILD_HEALROOT
 }
 
 enum class ItemCat(val label: String) {
@@ -131,6 +132,7 @@ enum class ItemType(
     MILK("Milk", ItemCat.FOOD_MEAT, 75, 2f, 0.05f, 4f),
     MEAL_SIMPLE("Simple meal", ItemCat.FOOD_MEAL, 10, 10f, 0.9f, 4f),
     MEAL_FINE("Fine meal", ItemCat.FOOD_MEAL, 10, 15f, 0.9f, 4f),
+    MEAL_PACKAGED("Packaged survival meal", ItemCat.FOOD_MEAL, 10, 12f, 0.9f, 0f),
     PEMMICAN("Pemmican", ItemCat.FOOD_MEAL, 50, 3f, 0.05f, 0f),
     KIBBLE("Kibble", ItemCat.FOOD_ANIMAL, 75, 0.9f, 0.05f, 0f, humanFood = false),
     HAY("Hay", ItemCat.FOOD_ANIMAL, 75, 0.4f, 0.05f, 40f, flammable = 1f, humanFood = false),
@@ -226,6 +228,9 @@ enum class Weapon(
     TURRET_GUN("Turret", true, 11f, 28f, 50, 0.75f, DamageKind.BULLET, burst = 3),
     MORTAR_SHELL("Mortar", true, 40f, 55f, 300, 0.5f, DamageKind.BLAST, aoe = 2.6f),
     MOLOTOV("Molotov", true, 5f, 15f, 100, 0.8f, DamageKind.BURN, aoe = 1.8f),
+    BLADE("Mechanoid blades", false, 18f, 1.6f, 30, 0.85f, DamageKind.CUT, armorPen = 0.2f),
+    LANCE("Charge lance", true, 28f, 24f, 110, 0.82f, DamageKind.BULLET, warmup = 25, armorPen = 0.45f),
+    MECH_GUN("Mechanoid cannon", true, 12f, 22f, 90, 0.7f, DamageKind.BULLET, burst = 5, warmup = 20, armorPen = 0.1f),
     TEETH("Teeth", false, 8f, 1.5f, 36, 0.85f, DamageKind.BITE),
     CLAWS("Claws", false, 6f, 1.5f, 32, 0.85f, DamageKind.SCRATCH),
     HEAD_BUTT("Horns", false, 12f, 1.5f, 50, 0.8f, DamageKind.BRUISE),

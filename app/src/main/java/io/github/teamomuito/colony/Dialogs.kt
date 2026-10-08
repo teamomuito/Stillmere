@@ -30,6 +30,8 @@ import io.github.teamomuito.colony.sim.Storyteller
 import io.github.teamomuito.colony.sim.Zone
 import io.github.teamomuito.colony.sim.ZoneKind
 import io.github.teamomuito.colony.sim.assignBed
+import io.github.teamomuito.colony.sim.availableSurgeries
+import io.github.teamomuito.colony.sim.queueSurgery
 import io.github.teamomuito.colony.sim.buyItem
 import io.github.teamomuito.colony.sim.buyPrice
 import io.github.teamomuito.colony.sim.sellItem
@@ -73,6 +75,7 @@ class Dialogs(private val a: MainActivity) {
             item("Colony statistics") { a.panels.toggle("stats") }
             item("Storyteller & difficulty") { settings() }
             item("How to play") { help() }
+            a.lastError()?.let { err -> item("Last error (for bug reports)") { dialog("Last error", { b2, d2 -> b2.addView(ui.mono(err, 10f)); b2.addView(closeRow(d2), ui.lin(-1, -2, 0f, 0, 10, 0, 0)) }) } }
             if (game.shipComplete()) item("🚀 Launch the escape ship") {
                 AlertDialog.Builder(a).setMessage("Launch the ship and leave the rim for good? This ends the game.")
                     .setPositiveButton("Launch") { _, _ -> if (game.launchShip()) a.refreshHud() }.setNegativeButton("Not yet", null).show()
@@ -367,6 +370,19 @@ class Dialogs(private val a: MainActivity) {
             }
             render()
         })
+    }
+
+    fun surgery(p: Pawn) {
+        dialog("Surgery: ${p.name}", { body, d ->
+            body.addView(ui.label("The patient walks to a bed; a doctor (skill 3+) operates. Hospital beds improve success.", 11.5f, ui.dim))
+            val ops = game.availableSurgeries(p)
+            if (ops.isEmpty()) body.addView(ui.label("No operations available. Research Prosthetics or Bionics for implants.", 12f, ui.warn))
+            for (o in ops) {
+                val cost = if (o.implant != null) o.implant!!.cost.joinToString(", ") { "${it.second} ${it.first.label.lowercase()}" } else "no materials"
+                body.addView(ui.button("${o.label(p)}\n$cost", 11.5f) { game.queueSurgery(p, o); d.dismiss(); a.panels.showPawn(p) }, ui.lin(-1, -2, 0f, 0, 3, 0, 0))
+            }
+            body.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 10, 0, 0))
+        }, false)
     }
 
     // ================================================================== trade

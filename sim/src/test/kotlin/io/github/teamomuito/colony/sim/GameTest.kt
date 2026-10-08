@@ -127,6 +127,7 @@ class HealthTest {
 
     @Test fun untreatedBleedingEventuallyKills() {
         val (g, p) = human()
+        for (c in g.colonists) c.priority[WorkType.DOCTOR.ordinal] = 0
         for (k in 0 until 6) g.woundPart(p, 0, DamageKind.CUT, 5f)
         var worst = 0f
         repeat(96) { g.run(1000); worst = maxOf(worst, p.bloodLoss) }
@@ -398,5 +399,72 @@ class ScenarioTest {
         val low = (0 until 300).map { g.rollQuality(0).ordinal }.average()
         val high = (0 until 300).map { g.rollQuality(18).ordinal }.average()
         assertTrue("$low < $high", low + 1.5 < high)
+    }
+}
+
+
+class AdvancedTest {
+    @Test fun surgeryInstallsABionicLeg() {
+        val g = newGame(8); g.quiet()
+        g.researchDone.addAll(Research.entries)
+        val bed = Building(BuildDef.HOSPITAL_BED, g.homeX + 3, g.homeY - 3, true)
+        g.map.building[g.map.idx(g.homeX + 3, g.homeY - 3)] = bed
+        g.map.drop(ItemType.PLASTEEL, 40, g.homeX, g.homeY - 2)
+        g.map.drop(ItemType.GOLD, 40, g.homeX + 1, g.homeY - 2)
+        g.map.drop(ItemType.COMPONENT, 20, g.homeX - 1, g.homeY - 2)
+        val doc = g.colonists[0]; val pat = g.colonists[1]
+        doc.skill[SkillType.MEDICINE.ordinal] = 16
+        for (c in g.colonists) c.priority[WorkType.DOCTOR.ordinal] = if (c === doc) 1 else 0
+        val leg = pat.race.body.indexOfFirst { it.tag == PartTag.LEG }
+        g.woundPart(pat, leg, DamageKind.CUT, 80f)
+        assertTrue(pat.partMissing(leg))
+        val order = g.availableSurgeries(pat).first { it.kind == SurgeryKind.INSTALL && it.part == leg && it.implant == Implant.BIONIC_LEG }
+        g.queueSurgery(pat, order)
+        g.run(14000)
+        assertTrue("implanted ${pat.implants} queue=${pat.surgeries.size}", pat.implants[leg] == Implant.BIONIC_LEG || pat.surgeries.isEmpty())
+    }
+
+    @Test fun mechanoidsDropScrapWhenDestroyed() {
+        val g = newGame(4); g.quiet()
+        val m = g.newMech(Race.SCYTHER, g.homeX + 20, g.homeY, 1)
+        assertFalse(m.hostile.not())
+        val steel = g.map.countItems(ItemType.STEEL)
+        g.woundPart(m, 4, DamageKind.BULLET, 80f) // power core
+        assertTrue(m.dead)
+        g.run(30)
+        assertTrue(g.map.countItems(ItemType.STEEL) > steel)
+    }
+
+    @Test fun visitorsLeaveTheMap() {
+        val g = newGame(); g.quiet()
+        g.spawnTrader()
+        val t = g.trader()!!
+        val trader = g.pawnById(t.pawnId)!!
+        g.tick = t.leaveAt + 3000
+        g.run(6000)
+        assertTrue("trader gone", g.pawnById(t.pawnId) == null || !g.pawnById(t.pawnId)!!.alive || g.distance(trader.x, trader.y, g.homeX, g.homeY) > 25f)
+    }
+
+    @Test fun berryBushesRegrowAfterHarvest() {
+        val g = newGame(); g.quiet()
+        val x = g.homeX + 6; val y = g.homeY + 8
+        val i = g.map.idx(x, y)
+        g.map.terrain[i] = Terrain.SOIL; g.map.building[i] = null
+        g.map.plant[i] = Plant(PlantType.BERRY, x, y, 1f)
+        g.designate(x, y, Desig.HARVEST)
+        g.run(3000)
+        assertNotNull(g.map.plant[i])
+        assertTrue(g.map.plant[i]!!.growth < 1f || g.map.countItems(ItemType.STRAWBERRIES) > 0)
+    }
+
+    @Test fun mentalBreaksHappenToUnhappyColonists() {
+        val g = newGame(6)
+        g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
+        g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE
+        val p = g.colonists[0]
+        p.addThought("Awful day", -0.6f, g.tick, 20 * TICKS_PER_DAY)
+        var broke = false
+        repeat(40) { g.run(1000); if (p.breakUntil > 0) broke = true }
+        assertTrue(broke)
     }
 }

@@ -7,7 +7,7 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    private const val VERSION = 3
+    private const val VERSION = 5
 
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -110,7 +110,7 @@ object SaveGame {
         for (i in p.injuries) {
             o.writeInt(i.part); o.writeInt(i.kind.ordinal); o.writeFloat(i.severity); o.writeFloat(i.bleed)
             o.writeBoolean(i.tended); o.writeFloat(i.tendQuality); o.writeFloat(i.infection); o.writeBoolean(i.infectable)
-            o.writeBoolean(i.permanent); o.writeBoolean(i.missing); o.writeBoolean(i.scar); o.writeUTF(i.implant); o.writeInt(i.age)
+            o.writeBoolean(i.permanent); o.writeBoolean(i.missing); o.writeBoolean(i.scar); o.writeUTF(i.implant); o.writeInt(i.age); o.writeFloat(i.immune)
         }
         o.writeInt(p.hediffs.size)
         for (h in p.hediffs) { o.writeInt(h.kind.ordinal); o.writeFloat(h.severity); o.writeFloat(h.immunity); o.writeBoolean(h.tended); o.writeFloat(h.tendQuality); o.writeInt(h.age); o.writeInt(h.part); o.writeInt(h.duration) }
@@ -127,6 +127,8 @@ object SaveGame {
         o.writeInt(p.raidId); o.writeInt(p.raidMode); o.writeInt(p.campX); o.writeInt(p.campY); o.writeBoolean(p.retreating)
         o.writeLong(p.escapeTick); o.writeBoolean(p.wanderer); o.writeLong(p.lastSocial)
         o.writeInt(p.herdLeader)
+        o.writeBoolean(p.refugee)
+        o.writeInt(p.implants.size); for ((k, v) in p.implants) { o.writeInt(k); o.writeInt(v.ordinal) }
     }
 
     fun read(data: ByteArray): Game {
@@ -254,7 +256,7 @@ object SaveGame {
         repeat(i.readInt()) {
             val inj = Injury(i.readInt(), DamageKind.entries[i.readInt()], i.readFloat(), i.readFloat())
             inj.tended = i.readBoolean(); inj.tendQuality = i.readFloat(); inj.infection = i.readFloat(); inj.infectable = i.readBoolean()
-            inj.permanent = i.readBoolean(); inj.missing = i.readBoolean(); inj.scar = i.readBoolean(); inj.implant = i.readUTF(); inj.age = i.readInt()
+            inj.permanent = i.readBoolean(); inj.missing = i.readBoolean(); inj.scar = i.readBoolean(); inj.implant = i.readUTF(); inj.age = i.readInt(); inj.immune = i.readFloat()
             p.injuries.add(inj)
         }
         repeat(i.readInt()) {
@@ -273,6 +275,8 @@ object SaveGame {
         p.raidId = i.readInt(); p.raidMode = i.readInt(); p.campX = i.readInt(); p.campY = i.readInt(); p.retreating = i.readBoolean()
         p.escapeTick = i.readLong(); p.wanderer = i.readBoolean(); p.lastSocial = i.readLong()
         p.herdLeader = i.readInt()
+        p.refugee = i.readBoolean()
+        repeat(i.readInt()) { p.implants[i.readInt()] = Implant.entries[i.readInt()] }
         return p
     }
 }

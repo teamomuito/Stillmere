@@ -61,6 +61,15 @@ object Bodies {
         PartDef("jaw", PartTag.JAW, 16f, 0f, 2),
     )
 
+    val MECH: List<PartDef> = listOf(
+        PartDef("chassis", PartTag.TORSO, 60f, 0.5f),
+        PartDef("sensor head", PartTag.HEAD, 30f, 0.12f),
+        PartDef("left leg", PartTag.LEG, 40f, 0.19f),
+        PartDef("right leg", PartTag.LEG, 40f, 0.19f),
+        PartDef("power core", PartTag.HEART, 30f, 0f, 0),
+        PartDef("processor", PartTag.BRAIN, 20f, 0f, 1),
+    )
+
     /** Insect-like bodies are simple: torso, head, legs. */
     val BUG: List<PartDef> = listOf(
         PartDef("body", PartTag.TORSO, 30f, 0.6f),
@@ -87,6 +96,7 @@ class Injury(
     var scar: Boolean = false,
     var implant: String = "",
     var age: Int = 0,
+    var immune: Float = 0f,
 )
 
 enum class HediffKind(

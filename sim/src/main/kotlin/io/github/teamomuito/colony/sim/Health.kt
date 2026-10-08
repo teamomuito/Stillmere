@@ -7,6 +7,7 @@ import kotlin.math.min
 fun Pawn.partMax(i: Int): Float = race.body[i].hp * race.hpScale
 
 fun Pawn.partMissing(i: Int): Boolean {
+    if (implants.containsKey(i)) return false
     for (inj in injuries) if (inj.part == i && inj.missing) return true
     val par = race.body[i].parent
     return par >= 0 && partMissing(par)
@@ -20,7 +21,9 @@ fun Pawn.partDamage(i: Int): Float {
 
 fun Pawn.partEff(i: Int): Float {
     if (partMissing(i)) return 0f
-    return (1f - partDamage(i) / partMax(i)).coerceIn(0f, 1f)
+    val imp = implants[i]
+    val base = (1f - partDamage(i) / partMax(i)).coerceIn(0f, 1f)
+    return if (imp != null) base * imp.eff else base
 }
 
 private fun Pawn.avgEff(tag: PartTag, default: Float = 1f): Float {
@@ -36,7 +39,7 @@ fun Game.recomputeHealth(p: Pawn) {
     p.healthDirty = false
     var pain = 0f
     for (inj in p.injuries) {
-        if (inj.scar || inj.missing) continue
+        if (inj.scar || inj.missing || p.race.mech) continue
         pain += inj.severity * inj.kind.pain * 0.014f / max(0.5f, p.race.hpScale.let { Math.sqrt(it.toDouble()).toFloat() })
     }
     for (h in p.hediffs) pain += h.kind.pain * h.severity
@@ -157,7 +160,7 @@ internal fun Game.applyWound(target: Pawn, part: Int, kind: DamageKind, dmg: Flo
     val cur = target.partDamage(part)
     val applied = min(dmg, max(0f, maxHp - cur) + dmg * 0.0f)
     val inj = Injury(part, kind, if (cur + dmg >= maxHp) max(0.5f, maxHp - cur) else dmg)
-    inj.bleed = kind.bleed * inj.severity * 1.35e-6f * (if (def.inner) 1.7f else 1f)
+    inj.bleed = if (target.race.mech) 0f else kind.bleed * inj.severity * 1.35e-6f * (if (def.inner) 1.7f else 1f)
     if (kind == DamageKind.BRUISE || kind == DamageKind.CRUSH) inj.bleed *= 0.1f
     inj.infectable = kind.infect > 0f
     target.injuries.add(inj)
@@ -167,7 +170,7 @@ internal fun Game.applyWound(target: Pawn, part: Int, kind: DamageKind, dmg: Flo
     if (kind.bleed > 0.3f && dmg > 2f && map.filth[i] < 4 && rng.chance(0.5f)) map.filth[i] = (map.filth[i] + 1).toByte()
     if (applied > 0f && target.faction == Faction.WILD && target.race.isAnimal && !target.hostile) {
         // Wild animals react by running or fighting.
-        if (target.race.dangerous > 0.3f && source != null) target.manhunter = true
+        if (target.race.dangerous > 0.3f && source != null && !source.isAnimal) { target.manhunter = true; target.predatorTarget = source.id }
     }
 }
 
@@ -176,8 +179,9 @@ private fun Game.destroyPart(p: Pawn, part: Int, kind: DamageKind, source: Pawn?
     val def = body[part]
     // Replace the wounds with a "missing" record; nested parts go with it.
     p.injuries.removeAll { it.part == part || (body[it.part].parent == part) }
+    p.implants.remove(part)
     val fatal = def.vital
-    val m = Injury(part, kind, def.hp * p.race.hpScale, bleed = def.hp * p.race.hpScale * kind.bleed * 1.5e-6f * (if (def.inner) 1.2f else 1f), missing = true, permanent = true)
+    val m = Injury(part, kind, def.hp * p.race.hpScale, bleed = if (p.race.mech) 0f else def.hp * p.race.hpScale * kind.bleed * 1.5e-6f * (if (def.inner) 1.2f else 1f), missing = true, permanent = true)
     m.infectable = false
     p.injuries.add(m)
     if (!def.inner && def.tag != PartTag.TORSO && (p.colonist || p.prisoner)) say("${p.name}'s ${def.label} was destroyed!", 3)
@@ -239,8 +243,8 @@ fun Game.healthTick(p: Pawn, dt: Int) {
             continue
         }
         // Bleeding.
-        var b = inj.bleed
-        if (inj.tended) b *= (1f - 0.9f * inj.tendQuality)
+        // A tended wound is bandaged and stops bleeding; poor care leaves a trickle.
+        val b = if (inj.tended) inj.bleed * (1f - inj.tendQuality) * 0.06f else inj.bleed
         bleed += b
         if (inj.missing) {
             // Stumps stop bleeding over time.
@@ -266,13 +270,15 @@ fun Game.healthTick(p: Pawn, dt: Int) {
         }
         inj.bleed *= (1f - dt / (if (inj.tended) 12000f else 34000f)).coerceAtLeast(0.5f)
         if (inj.bleed < 2e-8f) inj.bleed = 0f
-        // Infection.
+        // Infection: an untreated infection grows faster than the body can fight it; good care tips the balance.
         if (inj.infection > 0f) {
-            val grow = 1.1f / TICKS_PER_DAY * dt * (1f - 0.8f * (if (inj.tended) inj.tendQuality else 0f))
+            val q = if (inj.tended) inj.tendQuality else 0f
+            val grow = 1.1f / TICKS_PER_DAY * dt * (1f - 0.8f * q)
+            inj.immune += 0.9f / TICKS_PER_DAY * dt * (1f + 0.6f * q + (if (resting) 0.3f else 0f))
             inj.infection += grow
+            if (inj.immune > inj.infection * 1.1f) inj.infection -= (inj.immune - inj.infection) * 0.9f / TICKS_PER_DAY * dt * 2f
             if (inj.infection >= 1f) { checkDeath(p, null); if (p.dead) return }
-            if (inj.tended && inj.tendQuality > 0.5f) inj.infection = max(0f, inj.infection - 0.4f / TICKS_PER_DAY * dt * inj.tendQuality)
-            if (inj.infection <= 0f) inj.infection = 0f
+            if (inj.infection <= 0f) { inj.infection = 0f; inj.immune = 0f }
         } else if (inj.infectable && (!inj.tended || inj.tendQuality < 0.3f) && inj.severity > 2f) {
             var chance = inj.kind.infect * 0.7f / TICKS_PER_DAY * dt * 2.2f
             if (!map.roomIndoorAt(map.idx(p.x, p.y))) chance *= 1.5f

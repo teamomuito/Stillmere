@@ -362,7 +362,7 @@ private fun Game.plantsTick(out: Float) {
         val pl = m.plant[i] ?: continue
         val t = m.tempAt(i, out)
         val fert = m.terrain[i].fertility.let { f -> if (m.building[i]?.def == BuildDef.HYDROPONICS && m.building[i]?.powered == true) 2.0f else f }
-        if (pl.type.crop || pl.type.isTree) {
+        if (pl.type.crop || pl.type.isTree || pl.type.regrows) {
             pl.age += 250
             if (pl.growth >= 1f) {
                 if (pl.type.crop && t < -3f && rng.chance(0.002f)) m.plant[i] = null

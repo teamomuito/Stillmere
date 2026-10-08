@@ -531,6 +531,15 @@ class Panels(private val a: MainActivity) {
             body.addView(ui.label(desc, 11f, if (inj.infection > 0f) ui.bad else if (inj.missing || inj.scar) ui.dim else if (inj.tended) ui.warn else ui.bad))
         }
         if (!any) body.addView(ui.label("Healthy.", 11f, ui.good))
+        for ((idx, imp) in p.implants) body.addView(ui.label("${imp.label} (${p.race.body[idx].label})", 11f, ui.good))
+        body.addView(ui.label("Surgery", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 2))
+        for (o in p.surgeries.toList()) {
+            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            r.addView(ui.label(o.label(p), 11f), ui.lin(0, -2, 1f))
+            r.addView(ui.button("Cancel", 10.5f) { p.surgeries.remove(o); fillPawn(p) })
+            body.addView(r)
+        }
+        if (!p.isAnimal) body.addView(ui.button("Add operation…", 11f) { a.dialogs.surgery(p) }, ui.lin(-2, -2, 0f, 0, 3, 0, 0))
         body.addView(ui.label("Medical care", 12f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 8, 0, 2))
         val care = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         for ((i, n) in listOf("None", "Herbal+", "Best").withIndex()) care.addView(ui.button(n, 11f, selected = p.careLevel == i) { p.careLevel = i; fillPawn(p) }, ui.lin(-2, -2, 0f, 0, 0, 4, 0))

@@ -22,7 +22,7 @@ fun Game.spawnTrader() {
     // Stock: bulk goods and a few specialities.
     val goods = listOf(
         ItemType.STEEL to 250, ItemType.WOOD to 300, ItemType.CLOTH to 200, ItemType.LEATHER to 120, ItemType.COMPONENT to 20,
-        ItemType.MEAL_SIMPLE to 40, ItemType.MEAL_FINE to 20, ItemType.RICE to 150, ItemType.CORN to 150, ItemType.POTATOES to 100,
+        ItemType.MEAL_SIMPLE to 40, ItemType.MEAL_FINE to 20, ItemType.MEAL_PACKAGED to 30, ItemType.RICE to 150, ItemType.CORN to 150, ItemType.POTATOES to 100,
         ItemType.MEDS_HERBAL to 20, ItemType.MEDS_INDUSTRIAL to 10, ItemType.BEER to 20, ItemType.JOINT to 15, ItemType.PSYCHITE_TEA to 10,
         ItemType.PLASTEEL to 60, ItemType.GOLD to 30, ItemType.KIBBLE to 100, ItemType.HAY to 100,
     )

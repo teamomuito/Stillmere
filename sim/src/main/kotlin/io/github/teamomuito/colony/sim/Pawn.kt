@@ -98,6 +98,9 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var pain = 0f
     var careLevel = 2 // 0 none, 1 herbal, 2 any medicine
     var fullHealthCache = 1f
+    val implants = HashMap<Int, Implant>()
+    val surgeries = ArrayList<SurgeryOrder>()
+    var refugee = false
 
     // Skills and traits
     val skill = IntArray(SkillType.entries.size)
@@ -119,7 +122,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     val opinion = HashMap<Int, Int>()
     var spouse = -1
     var lover = -1
-    var schedule = IntArray(24) { if (it >= 22 || it < 6) 3 else 0 } // 0 anything, 1 work, 2 joy, 3 sleep
+    var schedule = IntArray(24) { if (it >= 22 || it < 6) 3 else if (it in 19..21) 2 else 0 } // 0 anything, 1 work, 2 joy, 3 sleep
     var areaRestriction = 0
     var foodPolicy = 0 // 0 anything, 1 no raw, 2 meals only
     var allowDrugs = false
@@ -166,7 +169,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     val hp: Float get() = max(0f, 100f * healthFraction())
     val untended get() = injuries.any { !it.tended && !it.scar && !it.missing && it.bleed > 0.00001f } ||
         injuries.any { !it.tended && it.infection > 0f } || hediffs.any { it.kind.needsTend && !it.tended }
-    val bleeding get() = injuries.sumOf { (if (it.tended) it.bleed * (1f - 0.9f * it.tendQuality) else it.bleed).toDouble() }.toFloat()
+    val bleeding get() = injuries.sumOf { (if (it.tended) it.bleed * (1f - it.tendQuality) * 0.06f else it.bleed).toDouble() }.toFloat()
     val needsMedical get() = injuries.any { !it.scar && !it.missing && it.severity > 0.5f } || hediffs.any { it.kind.category == 0 || it.kind.category == 1 && it.severity > 0.3f } || bloodLoss > 0.05f
     val injured get() = needsMedical
 
@@ -233,7 +236,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     fun weaponDamageMult() = if (weaponItem != null) weaponQuality.mult else 1f
 
     fun armorFor(coverBit: Int, sharp: Boolean): Float {
-        var armor = 0f
+        var armor = if (race.mech) race.armor * (if (sharp) 1f else 0.6f) else 0f
         for (w in apparel) {
             val a = w.type.apparel ?: continue
             if (a.cover and coverBit == 0) continue

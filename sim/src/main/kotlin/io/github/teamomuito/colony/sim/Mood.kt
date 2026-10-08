@@ -18,6 +18,7 @@ fun Game.comfortTick(p: Pawn) {
     val i = map.idx(p.x, p.y)
     val out = outdoorTemp()
     p.temp = map.tempAt(i, out)
+    if (p.race.mech) return
     p.dark = !p.isAnimal && map.light[i] < 0.25f && !(p.job?.type == JobType.SLEEP)
     if (p.dead) return
     val minT = p.comfyMin()
@@ -133,13 +134,16 @@ fun Game.moodUpdate(p: Pawn) {
     val hot = p.temp - p.comfyMax()
     when {
         cold > 20f -> add("Freezing", -0.25f)
-        cold > 8f -> add("Very cold", -0.15f)
-        cold > 0f -> add("Cold", -0.06f)
+        cold > 9f -> add("Very cold", -0.14f)
+        cold > 3f -> add("Cold", -0.05f)
         hot > 15f -> add("Scorching", -0.25f)
-        hot > 6f -> add("Very hot", -0.15f)
-        hot > 0f -> add("Hot", -0.06f)
+        hot > 7f -> add("Very hot", -0.14f)
+        hot > 3f -> add("Hot", -0.05f)
     }
     if (p.hediffs.any { it.kind.category == 0 && it.severity > 0.1f }) add("Sick", -0.06f)
+    val lost = p.injuries.count { it.missing && !p.implants.containsKey(it.part) && !p.race.body[it.part].inner }
+    if (lost > 0) add("Missing body parts", -min(0.2f, 0.05f * lost))
+    if (p.implants.isNotEmpty() && Trait.TRANSHUMANIST in p.traits) add("Bionic upgrades", 0.1f)
     // Clothing.
     if (p.apparel.isEmpty() && Trait.NUDIST !in p.traits) add("Naked", -0.1f)
     else if (p.apparel.isNotEmpty() && Trait.NUDIST in p.traits) add("Dressed against my beliefs", -0.1f)
@@ -147,7 +151,7 @@ fun Game.moodUpdate(p: Pawn) {
     else if (p.apparel.any { it.quality.ordinal >= Quality.EXCELLENT.ordinal }) add("Fine clothing", 0.04f)
     // Environment.
     if (p.dark && p.job?.type != JobType.SLEEP) add("In the dark", -0.03f)
-    if ((weather == Weather.RAIN || weather == Weather.THUNDER) && !map.roofed(i)) add("Soaking wet", -0.06f)
+    if ((weather == Weather.RAIN || weather == Weather.THUNDER) && !map.roofed(i)) add("Soaking wet", -0.04f)
     val r = map.roomId[i]
     if (r >= 0 && map.roomIndoor[r] && !map.roomDirty) {
         if (map.roomBeauty[r] < -0.6f) add("Ugly surroundings", -0.04f)
@@ -247,6 +251,14 @@ fun Game.startBreak(p: Pawn, kind: Int) {
 }
 
 fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
+    if (p.race.mech) {
+        map.drop(ItemType.STEEL, rng.range(20, 60), p.x, p.y)
+        map.drop(ItemType.COMPONENT, rng.range(1, 3), p.x, p.y)
+        if (rng.chance(0.15f)) map.drop(ItemType.PLASTEEL, rng.range(5, 12), p.x, p.y)
+        say("A ${p.race.label.lowercase()} was destroyed.", 1)
+        statsKilled++
+        return
+    }
     // Corpse.
     val i = map.idx(p.x, p.y)
     var cx = p.x; var cy = p.y
@@ -288,5 +300,6 @@ fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
         p.faction == Faction.ENEMY -> { say("${p.name} was killed.", 1); statsKilled++ }
         else -> { if (!p.isAnimal) say("${p.name} died.", 0) }
     }
+    if (source != null && source.isAnimal && source.race.predator && p.isAnimal && source.alive) source.food = min(1f, source.food + 0.65f)
     if (source != null && source.colonist && p.faction == Faction.ENEMY && Trait.BLOODLUST in source.traits) source.addThought("Killed someone", 0.1f, tick, TICKS_PER_DAY)
 }

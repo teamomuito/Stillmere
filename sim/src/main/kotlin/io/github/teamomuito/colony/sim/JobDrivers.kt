@@ -70,6 +70,8 @@ fun Game.driveJob(p: Pawn) {
         JobType.SLAUGHTER -> driveSlaughter(p, j)
         JobType.BUTCHER -> driveButcher(p, j)
         JobType.CLEAN -> driveClean(p, j)
+        JobType.LEAVE -> leaveMap(p)
+        JobType.SURGERY -> driveSurgery(p, j)
         JobType.FIREFIGHT -> driveFirefight(p, j)
         JobType.EQUIP -> driveEquip(p, j)
         JobType.WEAR -> driveWear(p, j)
@@ -138,7 +140,11 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
             if (j.stage == 1) {
                 val s = map.items[map.idx(j.tx, j.ty)]
                 if (s == null || !s.type.isFood) { j.stage = 0; return }
-                if (goTo(p, j.tx, j.ty) == 0) { map.take(map.idx(j.tx, j.ty), 1); p.food = min(1f, p.food + s.type.nutrition); j.stage = 0; j.timer = 0 }
+                if (goTo(p, j.tx, j.ty) == 0) {
+                    map.take(map.idx(j.tx, j.ty), 1); p.food = min(1f, p.food + s.type.nutrition)
+                    j.stage = 0; j.timer = 0; j.amount++
+                    if (j.amount >= 5 || p.food >= 0.99f && j.amount >= 3) p.breakUntil = tick  // full: the binge is over
+                }
             } else wanderStep(p, j)
         }
         Break.BINGE_DRUGS -> {
@@ -293,7 +299,7 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
         p.rest = min(1f, p.rest + gain * 0.6f)
         // Wake for food or when recovered.
         if (p.food < 0.15f) { endJob(p); return }
-        val recovered = !p.needsMedical || (p.pain < 0.03f && p.bloodLoss < 0.02f && p.healthFraction() > 0.93f && p.hediffs.none { it.kind.category == 0 })
+        val recovered = p.surgeries.isEmpty() && (!p.needsMedical || (p.pain < 0.03f && p.bloodLoss < 0.02f && p.healthFraction() > 0.93f && p.hediffs.none { it.kind.category == 0 }))
         if (recovered || j.timer > 3 * TICKS_PER_DAY) endJob(p)
         return
     }
@@ -325,7 +331,7 @@ private fun Game.driveJoy(p: Pawn, j: Job) {
             val x = (homeX + rng.range(-7, 7)).coerceIn(1, map.w - 2); val y = (homeY + rng.range(-7, 7)).coerceIn(1, map.h - 2)
             j.dx = if (map.walkable(map.idx(x, y))) x else -1; j.dy = y
         }
-        p.joy = min(1f, p.joy + 0.00012f)
+        p.joy = min(1f, p.joy + 0.00022f)
         if (--j.timer <= 0 || p.joy > 0.9f) endJob(p)
         return
     }
@@ -433,8 +439,8 @@ private fun Game.driveCut(p: Pawn, j: Job) {
             if (n > 0) map.drop(yt, n, p.x, p.y)
         }
         if (Trait.GREEN_THUMB in p.traits) p.addThought("Worked with plants", 0.04f, tick, TICKS_PER_DAY / 2)
-        map.plant[i] = null
-        map.desig[i] = 0
+        if (pl.type.regrows && map.desig[i].toInt() == Desig.HARVEST) { pl.growth = 0.05f; map.desig[i] = 0 }
+        else { map.plant[i] = null; map.desig[i] = 0 }
         endJob(p)
     }
 }
@@ -888,6 +894,7 @@ private fun Game.driveRescue(p: Pawn, j: Job) {
                 o.x = j.dx; o.y = j.dy; o.fromX = o.x; o.fromY = o.y
                 if (bed.def.medical) bed.occupant = o.id else bed.ownerId = if (bed.ownerId < 0) o.id else bed.ownerId
                 o.bedId = map.idx(j.dx, j.dy)
+                if (o.refugee) { o.refugee = false; recruit(o); say("${o.name} is grateful and joins the colony.", 1) }
                 // Wake them into rest mode once they are able.
                 val rj = Job(JobType.REST); rj.stage = 1; rj.amount = 1
                 endJob(p)

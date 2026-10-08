@@ -8,7 +8,7 @@ private fun Game.threatPoints(): Float {
     val animalsPower = tamedAnimals.sumOf { (it.race.dangerous * 6f).toDouble() }.toFloat()
     var pts = cols * 17f + map.wealth() / 95f + animalsPower
     pts *= difficulty.threat * storyteller.threat
-    pts *= min(1f, 0.38f + day / 32f)
+    pts *= min(1f, 0.34f + day / 34f)
     return max(pts, 22f * difficulty.threat)
 }
 
@@ -28,16 +28,14 @@ fun Game.hourlyEvents() {
         val alive = pawns.count { it.faction == Faction.ENEMY && it.alive && it.raidId > 0 }
         val standing = pawns.count { it.faction == Faction.ENEMY && it.alive && it.raidId > 0 && !it.downed }
         val anyRetreat = pawns.any { it.faction == Faction.ENEMY && it.raidId > 0 && it.alive && it.retreating }
-        if (alive == 0) {
+        if (alive == 0 || (standing == 0 && !anyRetreat)) {
+            // Nobody left on their feet: the raid is over. Downed raiders will limp away once they recover.
+            for (r in pawns) if (r.faction == Faction.ENEMY && r.raidId > 0 && r.alive) r.retreating = true
             raidActive = false; raidsSurvived++
             say("The raid has been beaten back.", 1)
-        } else if (!anyRetreat && (standing * 2 <= raidStartCount || tick > raidEnds)) {
+        } else if (!anyRetreat && standing > 0 && (standing * 2 <= raidStartCount || tick > raidEnds)) {
             for (r in pawns) if (r.faction == Faction.ENEMY && r.raidId > 0 && r.alive && !r.downed) { r.retreating = true; endJob(r) }
             say("The raiders are retreating!", 1)
-        } else if (standing == 0 && alive > 0 && !anyRetreat) {
-            // Everyone left is down. The raid is effectively over.
-            raidActive = false; raidsSurvived++
-            say("The raid has been beaten back.", 1)
         }
     }
     if (tempEventUntil in 1..tick) {
@@ -101,8 +99,8 @@ private fun Game.chaosInterval(minDays: Int, maxDays: Int): Int {
 
 private fun Game.miscEvent() {
     val weights = ArrayList<Pair<Int, Float>>()
-    weights += 0 to (if (day > 6) 2f else 0f)   // manhunter pack
-    weights += 1 to (if (day > 6) 2f else 0f) // infestation
+    weights += 0 to (if (day > 10) 2f else 0f)   // manhunter pack
+    weights += 1 to (if (day > 10) 2f else 0f) // infestation
     weights += 2 to 1.2f // disease outbreak
     weights += 3 to (if (power.nets > 0) 1.5f else 0f) // solar flare
     weights += 4 to 1f   // eclipse
@@ -113,6 +111,7 @@ private fun Game.miscEvent() {
     weights += 9 to (if (day > 8) 0.5f else 0f)  // thrumbo
     weights += 10 to (if (prisoners.isNotEmpty()) 0.8f else 0f) // prison break handled hourly
     weights += 11 to 1.0f // heat/cold done elsewhere: lightning storm
+    weights += 12 to (if (day > 9) 1.2f else 0f) // refugee
     val total = weights.sumOf { it.second.toDouble() }.toFloat()
     var r = rng.float() * total
     var pick = 0
@@ -128,6 +127,7 @@ private fun Game.miscEvent() {
         7 -> blight()
         8 -> animalJoins()
         9 -> thrumboPasses()
+        12 -> refugees()
         11 -> { weather = Weather.THUNDER; weatherUntil = tick + 5000; lightning(); say("A violent thunderstorm hits.", 2) }
         else -> {}
     }
@@ -151,9 +151,10 @@ private fun Game.pickRaidKind(): Int {
     val hasWalls = map.building.count { it != null && it.built && it.def.isWall } > 12
     val opts = ArrayList<Int>()
     opts += 0; opts += 0; opts += 0
-    if (day >= 10 && hasWalls) { opts += 1; opts += 1 }
+    if (day >= 14 && hasWalls) { opts += 1; opts += 1 }
     if (day >= 16) opts += 2
     if (day >= 12) opts += 3
+    if (day >= 26) { opts += 4; opts += 4 }
     return opts[rng.int(opts.size)]
 }
 
@@ -166,9 +167,19 @@ fun Game.launchRaid() {
     val tier = raidWeaponTier(day)
     var left = points
     var count = 0
-    val maxCount = 1 + day / 3 + colonists.size / 2
+    val maxCount = 1 + day / 5 + colonists.size / 3
     val spawned = ArrayList<Pawn>()
-    while ((left > 0f || count == 0) && count < min(16, maxCount)) {
+    if (kind == 4) {
+        val mechs = listOf(Race.SCYTHER to 34f, Race.LANCER to 36f, Race.CENTIPEDE to 90f)
+        while ((left > 0f || count == 0) && count < 8) {
+            val (r, c) = mechs[rng.int(if (left > 100f) 3 else 2)]
+            val x = (base.first + rng.range(-3, 3)).coerceIn(1, map.w - 2)
+            val y = (base.second + rng.range(-3, 3)).coerceIn(1, map.h - 2)
+            if (!map.walkable(map.idx(x, y))) { left -= 1f; continue }
+            spawned += newMech(r, x, y, raidId); left -= c; count++
+        }
+    }
+    while (kind != 4 && (left > 0f || count == 0) && count < min(16, maxCount)) {
         val (w, c) = tier[rng.int(tier.size)]
         val armor = ArrayList<ItemType>()
         if (day >= 18 && rng.chance(0.5f)) armor += ItemType.A_FLAK_VEST
@@ -209,7 +220,7 @@ fun Game.launchRaid() {
     nextRaid = tick + chaosInterval(3, 6)
     val dir = arrayOf("west", "east", "north", "south")[side]
     val label = when (kind) {
-        1 -> "Sappers"; 2 -> "A siege force"; 3 -> "Raiders in drop pods"; else -> "Raiders"
+        1 -> "Sappers"; 2 -> "A siege force"; 3 -> "Raiders in drop pods"; 4 -> "Mechanoids"; else -> "Raiders"
     }
     say("RAID! $label ($count) ${if (kind == 3) "drop in near your colony" else "approach from the $dir"}.", 3)
 }
@@ -231,7 +242,7 @@ private fun Game.spawnPod() {
     val y = (c.y + rng.range(-7, 7)).coerceIn(2, map.h - 3)
     val (type, n) = when (rng.int(7)) {
         0 -> ItemType.STEEL to rng.range(40, 100)
-        1 -> ItemType.MEAL_SIMPLE to rng.range(6, 14)
+        1 -> ItemType.MEAL_PACKAGED to rng.range(6, 14)
         2 -> ItemType.WOOD to rng.range(50, 110)
         3 -> ItemType.COMPONENT to rng.range(2, 6)
         4 -> ItemType.SILVER to rng.range(60, 220)
@@ -320,4 +331,28 @@ private fun Game.thrumboPasses() {
     val e = edgeCell(rng.int(4)) ?: return
     newAnimal(Race.THRUMBO, e.first, e.second)
     say("A rare thrumbo has been spotted nearby!", 1)
+}
+
+private fun Game.refugees() {
+    val side = rng.int(4)
+    val e = edgeCell(side) ?: return
+    val ref = newHuman(e.first, e.second, Faction.VISITOR)
+    ref.refugee = true
+    ref.homeTile = -1
+    // Wounded and exhausted.
+    val torso = ref.race.body.indexOfFirst { it.tag == PartTag.TORSO }
+    woundPart(ref, torso, DamageKind.CUT, 14f)
+    for (leg in partsWithTag(ref, PartTag.LEG).take(1)) woundPart(ref, leg, DamageKind.BULLET, 12f)
+    downPawn(ref)
+    ref.food = 0.3f
+    val raidId = ++raidCounter
+    val n = rng.range(2, 3 + day / 10)
+    val tier = raidWeaponTier(day)
+    repeat(n) {
+        val (w, _) = tier[rng.int(tier.size)]
+        val x = (e.first + rng.range(-2, 2)).coerceIn(1, map.w - 2); val y = (e.second + rng.range(-2, 2)).coerceIn(1, map.h - 2)
+        if (map.walkable(map.idx(x, y))) newRaider(x, y, w, raidId)
+    }
+    raidActive = true; raidStartCount = n; raidStartedAt = tick; raidEnds = tick + TICKS_PER_DAY
+    say("${ref.name} staggers in from the ${arrayOf("west", "east", "north", "south")[side]}, wounded and chased by raiders. Rescue them to gain a colonist.", 2)
 }

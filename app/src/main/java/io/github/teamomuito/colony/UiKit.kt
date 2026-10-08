@@ -47,8 +47,13 @@ class UiKit(val a: Activity) {
             this.text = t; textSize = size; setTextColor(if (selected) Color.WHITE else this@UiKit.text); gravity = Gravity.CENTER
             background = bg(if (selected) 0xFF7A5A1E.toInt() else button, 10, if (selected) accent else 0x33FFFFFF)
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            setOnClickListener { onClick() }
+            setOnClickListener { guard(onClick) }
         }
+
+    /** Runs a UI action; a bug in it shows a message and is logged instead of crashing the app. */
+    fun guard(f: () -> Unit) {
+        try { f() } catch (e: Throwable) { (a as? MainActivity)?.reportError(e) }
+    }
 
     fun chip(t: String, color: Int, size: Float = 11f): TextView =
         TextView(a).apply {

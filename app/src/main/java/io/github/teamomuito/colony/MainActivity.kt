@@ -79,6 +79,17 @@ class MainActivity : Activity() {
         started = true
     }
 
+    private var errorCount = 0
+    fun reportError(e: Throwable) {
+        errorCount++
+        try {
+            File(filesDir, "error.txt").writeText("${e.javaClass.name}: ${e.message}\n" + e.stackTrace.take(25).joinToString("\n") { "  at $it" })
+        } catch (_: Throwable) {}
+        if (errorCount < 6) toast("Error: ${e.javaClass.simpleName} (see Menu → Last error)")
+    }
+
+    fun lastError(): String? = try { File(filesDir, "error.txt").takeIf { it.exists() }?.readText() } catch (_: Throwable) { null }
+
     private fun loadSave(): Game? {
         try {
             if (saveFile.exists()) return SaveGame.read(saveFile.readBytes())
@@ -161,7 +172,10 @@ class MainActivity : Activity() {
             }
             view.invalidate()
             hudAcc += dt
-            if (hudAcc > 0.25) { hudAcc = 0.0; refreshHud() }
+            if (hudAcc > 0.25) {
+                hudAcc = 0.0
+                try { refreshHud() } catch (e: Throwable) { reportError(e) }
+            }
             Choreographer.getInstance().postFrameCallback(this)
         }
     }
@@ -171,8 +185,8 @@ class MainActivity : Activity() {
         root = FrameLayout(this)
         view = GameView(this)
         view.game = game
-        view.onTileTap = { x, y -> onTileTap(x, y) }
-        view.onArea = { x0, y0, x1, y1 -> onArea(x0, y0, x1, y1) }
+        view.onTileTap = { x, y -> ui.guard { onTileTap(x, y) } }
+        view.onArea = { x0, y0, x1, y1 -> ui.guard { onArea(x0, y0, x1, y1) } }
         root.addView(view, ui.fl(-1, -1))
         panels = Panels(this)
         dialogs = Dialogs(this)

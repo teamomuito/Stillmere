@@ -122,7 +122,7 @@ private fun Game.pickRaidTarget(p: Pawn): Pawn? {
     var bd = 1e9f
     for (c in pawns) {
         if (!c.alive || c === p) continue
-        val enemy = if (p.faction == Faction.ENEMY || p.manhunter) c.faction == Faction.PLAYER && !c.prisoner || c.faction == Faction.VISITOR && false
+        val enemy = if (p.faction == Faction.ENEMY || p.manhunter) c.faction == Faction.PLAYER && !c.prisoner || c.faction == Faction.VISITOR && c.refugee
         else (c.faction == Faction.PLAYER || c.faction == Faction.VISITOR) && c !== p
         if (!enemy) continue
         if (p.manhunter && c.isAnimal && c.race.size > p.race.size * 1.5f && c.faction == Faction.WILD) continue

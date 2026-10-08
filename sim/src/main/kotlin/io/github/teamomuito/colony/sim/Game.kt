@@ -20,7 +20,7 @@ enum class Storyteller(val label: String, val desc: String, val threat: Float, v
 }
 
 enum class Difficulty(val label: String, val threat: Float, val colonistDamage: Float, val loseOnDeath: Boolean) {
-    PEACEFUL("Peaceful", 0.0f, 0.5f, false), EASY("Easy", 0.6f, 0.8f, false), RANDY("Normal", 1f, 1f, false), HARD("Challenge", 1.5f, 1.1f, false), EXTREME("Losing is fun", 2.2f, 1.25f, false)
+    PEACEFUL("Peaceful", 0.0f, 0.5f, false), EASY("Easy", 0.6f, 0.8f, false), RANDY("Normal", 0.9f, 1f, false), HARD("Challenge", 1.5f, 1.1f, false), EXTREME("Losing is fun", 2.2f, 1.25f, false)
 }
 
 enum class Scenario(val label: String, val desc: String) {
@@ -95,7 +95,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
     var graveyard = ArrayList<String>()
 
     init {
-        nextRaid = 5L * TICKS_PER_DAY + rng.int(TICKS_PER_DAY)
+        nextRaid = 8L * TICKS_PER_DAY + rng.int(4 * TICKS_PER_DAY)
         nextWanderer = 3L * TICKS_PER_DAY + rng.int(3 * TICKS_PER_DAY)
         nextPod = 2L * TICKS_PER_DAY + rng.int(4 * TICKS_PER_DAY)
         nextTempEvent = 8L * TICKS_PER_DAY + rng.int(6 * TICKS_PER_DAY)
@@ -234,6 +234,17 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
         return p
     }
 
+    fun newMech(race: Race, x: Int, y: Int, raidId: Int): Pawn {
+        val p = Pawn(nextPawnId++, race.label, race, Faction.ENEMY)
+        p.raidId = raidId
+        p.skill[SkillType.SHOOTING.ordinal] = 8
+        p.skill[SkillType.MELEE.ordinal] = 10
+        p.x = x; p.y = y; p.fromX = x; p.fromY = y
+        recomputeHealth(p)
+        pawns.add(p)
+        return p
+    }
+
     fun newRaider(x: Int, y: Int, weaponItem: ItemType?, raidId: Int, armor: List<ItemType> = emptyList()): Pawn {
         val p = Pawn(nextPawnId++, rng.pick(Names.raider) + " " + rng.pick(Names.raider), Race.HUMAN, Faction.ENEMY)
         p.weaponItem = weaponItem
@@ -300,7 +311,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
         when (sc) {
             Scenario.CRASHLANDED -> {
                 researchDone.addAll(listOf(Research.COMPLEX_FURNITURE))
-                sup += ItemType.MEAL_SIMPLE to 30; sup += ItemType.WOOD to 150; sup += ItemType.STEEL to 250; sup += ItemType.COMPONENT to 12
+                sup += ItemType.MEAL_PACKAGED to 30; sup += ItemType.WOOD to 150; sup += ItemType.STEEL to 250; sup += ItemType.COMPONENT to 12
                 sup += ItemType.MEDS_HERBAL to 8; sup += ItemType.MEDS_INDUSTRIAL to 4; sup += ItemType.SILVER to 200; sup += ItemType.CLOTH to 60
             }
             Scenario.LOST_TRIBE -> {
@@ -310,10 +321,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
             }
             Scenario.RICH_EXPLORER -> {
                 researchDone.addAll(listOf(Research.COMPLEX_FURNITURE, Research.SMITHING, Research.STONECUTTING, Research.TAILORING))
-                sup += ItemType.MEAL_FINE to 18; sup += ItemType.SILVER to 1800; sup += ItemType.STEEL to 400; sup += ItemType.WOOD to 200
+                sup += ItemType.MEAL_PACKAGED to 20; sup += ItemType.SILVER to 1800; sup += ItemType.STEEL to 400; sup += ItemType.WOOD to 200
                 sup += ItemType.MEDS_INDUSTRIAL to 10; sup += ItemType.COMPONENT to 20; sup += ItemType.GOLD to 60
             }
-            Scenario.SOLO -> { sup += ItemType.MEAL_SIMPLE to 6 }
+            Scenario.SOLO -> { sup += ItemType.MEAL_PACKAGED to 6 }
         }
         var k = 0
         for ((t, n) in sup) {
@@ -543,12 +554,13 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
     private fun pawnTick(p: Pawn) {
         if (p.dead) return
         val sleeping = p.job?.type == JobType.SLEEP && p.job?.stage == 1
+        if (p.race.mech) { p.food = 1f; p.rest = 1f }
         // Needs.
         val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { Math.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else 0.7f * (if (Trait.GOURMAND in p.traits) 1.3f else 1f)
         p.food = max(0f, p.food - foodRate / TICKS_PER_DAY * (if (sleeping) 0.7f else 1f))
         if (!p.isAnimal) {
             if (!sleeping) p.rest = max(0f, p.rest - 0.95f / TICKS_PER_DAY)
-            val joyDrain = 0.55f / TICKS_PER_DAY
+            val joyDrain = 0.42f / TICKS_PER_DAY
             if (p.job?.type != JobType.JOY) p.joy = max(0f, p.joy - joyDrain)
         }
         if (p.food <= 0f && !p.isAnimal || p.food <= 0f && p.isAnimal) starvationTick(p)
@@ -569,6 +581,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generate(MAP_SIZE, MAP_SIZ
         if (p.attackCd > 0) p.attackCd--
         if (map.fires.isNotEmpty() && tick % 3 == (p.id % 3).toLong() && p.moveCd <= 0) stepOutOfFire(p)
         if (p.isAnimal) { animalTick(p); return }
+        if (p.drafted && tick % 60 == (p.id % 60).toLong() && (p.food < 0.08f || p.rest < 0.04f) && pawns.none { it.hostile && it.alive && !it.downed }) {
+            setDrafted(p, false)
+            say("${p.name} stood down to rest and eat.", 0)
+        }
         if (p.colonist && !p.drafted && p.job != null && tick % 10 == (p.id % 10).toLong() && shouldReact(p)) endJob(p)
         if (p.job == null) think(p)
         driveJob(p)

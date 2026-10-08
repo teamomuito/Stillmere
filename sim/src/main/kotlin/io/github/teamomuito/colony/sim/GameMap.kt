@@ -7,7 +7,7 @@ import kotlin.math.min
 class Plant(val type: PlantType, val x: Int, val y: Int, var growth: Float) {
     var age = 0
     var blighted = false
-    val mature get() = (!type.crop && !type.isTree) || growth >= 1f
+    val mature get() = (!type.crop && !type.isTree && !type.regrows && type != PlantType.BRAMBLE) || growth >= 1f
 }
 
 class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {

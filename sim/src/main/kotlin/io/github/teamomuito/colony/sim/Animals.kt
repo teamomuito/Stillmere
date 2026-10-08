@@ -87,7 +87,7 @@ internal fun Game.animalTick(p: Pawn) {
             return
         }
         // Hungry enough to go after people nearby.
-        if (p.food < 0.12f && day >= 4) {
+        if (p.food < 0.08f && day >= 6) {
             val human = pawns.filter { it.alive && !it.isAnimal && it.faction == Faction.PLAYER && !it.downed && distance(p.x, p.y, it.x, it.y) < 20f }.minByOrNull { distance(p.x, p.y, it.x, it.y) }
             if (human != null) { p.manhunter = true; return }
         }
@@ -123,7 +123,14 @@ internal fun Game.animalHostileAI(p: Pawn) {
     if (j == null) { j = Job(JobType.RAID); p.job = j }
     j.timer++
     var t = pawnById(j.targetPawn)
-    if (t == null || !t.alive || t.downed && j.timer % 20 == 0 || j.timer % 80 == 0) {
+    // Provoked animals go after whoever hurt them, then calm down.
+    if (p.predatorTarget >= 0 && p.race.insect.not()) {
+        val prov = pawnById(p.predatorTarget)
+        if (prov == null || !prov.alive || prov.downed || j.timer > 2400) { p.manhunter = false; p.predatorTarget = -1; p.job = null; return }
+        j.targetPawn = prov.id
+        t = prov
+    }
+    if (t == null || !t.alive || t.downed && j.timer % 20 == 0 || j.timer % 80 == 0 && p.predatorTarget < 0) {
         t = pawns.filter { it.alive && it !== p && (it.faction == Faction.PLAYER || it.faction == Faction.VISITOR) && !it.downed }
             .minByOrNull { distance(p.x, p.y, it.x, it.y) }
         j.targetPawn = t?.id ?: -1

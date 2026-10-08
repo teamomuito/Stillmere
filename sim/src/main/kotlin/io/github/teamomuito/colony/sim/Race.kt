@@ -8,7 +8,7 @@ enum class Race(
     val weapon: Weapon = Weapon.FISTS, val diet: Diet = Diet.OMNIVORE, val predator: Boolean = false, val herd: Boolean = false,
     val tameDifficulty: Float = 1f, val wildness: Float = 0.5f, val product: ItemType? = null, val productPerDay: Float = 0f,
     val color: Int = 0xFF8B7355.toInt(), val size: Float = 1f, val farm: Boolean = false, val dangerous: Float = 0f,
-    val biomes: Int = 0xFFFF, val colonyPower: Float = 1f,
+    val biomes: Int = 0xFFFF, val colonyPower: Float = 1f, val mech: Boolean = false, val armor: Float = 0f,
 ) {
     HUMAN("Human", Bodies.HUMAN, 1f, 11, false, meat = 0),
     HARE("Hare", Bodies.QUAD, 0.3f, 6, true, meat = 8, leather = 6, weapon = Weapon.TEETH, diet = Diet.HERBIVORE, tameDifficulty = 0.4f, wildness = 0.4f, color = 0xFFC9B79C.toInt(), size = 0.6f),
@@ -26,6 +26,9 @@ enum class Race(
     MEGASCARAB("Megascarab", Bodies.BUG, 0.9f, 8, true, meat = 20, weapon = Weapon.TEETH, diet = Diet.CARNIVORE, predator = true, wildness = 1f, color = 0xFF2F4F4F.toInt(), size = 0.9f, dangerous = 0.6f),
     SPELOPEDE("Spelopede", Bodies.BUG, 2.2f, 9, true, meat = 50, weapon = Weapon.TEETH, diet = Diet.CARNIVORE, predator = true, wildness = 1f, color = 0xFF6B3F8F.toInt(), size = 1.3f, dangerous = 1.2f),
     MEGASPIDER("Megaspider", Bodies.BUG, 4f, 8, true, meat = 110, weapon = Weapon.TEETH, diet = Diet.CARNIVORE, predator = true, wildness = 1f, color = 0xFF7A1F1F.toInt(), size = 1.7f, dangerous = 2.2f),
+    SCYTHER("Scyther", Bodies.MECH, 2.2f, 6, false, weapon = Weapon.BLADE, color = 0xFF8EA0AE.toInt(), size = 1.3f, dangerous = 2f, mech = true, armor = 0.55f),
+    LANCER("Lancer", Bodies.MECH, 2.0f, 9, false, weapon = Weapon.LANCE, color = 0xFF6F86A0.toInt(), size = 1.3f, dangerous = 2f, mech = true, armor = 0.5f),
+    CENTIPEDE("Centipede", Bodies.MECH, 5.5f, 11, false, weapon = Weapon.MECH_GUN, color = 0xFF5A6978.toInt(), size = 2.0f, dangerous = 4f, mech = true, armor = 0.7f),
     ;
 
     val insect get() = body === Bodies.BUG

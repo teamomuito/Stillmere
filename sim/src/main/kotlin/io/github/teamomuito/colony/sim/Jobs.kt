@@ -148,6 +148,7 @@ fun Game.think(p: Pawn) {
     // Needs.
     val act = p.schedule[hour]
     if (p.food < 0.3f && startEat(p)) return
+    if (p.surgeries.isNotEmpty() && map.building[map.idx(p.x, p.y)]?.def?.sleeps != true && startRest(p)) return
     if (p.needsMedical && p.priority[WorkType.PATIENT.ordinal] > 0 && patientShouldRest(p) && startRest(p)) return
     val sleepy = p.rest < 0.25f || (act == 3 && p.rest < 0.92f) || (Trait.NIGHT_OWL in p.traits && false)
     if (sleepy && startSleep(p)) return
@@ -208,6 +209,7 @@ private fun Game.foodScore(p: Pawn, t: ItemType, rot: Float): Int {
     return when (t) {
         ItemType.MEAL_FINE -> 0
         ItemType.MEAL_SIMPLE -> 1
+        ItemType.MEAL_PACKAGED -> 1
         ItemType.PEMMICAN -> 2
         ItemType.MILK -> 3
         ItemType.EGGS, ItemType.STRAWBERRIES -> 5
@@ -398,7 +400,7 @@ internal fun Game.findDoctor(p: Pawn): Job? {
     var bd = Int.MAX_VALUE
     for (o in pawns) {
         if (o === p || !o.alive || !o.downed || o.carriedBy >= 0 || o.hostile && !o.prisoner) continue
-        if (o.faction != Faction.PLAYER) continue
+        if (o.faction != Faction.PLAYER && !o.refugee) continue
         if (o.isAnimal && !o.tame) continue
         val k = pawnKey(o.id, K_PATIENT)
         if (!isFree(p, k) || isBad(p, k)) continue
@@ -418,6 +420,7 @@ internal fun Game.findDoctor(p: Pawn): Job? {
             return j
         }
     }
+    findSurgery(p)?.let { return it }
     // Tend.
     var patient: Pawn? = null
     bd = Int.MAX_VALUE
