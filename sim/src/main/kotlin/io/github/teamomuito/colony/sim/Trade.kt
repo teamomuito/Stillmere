@@ -28,9 +28,9 @@ fun Game.spawnTrader(from: WorldFaction? = null, orbitalAt: Pair<Int, Int>? = nu
         ItemType.MEDS_HERBAL to 20, ItemType.MEDS_INDUSTRIAL to 10, ItemType.BEER to 20, ItemType.JOINT to 15, ItemType.PSYCHITE_TEA to 10,
         ItemType.PLASTEEL to 60, ItemType.GOLD to 30, ItemType.KIBBLE to 100, ItemType.HAY to 100,
     )
-    for ((t, n) in goods) if (rng.chance(if (orbitalAt != null) 0.8f else 0.55f)) info.stock.add(t, rng.range(n / 4, n) * (if (orbitalAt != null && (t == ItemType.COMPONENT || t == ItemType.PLASTEEL || t == ItemType.GOLD)) 2 else 1))
+    for ((t, n) in goods) if (t !in BaseContent.hiddenItems && rng.chance(if (orbitalAt != null) 0.8f else 0.55f)) info.stock.add(t, rng.range(n / 4, n) * (if (orbitalAt != null && (t == ItemType.COMPONENT || t == ItemType.PLASTEEL || t == ItemType.GOLD)) 2 else 1))
     if (fac != null && fac.kind == 0) info.stock.removeKinds { it in setOf(ItemType.COMPONENT, ItemType.PLASTEEL, ItemType.MEAL_PACKAGED, ItemType.MEDS_INDUSTRIAL) }
-    val gear = ItemType.entries.filter { it.isGear && (fac == null || fac.kind != 0 || it.weapon?.ranged != true || it.weapon == Weapon.BOW || it.weapon == Weapon.GREATBOW) && (fac == null || fac.kind != 0 || (it.apparel != null && it.value < 80f) || it.weapon != null) }
+    val gear = ItemType.entries.filter { it.isGear && it !in BaseContent.hiddenItems && (fac == null || fac.kind != 0 || it.weapon?.ranged != true || it.weapon == Weapon.BOW || it.weapon == Weapon.GREATBOW) && (fac == null || fac.kind != 0 || (it.apparel != null && it.value < 80f) || it.weapon != null) }
     repeat(rng.range(2, 6)) { info.stock.add(rng.pick(gear), 1) }
     traders.add(info)
     say(if (orbitalAt != null) "An orbital trade ship lands at your beacon! ${trader.name} is waiting." else "A trade caravan ${if (fac != null) "from ${fac.name} " else ""}arrives! ${trader.name} is waiting in your colony.", 1)

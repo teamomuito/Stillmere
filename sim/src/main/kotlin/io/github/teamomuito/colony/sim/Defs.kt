@@ -86,7 +86,7 @@ enum class PlantType(
     MAPLE("Maple", 12f, ItemType.WOOD, 22, 420, 0, false, wood = true),
     TEAK("Teak", 14f, ItemType.WOOD, 26, 480, 0, false, wood = true),
     SAGUARO("Saguaro cactus", 10f, ItemType.WOOD, 8, 280, 0, false, wood = true, flammable = 0.1f),
-    BERRY("Strawberry bush", 5f, ItemType.STRAWBERRIES, 8, 120, 0, false),
+    BERRY("Berry bush", 5f, ItemType.BERRIES, 8, 120, 0, false),
     BRAMBLE("Brambles", 0f, null, 0, 150, 0, false),
     WILD_HEALROOT("Wild healroot", 6f, ItemType.HEALROOT, 3, 120, 0, false),
     RICE("Rice", 5.8f, ItemType.RICE, 12, 110, 170, true),
@@ -215,6 +215,8 @@ enum class ItemType(
     // Misc
     CORPSE_HUMAN("Corpse", ItemCat.MISC, 1, 0f, flammable = 0.3f),
     SHELL("Mortar shell", ItemCat.MISC, 25, 15f),
+    BERRIES("Berries", ItemCat.FOOD_PLANT, 75, 1.2f, 0.05f, 10f),
+    MEAL_NUTRIENT("Nutrient paste meal", ItemCat.FOOD_MEAL, 25, 3f, 0.9f, 0f),
     ;
 
     val isFood get() = nutrition > 0f
@@ -277,7 +279,7 @@ enum class Weapon(
     CLAWS("Claws", false, 6f, 1.5f, 32, 0.85f, DamageKind.SCRATCH),
     HEAD_BUTT("Horns", false, 12f, 1.5f, 50, 0.8f, DamageKind.BRUISE),
     TRAMPLE("Trample", false, 20f, 1.5f, 60, 0.8f, DamageKind.CRUSH),
-    SPIT("Acid spit", true, 8f, 12f, 80, 0.8f, DamageKind.ACID);
+    MINI_TURRET_GUN("Mini-turret", true, 8f, 22f, 40, 0.7f, DamageKind.BULLET, burst = 2);
 
     val meleeSkill get() = !ranged
 }
@@ -396,6 +398,11 @@ enum class Research(
     SHIP_ENGINE("Ship engine", 3500f, listOf(MULTIANALYZER, FABRICATION), "Ship engine", 3),
     SHIP_REACTOR("Ship reactor", 4000f, listOf(SHIP_ENGINE), "Ship reactor", 3),
     SHIP_COMPUTER("Ship computer core", 3500f, listOf(MULTIANALYZER), "Ship computer core", 3),
+    // Production and utility
+    DEEP_DRILLING("Deep drilling", 1200f, listOf(MULTIANALYZER), "Deep drill", 3),
+    NUTRIENT_PASTE("Nutrient paste", 500f, listOf(HYDROPONICS), "Nutrient paste dispenser", 2),
+    SCULPTING("Sculpting", 300f, listOf(STONECUTTING), "Sculptor's table", 1),
+    CREMATION("Cremation", 400f, listOf(MEDICINE), "Crematorium", 2),
     ;
 
     val cost get() = baseCost * 16f

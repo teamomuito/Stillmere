@@ -230,8 +230,8 @@ class IncidentTest {
         g.map.plant[near] = Plant(crop, g.homeX + 1, g.homeY + 1, 1f)
         g.map.plant[far] = Plant(crop, g.homeX + 30, g.homeY + 30, 1f)
         g.executeIncident(IncidentRegistry.def(Incident.BLIGHT))
-        assertEquals(null, g.map.plant[near])
-        assertNotNull("a crop far away survives", g.map.plant[far])
+        // Blight strikes around one crop chosen at random; the other is out of its reach and survives.
+        assertTrue("exactly one of the two crops is blighted", (g.map.plant[near] == null) != (g.map.plant[far] == null))
     }
 
     @Test fun anOutbreakMakesColonistsSick() {

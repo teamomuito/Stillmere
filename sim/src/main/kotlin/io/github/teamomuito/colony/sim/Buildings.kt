@@ -41,8 +41,8 @@ enum class BuildDef(
     STOOL("Stool", listOf(c(ItemType.WOOD, 8)), 120, 40f, "Furniture", comfort = 0.45f, research = Research.COMPLEX_FURNITURE, flam = 1f),
     CHAIR("Chair", listOf(c(ItemType.WOOD, 14)), 200, 60f, "Furniture", comfort = 0.7f, beauty = 0.3f, research = Research.COMPLEX_FURNITURE, flam = 1f),
     PLANT_POT("Plant pot", listOf(c(ItemType.WOOD, 14)), 150, 30f, "Furniture", beauty = 2.2f, research = Research.COMPLEX_FURNITURE, flam = 0.8f),
-    SCULPTURE_SMALL("Small sculpture", listOf(c(ItemType.STONE, 50)), 3000, 80f, "Furniture", beauty = 6f, buildWork = WorkType.ART, art = true, blocksMove = true, research = Research.STONECUTTING, flam = 0f),
-    SCULPTURE_LARGE("Large sculpture", listOf(c(ItemType.STONE, 140)), 7500, 160f, "Furniture", beauty = 20f, buildWork = WorkType.ART, art = true, blocksMove = true, research = Research.STONECUTTING, flam = 0f, w = 2, h = 2),
+    SCULPTURE_SMALL("Small sculpture", listOf(c(ItemType.SCULPTURE_SMALL, 1)), 3000, 80f, "Furniture", beauty = 6f, buildWork = WorkType.ART, art = true, blocksMove = true, research = Research.STONECUTTING, flam = 0f),
+    SCULPTURE_LARGE("Large sculpture", listOf(c(ItemType.SCULPTURE_LARGE, 1)), 7500, 160f, "Furniture", beauty = 20f, buildWork = WorkType.ART, art = true, blocksMove = true, research = Research.STONECUTTING, flam = 0f, w = 2, h = 2),
     TORCH_LAMP("Torch lamp", listOf(c(ItemType.WOOD, 12)), 80, 20f, "Furniture", light = 8f, fuelCap = 24f, heat = 1.5f, flam = 1f, beauty = 0.3f),
     STANDING_LAMP("Standing lamp", listOf(c(ItemType.STEEL, 10), c(ItemType.COMPONENT, 1)), 120, 40f, "Furniture", light = 10f, power = -30f, research = Research.ELECTRICITY, beauty = 0.5f),
     HORSESHOES("Horseshoes pin", listOf(c(ItemType.WOOD, 10)), 100, 20f, "Joy", joy = 0.35f, flam = 1f),
@@ -97,7 +97,15 @@ enum class BuildDef(
     SHIP_COMPUTER("Ship computer core", listOf(c(ItemType.STEEL, 100), c(ItemType.PLASTEEL, 60), c(ItemType.COMPONENT, 8)), 2500, 300f, "Ship", blocksMove = true, research = Research.SHIP_COMPUTER, power = -100f, w = 2, h = 2),
     SHIP_ENGINE("Ship engine", listOf(c(ItemType.STEEL, 160), c(ItemType.PLASTEEL, 80), c(ItemType.COMPONENT, 6)), 3000, 300f, "Ship", blocksMove = true, research = Research.SHIP_ENGINE, w = 3, h = 2),
     SHIP_REACTOR("Ship reactor", listOf(c(ItemType.STEEL, 160), c(ItemType.PLASTEEL, 120), c(ItemType.GOLD, 40), c(ItemType.COMPONENT, 8)), 3500, 300f, "Ship", blocksMove = true, research = Research.SHIP_REACTOR, w = 2, h = 2),
-    SHIP_CASKET("Cryptosleep casket", listOf(c(ItemType.STEEL, 100), c(ItemType.PLASTEEL, 30), c(ItemType.COMPONENT, 4)), 1800, 200f, "Ship", blocksMove = true, research = Research.CRYPTOSLEEP, power = -30f, w = 1, h = 2);
+    SHIP_CASKET("Cryptosleep casket", listOf(c(ItemType.STEEL, 100), c(ItemType.PLASTEEL, 30), c(ItemType.COMPONENT, 4)), 1800, 200f, "Ship", blocksMove = true, research = Research.CRYPTOSLEEP, power = -30f, w = 1, h = 2),
+    // Production and utility, from the base game's production list.
+    DEEP_DRILL("Deep drill", listOf(c(ItemType.STEEL, 100), c(ItemType.COMPONENT, 2)), 600, 150f, "Production", blocksMove = true, power = -300f, research = Research.DEEP_DRILLING),
+    NUTRIENT_DISPENSER("Nutrient paste dispenser", listOf(c(ItemType.STEEL, 125), c(ItemType.COMPONENT, 3)), 600, 120f, "Production", blocksMove = true, power = -200f, workbench = true, research = Research.NUTRIENT_PASTE, skillRequirement = 5),
+    SCULPTOR_TABLE("Sculptor's table", listOf(c(ItemType.STONE, 40)), 400, 100f, "Production", blocksMove = true, workbench = true, research = Research.SCULPTING),
+    BREWERY("Brewery", listOf(c(ItemType.STEEL, 60), c(ItemType.WOOD, 40)), 450, 110f, "Production", blocksMove = true, workbench = true, research = Research.BREWING),
+    FERMENTING_BARREL("Fermenting barrel", listOf(c(ItemType.WOOD, 30)), 200, 60f, "Production", blocksMove = true, workbench = true, research = Research.BREWING),
+    CREMATORIUM("Crematorium", listOf(c(ItemType.STEEL, 80), c(ItemType.STONE, 60)), 800, 200f, "Production", blocksMove = true, power = -250f, research = Research.CREMATION, w = 2, h = 2),
+    MINI_TURRET("Mini-turret", listOf(c(ItemType.STEEL, 45), c(ItemType.COMPONENT, 1)), 300, 120f, "Security", blocksMove = true, research = Research.GUN_TURRETS);
 
     val isPowered get() = power != 0f
     val producesPower get() = power > 0f

@@ -227,6 +227,7 @@ fun Game.worldSlowTick() {
     roomClimate(out)
     plantsTick(out)
     spoilTick(out)
+    productionTick()
     roomStats()
     // Rain washes the outdoors clean; snow settles and melts.
     if (weather == Weather.RAIN || weather == Weather.THUNDER) {
@@ -549,25 +550,33 @@ fun impressMood(score: Float): Float = when {
 
 // ----------------------------------------------------------------------------------- traps and turrets
 
+/** The weapon a turret building fires, from the weapon table. Null for buildings that do not shoot. */
+internal fun turretWeapon(d: BuildDef): Weapon? = when (d) {
+    BuildDef.TURRET -> Weapon.TURRET_GUN
+    BuildDef.MINI_TURRET -> Weapon.MINI_TURRET_GUN
+    BuildDef.MORTAR -> Weapon.MORTAR_SHELL
+    else -> null
+}
+
 fun Game.turretsTick() {
     for (b in map.buildings()) {
         if (b == null || !b.built) continue
-        if (b.def != BuildDef.TURRET && b.def != BuildDef.MORTAR) continue
+        val w = turretWeapon(b.def) ?: continue
         if (b.cooldown > 0) { b.cooldown -= 10; continue }
         if (b.def == BuildDef.MORTAR) { mortarFire(b); continue }
         var best: Pawn? = null
-        var bd = 28f * 28f
+        var bd = w.range * w.range
         for (h in pawns) {
             if (!h.hostile || !h.alive || h.downed) continue
             val d = ((h.x - b.x) * (h.x - b.x) + (h.y - b.y) * (h.y - b.y)).toFloat()
             if (d < bd && map.lineOfSight(b.x, b.y, h.x, h.y)) { best = h; bd = d }
         }
         if (best != null) {
-            b.cooldown = 55
-            repeat(3) {
-                val hit = rng.chance(0.62f)
+            b.cooldown = w.cooldown
+            repeat(w.burst) {
+                val hit = rng.chance(w.accuracy)
                 shots.add(Shot(b.x.toFloat(), b.y.toFloat(), best.x.toFloat(), best.y.toFloat(), tick + 6 + it * 2, hit))
-                if (hit) dealDamage(best, DamageKind.BULLET, 10f * (0.8f + rng.float() * 0.4f), 0f, null)
+                if (hit) dealDamage(best, w.kind, w.damage * (0.85f + rng.float() * 0.3f), w.armorPen, null)
             }
         }
     }
@@ -583,12 +592,15 @@ private fun Game.mortarFire(b: Building) {
         if (d < bd && d > 64f) { best = h; bd = d }
     }
     if (best == null) return
+    val w = Weapon.MORTAR_SHELL
     b.shells--
-    b.cooldown = 260
-    val tx = (best.x + rng.range(-2, 2)).coerceIn(1, map.w - 2)
-    val ty = (best.y + rng.range(-2, 2)).coerceIn(1, map.h - 2)
+    b.cooldown = w.cooldown
+    // A shell lands close to where it was aimed when it hits, and wide when it misses.
+    val spread = if (rng.chance(w.accuracy)) 2 else 4
+    val tx = (best.x + rng.range(-spread, spread)).coerceIn(1, map.w - 2)
+    val ty = (best.y + rng.range(-spread, spread)).coerceIn(1, map.h - 2)
     shots.add(Shot(b.x.toFloat(), b.y.toFloat(), tx.toFloat(), ty.toFloat(), tick + 12, true, 1))
-    explode(tx, ty, 2.4f, 34f, null, false)
+    explode(tx, ty, w.aoe, w.damage, null, false)
 }
 
 fun Game.trapsTick() {
@@ -607,6 +619,30 @@ fun Game.trapsTick() {
             say("A ${b.def.label.lowercase()} caught ${h.name}.", if (h.hostile) 1 else 2)
             if (rng.chance(0.5f)) { map.removeBuilding(b) }
             break
+        }
+    }
+}
+
+/**
+ * Powered production that happens without a colonist: a deep drill brings up whatever ore lies under it (stone chunks
+ * when there is none), and a crematorium burns the nearest corpse within reach.
+ */
+internal fun Game.productionTick() {
+    for (b in map.buildings()) {
+        if (b == null || !b.built || !b.powered) continue
+        if (b.def == BuildDef.DEEP_DRILL) {
+            if (b.cooldown > 0) { b.cooldown -= 250; continue }
+            b.cooldown = 2 * TICKS_PER_DAY
+            val ore = map.ore[map.idx(b.x, b.y)]
+            val item = ore.item
+            if (ore != Ore.NONE && item != null) map.drop(item, max(1, rng.range(ore.yieldMin, ore.yieldMax) / 2), b.x, b.y)
+            else map.drop(ItemType.STONE_CHUNK, rng.range(1, 2), b.x, b.y)
+        } else if (b.def == BuildDef.CREMATORIUM) {
+            val body = map.items.entries.firstOrNull { (i, s) ->
+                s.corpseOf != null && distance(map.xOf(i), map.yOf(i), b.x, b.y) <= 5f
+            } ?: continue
+            map.items.remove(body.key)
+            say("The crematorium burned the body of ${body.value.corpseOf}.", 0)
         }
     }
 }

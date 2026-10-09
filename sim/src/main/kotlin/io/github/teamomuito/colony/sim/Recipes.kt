@@ -7,7 +7,7 @@ class Ing(val types: List<ItemType>, val count: Int, val label: String) {
 private fun ing(t: ItemType, n: Int) = Ing(listOf(t), n, t.label)
 private fun anyOf(label: String, n: Int, vararg t: ItemType) = Ing(t.toList(), n, label)
 
-private val RAW_VEG = arrayOf(ItemType.RICE, ItemType.POTATOES, ItemType.CORN, ItemType.STRAWBERRIES)
+private val RAW_VEG = arrayOf(ItemType.RICE, ItemType.POTATOES, ItemType.CORN, ItemType.STRAWBERRIES, ItemType.BERRIES)
 private val RAW_MEAT = arrayOf(ItemType.MEAT, ItemType.INSECT_MEAT, ItemType.HUMAN_MEAT, ItemType.EGGS)
 
 enum class Recipe(
@@ -25,7 +25,7 @@ enum class Recipe(
 
     CUT_BLOCKS("Cut stone blocks", listOf(BuildDef.STONECUTTER), listOf(ing(ItemType.STONE_CHUNK, 1)), ItemType.STONE, 20, 400, WorkType.CRAFT),
 
-    BREW_BEER("Brew beer", listOf(BuildDef.DRUG_LAB), listOf(anyOf("Crops", 20, ItemType.CORN, ItemType.RICE, ItemType.POTATOES)), ItemType.BEER, 5, 900, WorkType.CRAFT, 0, Research.BREWING),
+    BREW_BEER("Brew beer", listOf(BuildDef.DRUG_LAB, BuildDef.BREWERY, BuildDef.FERMENTING_BARREL), listOf(anyOf("Crops", 20, ItemType.CORN, ItemType.RICE, ItemType.POTATOES)), ItemType.BEER, 5, 900, WorkType.CRAFT, 0, Research.BREWING),
     ROLL_JOINT("Roll smokeleaf joint", listOf(BuildDef.DRUG_LAB), listOf(ing(ItemType.SMOKELEAF, 3)), ItemType.JOINT, 1, 250, WorkType.CRAFT, 0, Research.DRUGS),
     BREW_TEA("Brew psychite tea", listOf(BuildDef.DRUG_LAB), listOf(ing(ItemType.PSYCHOID, 1)), ItemType.PSYCHITE_TEA, 1, 300, WorkType.CRAFT, 0, Research.DRUGS),
     HERBAL_MEDS("Make herbal medicine", listOf(BuildDef.DRUG_LAB, BuildDef.CRAFTING_SPOT), listOf(ing(ItemType.HEALROOT, 3)), ItemType.MEDS_HERBAL, 1, 600, WorkType.CRAFT, 0, Research.HERBAL_MEDICINE),
@@ -93,6 +93,9 @@ enum class Recipe(
     MAKE_LMG("Make light machine gun", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 100), ing(ItemType.COMPONENT, 8)), ItemType.W_LMG, 1, 3800, WorkType.SMITH, 9, Research.FIREARMS),
     MAKE_SNIPER("Make sniper rifle", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 100), ing(ItemType.COMPONENT, 8)), ItemType.W_SNIPER, 1, 3800, WorkType.SMITH, 9, Research.FIREARMS),
     MAKE_SHELLS("Make mortar shells", listOf(BuildDef.MACHINING), listOf(ing(ItemType.STEEL, 15)), ItemType.SHELL, 5, 800, WorkType.SMITH, 3, Research.MORTARS),
+    MAKE_NUTRIENT("Make nutrient paste meal", listOf(BuildDef.NUTRIENT_DISPENSER), listOf(anyOf("Food", 10, *RAW_VEG, *RAW_MEAT)), ItemType.MEAL_NUTRIENT, 10, 400, WorkType.COOK, 0, Research.NUTRIENT_PASTE),
+    CARVE_SMALL("Carve small sculpture", listOf(BuildDef.SCULPTOR_TABLE), listOf(ing(ItemType.STONE, 50)), ItemType.SCULPTURE_SMALL, 1, 1200, WorkType.ART, 0, Research.SCULPTING),
+    CARVE_LARGE("Carve large sculpture", listOf(BuildDef.SCULPTOR_TABLE), listOf(ing(ItemType.STONE, 140)), ItemType.SCULPTURE_LARGE, 1, 3600, WorkType.ART, 4, Research.SCULPTING),
     MAKE_RECON("Make recon armor", listOf(BuildDef.FAB_BENCH), listOf(ing(ItemType.PLASTEEL, 60), ing(ItemType.COMPONENT, 4)), ItemType.A_RECON, 1, 4500, WorkType.SMITH, 8, Research.ADV_ARMOR);
 
     fun available(done: Set<Research>) = research == null || research in done

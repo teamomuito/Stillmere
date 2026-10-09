@@ -191,7 +191,7 @@ private fun Game.pickTurretTarget(p: Pawn): Building? {
     var bd = p.weapon.range * p.weapon.range
     if (!p.weapon.ranged) return null
     for (b in map.buildings()) {
-        if (b == null || !b.built || (b.def != BuildDef.TURRET && b.def != BuildDef.MORTAR)) continue
+        if (b == null || !b.built || turretWeapon(b.def) == null) continue
         val d = ((b.x - p.x) * (b.x - p.x) + (b.y - p.y) * (b.y - p.y)).toFloat()
         if (d < bd && map.lineOfSight(p.x, p.y, b.x, b.y)) { best = b; bd = d }
     }

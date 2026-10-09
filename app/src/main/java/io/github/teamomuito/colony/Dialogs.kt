@@ -24,6 +24,7 @@ import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.PlantType
 import io.github.teamomuito.colony.sim.Quality
 import io.github.teamomuito.colony.sim.Recipe
+import io.github.teamomuito.colony.sim.BaseContent
 import io.github.teamomuito.colony.sim.Scenario
 import io.github.teamomuito.colony.sim.SkillType
 import io.github.teamomuito.colony.sim.Storyteller
@@ -270,7 +271,7 @@ class Dialogs(val a: MainActivity) {
     }
 
     private fun billsSection(body: LinearLayout, b: Building, rerender: () -> Unit) {
-        val recipes = Recipe.entries.filter { b.def in it.benches }
+        val recipes = Recipe.entries.filter { b.def in it.benches && BaseContent.offered(it) }
         if (recipes.isEmpty()) return
         body.addView(ui.label("Bills", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 12, 0, 2))
         if (b.bills.isEmpty()) body.addView(ui.label("No bills. Add one so colonists use this workbench.", 11.5f, ui.dim))
