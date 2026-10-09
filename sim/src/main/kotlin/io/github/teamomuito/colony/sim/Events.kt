@@ -313,7 +313,7 @@ internal fun Game.meteorite() {
     map.drop(ItemType.STEEL, steel, x, y)
     if (rng.chance(0.5f)) map.drop(ItemType.SILVER, rng.range(30, 90), x, y)
     if (rng.chance(0.3f)) map.drop(ItemType.COMPONENT, rng.range(1, 3), x, y)
-    blasts.add(Blast(x, y, 1.5f, tick + 14))
+    blasts.add(Blast(x, y, 1.5f, tick + tk(14)))
     say("A meteorite crashes into the ground nearby, scattering metal.", 1)
 }
 
@@ -345,7 +345,7 @@ internal fun Game.mechCrash() {
     }
     map.drop(ItemType.STEEL, rng.range(80, 160), cx, cy)
     map.drop(ItemType.COMPONENT, rng.range(2, 5), cx, cy)
-    blasts.add(Blast(cx, cy, 2.5f, tick + 20))
+    blasts.add(Blast(cx, cy, 2.5f, tick + tk(20)))
     say("A mechanoid ship has crashed to the ${if (cx < homeX) "west" else "east"}. Its cluster lies dormant... for now.", 2)
 }
 
@@ -382,7 +382,7 @@ internal fun Game.volcanicWinter() {
 }
 
 internal fun Game.thunderstorm() {
-    weather = Weather.THUNDER; weatherUntil = tick + 5000; lightning(); say("A violent thunderstorm hits.", 2)
+    weather = Weather.THUNDER; weatherUntil = tick + tk(5000); lightning(); say("A violent thunderstorm hits.", 2)
 }
 
 /** A spark in dry grass or forest well away from the base. Rain and thunder put it out before it starts. */

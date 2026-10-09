@@ -52,12 +52,12 @@ fun Game.fireTick() {
     val rain = weather == Weather.RAIN || weather == Weather.THUNDER
     val snow = weather == Weather.SNOW
     for ((i, f) in map.fires.entries.toList()) {
-        f.age += 4
+        f.age += tk(4)
         val flam = cellFlammability(i)
         if (rain) f.intensity -= 0.01f
         if (snow) f.intensity -= 0.004f
         if (flam <= 0.01f) f.intensity -= 0.006f else f.intensity = min(1.2f, f.intensity + 0.002f * flam)
-        if (f.age % 20 == 0) {
+        if (f.age % tk(20) == 0) {
             val b = map.building[i]
             if (b != null && b.flam > 0f) {
                 b.hp -= 4f * f.intensity * b.flam
@@ -76,7 +76,7 @@ fun Game.fireTick() {
             for (p in pawns) if (p.alive && p.x == i % map.w && p.y == i / map.w) dealDamage(p, DamageKind.BURN, 3.5f * f.intensity)
         }
         // Spread.
-        if (f.age % 16 == 0) {
+        if (f.age % tk(16) == 0) {
             for (d in 0 until 8) {
                 val nx = i % map.w + GameMap.DX8[d]; val ny = i / map.w + GameMap.DY8[d]
                 if (!map.inB(nx, ny)) continue
@@ -92,7 +92,7 @@ fun Game.fireTick() {
 }
 
 fun Game.explode(x: Int, y: Int, radius: Float, damage: Float, source: Pawn? = null, fire: Boolean = false) {
-    blasts.add(Blast(x, y, radius, tick + 14))
+    blasts.add(Blast(x, y, radius, tick + tk(14)))
     val r = radius.toInt() + 1
     for (yy in y - r..y + r) for (xx in x - r..x + r) {
         if (!map.inB(xx, yy)) continue
@@ -177,7 +177,7 @@ fun Game.powerTick() {
     }
     class Net { var prod = 0f; var cons = 0f; var cap = 0f; var stored = 0f; val batteries = ArrayList<Building>(); val consumers = ArrayList<Building>() }
     val nets = HashMap<Int, Net>()
-    val dt = 250f / TICKS_PER_DAY
+    val dt = Game.SLOW_TICK.toFloat() / TICKS_PER_DAY
     for ((k, b) in devices.withIndex()) {
         val net = nets.getOrPut(find(attach[k][0])) { Net() }
         val d = b.def
@@ -187,7 +187,7 @@ fun Game.powerTick() {
             when (d) {
                 BuildDef.SOLAR_PANEL -> out = d.power * daylight() * (if (ps.flare) 0f else 1f)
                 BuildDef.WIND_TURBINE -> out = d.power * windFactor
-                BuildDef.WOOD_GENERATOR -> if (b.fuel > 0f) { out = d.power; b.fuel = max(0f, b.fuel - 250f / TICKS_PER_HOUR * 0.8f) }
+                BuildDef.WOOD_GENERATOR -> if (b.fuel > 0f) { out = d.power; b.fuel = max(0f, b.fuel - Game.SLOW_TICK.toFloat() / TICKS_PER_HOUR * 0.8f) }
                 else -> {}
             }
             if (ps.flare) out *= 0f
@@ -250,7 +250,7 @@ fun Game.worldSlowTick() {
         for (i in 0 until m.size) { val pl = m.plant[i]; if (pl != null && !m.roofed(i) && rng.chance(0.002f)) m.plant[i] = null }
     }
     // Filth settles in busy rooms slowly.
-    if (tick % 2000L == 0L) for (p in pawns) if (p.alive && !p.isAnimal && rng.chance(0.3f)) {
+    if (tick % tk(2000L) == 0L) for (p in pawns) if (p.alive && !p.isAnimal && rng.chance(0.3f)) {
         val i = m.idx(p.x, p.y)
         if (m.roofed(i) && m.filth[i] < 4) m.filth[i] = (m.filth[i] + 1).toByte()
     }
@@ -272,7 +272,7 @@ private fun Game.updateWeather() {
         r < b.rain + 0.15f -> Weather.CLOUDY
         else -> Weather.CLEAR
     }
-    weatherUntil = tick + rng.range(2500, 9000)
+    weatherUntil = tick + rng.range(tk(2500), tk(9000))
     if (weather == Weather.THUNDER && rng.chance(0.5f)) lightning()
 }
 
@@ -284,7 +284,7 @@ fun Game.lightning() {
         weather = Weather.CLEAR
         igniteCell(i, 0.5f)
         weather = old
-        shots.add(Shot(x.toFloat(), 0f, x.toFloat(), y.toFloat(), tick + 8, true, 2))
+        shots.add(Shot(x.toFloat(), 0f, x.toFloat(), y.toFloat(), tick + tk(8), true, 2))
     }
 }
 
@@ -344,7 +344,7 @@ private fun Game.roomClimate(out: Float) {
                 if (b.fuel > 0f) {
                     val use = d == BuildDef.CAMPFIRE || d == BuildDef.TORCH_LAMP || b.inUse > 0 || d == BuildDef.WOOD_GENERATOR
                     if (use) { b.fuel = max(0f, b.fuel - 0.25f); active = true }
-                    if (b.inUse > 0) b.inUse = max(0, b.inUse - 250)
+                    if (b.inUse > 0) b.inUse = max(0, b.inUse - Game.SLOW_TICK.toInt())
                 }
             }
             else -> active = true
@@ -377,7 +377,7 @@ private fun Game.plantsTick(out: Float) {
         val t = m.tempAt(i, out)
         val fert = m.terrain[i].fertility.let { f -> if (m.building[i]?.def == BuildDef.HYDROPONICS && m.building[i]?.powered == true) 2.0f else f }
         if (pl.type.crop || pl.type.isTree || pl.type.regrows) {
-            pl.age += 250
+            pl.age += Game.SLOW_TICK.toInt()
             if (pl.growth >= 1f) {
                 if (pl.type.crop && t < -3f && rng.chance(0.002f)) m.plant[i] = null
                 continue
@@ -392,14 +392,14 @@ private fun Game.plantsTick(out: Float) {
             val lit = light > 0.2f || m.light[i] > 0.5f
             if (t < pl.type.minTemp || t > pl.type.maxTemp || !lit) continue
             val days = if (pl.type.growDays <= 0f) 1f else pl.type.growDays
-            var rate = 1f / (days * TICKS_PER_DAY * 0.55f) * 250f * max(0.2f, fert)
+            var rate = 1f / (days * TICKS_PER_DAY * 0.55f) * Game.SLOW_TICK * max(0.2f, fert)
             if (weather == Weather.RAIN) rate *= 1.1f
             if (Trait.GREEN_THUMB in pawns.firstOrNull { it.colonist }?.traits.orEmpty()) rate *= 1.25f
             pl.growth = min(1f, pl.growth + rate)
         }
     }
     // Saplings: forests slowly spread.
-    if (tick % 1000L == 0L) {
+    if (tick % tk(1000L) == 0L) {
         repeat(6) {
             val i = rng.int(m.size)
             if (m.plant[i] != null || m.building[i] != null || m.floor[i] != null || m.zoneId[i] != 0 || m.items[i] != null) return@repeat
@@ -428,7 +428,7 @@ private fun Game.deteriorationTick() {
     val gone = ArrayList<Int>()
     for ((i, s) in m.items) {
         if (s.corpseOf != null || !deteriorates(s.type) || m.roofed(i) || m.building[i]?.def?.sleeps == true) continue
-        s.hp -= 250f / (TICKS_PER_DAY * 25f) * (if (wet) 3f else 1f)
+        s.hp -= Game.SLOW_TICK.toFloat() / (TICKS_PER_DAY * 25f) * (if (wet) 3f else 1f)
         if (s.hp <= 0f) {
             if (s.count <= 1 || s.type.isGear) gone.add(i) else { s.count = max(1, s.count - max(1, s.count / 6)); s.hp = 0.6f }
         }
@@ -438,7 +438,7 @@ private fun Game.deteriorationTick() {
 
 private fun Game.spoilTick(out: Float) {
     val m = map
-    val dt = 250f
+    val dt = Game.SLOW_TICK.toFloat()
     deteriorationTick()
     var spoiled = 0
     val rem = ArrayList<Int>()
@@ -562,7 +562,7 @@ fun Game.turretsTick() {
     for (b in map.buildings()) {
         if (b == null || !b.built) continue
         val w = turretWeapon(b.def) ?: continue
-        if (b.cooldown > 0) { b.cooldown -= 10; continue }
+        if (b.cooldown > 0) { b.cooldown -= tk(10); continue }
         if (b.def == BuildDef.MORTAR) { mortarFire(b); continue }
         var best: Pawn? = null
         var bd = w.range * w.range
@@ -572,10 +572,10 @@ fun Game.turretsTick() {
             if (d < bd && map.lineOfSight(b.x, b.y, h.x, h.y)) { best = h; bd = d }
         }
         if (best != null) {
-            b.cooldown = w.cooldown
+            b.cooldown = w.cooldownTicks
             repeat(w.burst) {
                 val hit = rng.chance(w.accuracy)
-                shots.add(Shot(b.x.toFloat(), b.y.toFloat(), best.x.toFloat(), best.y.toFloat(), tick + 6 + it * 2, hit))
+                shots.add(Shot(b.x.toFloat(), b.y.toFloat(), best.x.toFloat(), best.y.toFloat(), tick + tk(6) + it * tk(2), hit))
                 if (hit) dealDamage(best, w.kind, w.damage * (0.85f + rng.float() * 0.3f), w.armorPen, null)
             }
         }
@@ -594,12 +594,12 @@ private fun Game.mortarFire(b: Building) {
     if (best == null) return
     val w = Weapon.MORTAR_SHELL
     b.shells--
-    b.cooldown = w.cooldown
+    b.cooldown = w.cooldownTicks
     // A shell lands close to where it was aimed when it hits, and wide when it misses.
     val spread = if (rng.chance(w.accuracy)) 2 else 4
     val tx = (best.x + rng.range(-spread, spread)).coerceIn(1, map.w - 2)
     val ty = (best.y + rng.range(-spread, spread)).coerceIn(1, map.h - 2)
-    shots.add(Shot(b.x.toFloat(), b.y.toFloat(), tx.toFloat(), ty.toFloat(), tick + 12, true, 1))
+    shots.add(Shot(b.x.toFloat(), b.y.toFloat(), tx.toFloat(), ty.toFloat(), tick + tk(12), true, 1))
     explode(tx, ty, w.aoe, w.damage, null, false)
 }
 
@@ -631,7 +631,7 @@ internal fun Game.productionTick() {
     for (b in map.buildings()) {
         if (b == null || !b.built || !b.powered) continue
         if (b.def == BuildDef.DEEP_DRILL) {
-            if (b.cooldown > 0) { b.cooldown -= 250; continue }
+            if (b.cooldown > 0) { b.cooldown -= Game.SLOW_TICK.toInt(); continue }
             b.cooldown = 2 * TICKS_PER_DAY
             val ore = map.ore[map.idx(b.x, b.y)]
             val item = ore.item

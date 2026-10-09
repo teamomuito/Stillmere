@@ -48,8 +48,8 @@ about fidelity.
 
 | # | Finding | Where | Priority |
 |---|---|---|---|
-| R1 | **Wall clock and non-seeded randomness inside `sim/`.** `System.currentTimeMillis()` is a default argument, and `UUID.randomUUID()` names new saves. Neither changes simulation state (they are save metadata), but the rule is "never read the wall clock inside `sim/`". | `SaveStore.kt:115`, `SaveStore.kt:88` | 1 (small fix) |
-| R2 | **Hash-ordered collection written to disk.** `Game.incidentLast` is a `HashMap<Incident, Long>` keyed by an enum, and `SaveGame.kt:128` iterates it when saving. Enum `hashCode()` is identity-based, so entry order can differ between JVM runs and the same game can serialise to different bytes. `Game.kt` already warns about exactly this for `researchDone`. `PerformanceEquivalenceTest.theSameSeedGivesTheSameSaveBytes` passes only because the comparison runs in one JVM. | `Game.kt:92`, `SaveGame.kt:127-128` | 1 (small fix: `EnumMap`) |
+| R1 | **Wall clock and non-seeded randomness inside `sim/`.** `System.currentTimeMillis()` is a default argument, and `UUID.randomUUID()` names new saves. Neither changes simulation state (they are save metadata), but the rule is "never read the wall clock inside `sim/`". | `SaveStore.kt:115`, `SaveStore.kt:88` | 1 (small fix). **Fixed:** default is now 0 and save IDs count up. |
+| R2 | **Hash-ordered collection written to disk.** `Game.incidentLast` is a `HashMap<Incident, Long>` keyed by an enum, and `SaveGame.kt:128` iterates it when saving. Enum `hashCode()` is identity-based, so entry order can differ between JVM runs and the same game can serialise to different bytes. `Game.kt` already warns about exactly this for `researchDone`. `PerformanceEquivalenceTest.theSameSeedGivesTheSameSaveBytes` passes only because the comparison runs in one JVM. | `Game.kt:92`, `SaveGame.kt:127-128` | 1 (small fix: `EnumMap`). **Fixed:** `EnumMap` in `Game` and the loader. |
 | R3 | **Platform-dependent floating point.** `Math.sin`/`Math.cos` are allowed to differ by 1 ulp between JVM and Android runtime. They feed map generation (lake position), drop-pod landing, and the outdoor temperature curve. A seed could generate a slightly different map on a phone than in the unit tests. **UNVERIFIED in practice**; `StrictMath` removes the doubt. | `GameMap.kt:485-486`, `Events.kt:139-140`, `Game.kt:171` | 2 |
 
 Everything else checked is clean: no wall-clock reads in the tick loop, one seeded `Rng` (same LCG as `java.util.Random`, state saved
@@ -80,30 +80,29 @@ them. Whether the rule covers names or only prose is your call; the list is here
 
 ### 3.1 Time and determinism
 
-**Status: Divergent** (time base). **Partial** (determinism). **Priority 1.**
-**Files:** `Defs.kt` (tick constants), `Game.kt` (`tick`, `step`, `daylight`, `outdoorTemp`), `Noise.kt` (`Rng`), `Life.kt` (`DAYS_PER_YEAR`), `SaveStore.kt`, `SaveGame.kt`, `app/MainActivity.kt` (speed).
+**Status: Matches for the time base, pending the save-format decision (see `docs/fidelity/time.md`). Determinism: Matches, with two rule fixes.** **Priority 1.**
+**Files:** `Defs.kt` (calendar and `tk()`), `Game.kt` (`tick`, `step`, `daylight`, `outdoorTemp`, `SLOW_TICK`, `HEALTH_STRIDE`), `Noise.kt` (`Rng`), `SaveStore.kt`, `SaveGame.kt`, `app/MainActivity.kt` (real-time pace).
 
-| Constant | Stillmere | Vanilla | Diff | Conf |
-|---|---|---|---|---|
-| Ticks per in-game hour | 1,000 | 2,500 | 0.4x | V |
-| Ticks per day | 24,000 | 60,000 | 0.4x | V |
-| Days per quadrum (season) | 15 | 15 | none | V |
-| Days per year | 60 | 60 | none | V |
-| Base tick rate | 30 ticks per real second at 1x | 60 | 0.5x | V |
-| Speed multipliers | 0, 1, 3, 6 | pause, 1, 2, 3, plus a dev speed | exact set **UNVERIFIED** | M |
-| Real minutes per game day at 1x | 13.3 | 16.7 | 20% faster | V (derived) |
-| Day starts at | 06:00, day 0 | ? | | ? |
-| Start year | 5500 | ? | | ? |
+| Constant | Stillmere now | Vanilla | Conf |
+|---|---|---|---|
+| Ticks per in-game hour | 2,500 | 2,500 | V |
+| Ticks per day | 60,000 | 60,000 | V |
+| Days per season / per year | 15 / 60 | 15 / 60 | V |
+| Real-time base rate at 1x | 60 ticks per second (app) | 60 | V |
+| Real minutes per game day at 1x | about 16.7 | about 16.7 | V (derived) |
 
-**Why this matters beyond the clock:** many constants are written per tick, not per day. A colonist crosses a cell in `moveTicks`
-= 11 ticks, so in one game day they can walk 24,000 / 11 = about 2,180 cells. A day has 2.5x more ticks in vanilla, so any
-constant carried over unchanged would give 2.5x the effect per day. Work amounts, cooldowns, wound ticks (`30000`, `15000`) and
-raid timers (`9000`) are all in raw ticks. Changing the time base is a save-breaking, whole-codebase change (see Phase 2).
+**Done in this change:** every constant that was written in old ticks (1,000 per hour) is converted with `tk()` or `TIME_SCALE`, so
+it keeps the same game-time length. Per-tick rates (work, XP, joy, rest, repair, sleep) are divided by `TIME_SCALE`. A parity harness
+over 8 seeds compared the old and new builds on walking, food, rest, joy, wounds, fire, crops, combat, mining and cutting: they agree
+within sampling noise, and mined and cut counts match exactly.
 
-**Determinism:** see R1, R2, R3 above. Positive: `theSameSeedGivesTheSameFight`, `theSameSeedGivesTheSameIncidents`, and
-`aLoadedGameContinuesExactlyLikeTheOriginal` all pass.
+**Determinism:** `sim/` reads no clock and no unseeded randomness (enforced by a test that scans the sources). Enum-keyed maps that
+reach the save file are now `EnumMap`, so save bytes do not depend on JVM identity hashes (R2). The save timestamp is a caller-supplied
+value, defaulting to 0 (R1). Save IDs count up instead of using UUIDs. A test runs the same seed twice and compares a SHA-256 of the
+full save bytes; another checks that save and load leave the state identical, and that a loaded game keeps running identically.
 
-**Missing:** none of the above is reflected in a `docs/fidelity/time.md`.
+**Open:** existing saves store tick counts in old units. Loading one into the new time base would shift its calendar and timers. See
+`docs/fidelity/time.md`.
 
 ### 3.2 Map generation
 
@@ -530,7 +529,7 @@ need your sign-off on a save-migration approach first.
 | Phase | Name | Content | Needs from you |
 |---|---|---|---|
 | 1 | `phase-1-hygiene` | Pin `<VERSION>`; fix R1 to R3; delete nothing; create `docs/fidelity/` with one file per system and the constant tables above; add a first fidelity test per system as numbers are verified; fix the README counts and links | the version; the naming decision (2.2); the signing-key decision (X1) |
-| 2 | `phase-2-timebase` | Move to 2,500 / 60,000 ticks and rescale every per-tick constant; save migration | approval to break or migrate old saves |
+| 2 | `phase-2-timebase` (time base; largely done, see docs/fidelity/time.md) | Move to 2,500 / 60,000 ticks and rescale every per-tick constant; save migration | approval to break or migrate old saves |
 | 3 | `phase-3-needs-mood` | Hunger rate, rest and joy drains, add comfort, beauty, outdoors and indoors needs, vanilla break thresholds, thought catalogue, tolerance | none after phase 2 |
 | 4 | `phase-4-skills-traits` | Learning rates, decay, XP curve, work-speed curves, trait degrees, backstory set | the backstory approach (original titles only) |
 | 5 | `phase-5-health` | Body depth, bleeding and immunity, chronic conditions, medicine, surgery | none |

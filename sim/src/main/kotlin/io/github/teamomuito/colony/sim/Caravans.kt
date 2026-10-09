@@ -176,7 +176,7 @@ fun Game.unloadCaravan(c: Caravan) {
 internal fun Game.caravansTick() {
     for (c in caravans.toList()) {
         if (pendingBattle != null) return
-        if (!c.inBattle) caravanStep(c, 250)
+        if (!c.inBattle) caravanStep(c, Game.SLOW_TICK.toInt())
     }
 }
 

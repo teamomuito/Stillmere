@@ -343,7 +343,7 @@ object SaveGame {
             t
         }
         var raidEnded = -1L
-        val incidents = HashMap<Incident, Long>()
+        val incidents: MutableMap<Incident, Long> = java.util.EnumMap(Incident::class.java)
         if (version >= 20) {
             raidEnded = i.readLong()
             repeat(i.readInt()) { val name = i.readUTF(); val at = i.readLong(); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }

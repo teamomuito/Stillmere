@@ -48,7 +48,7 @@ class BaseContentTest {
         val before = g.shots.size
         g.turretsTick()
         assertEquals("one burst of the mini-turret gun", Weapon.MINI_TURRET_GUN.burst, g.shots.size - before)
-        assertEquals(Weapon.MINI_TURRET_GUN.cooldown, t.cooldown)
+        assertEquals(Weapon.MINI_TURRET_GUN.cooldownTicks, t.cooldown)
     }
 
     @Test fun aGunTurretUsesTheTurretGunTable() {
@@ -56,7 +56,7 @@ class BaseContentTest {
         val t = g.build(BuildDef.TURRET, g.homeX, g.homeY)
         g.hostileAt(g.homeX + 8, g.homeY)
         g.turretsTick()
-        assertEquals(Weapon.TURRET_GUN.cooldown, t.cooldown)
+        assertEquals(Weapon.TURRET_GUN.cooldownTicks, t.cooldown)
     }
 
     @Test fun aMortarShellsAndCoolsDownFromTheShellTable() {
@@ -66,7 +66,7 @@ class BaseContentTest {
         g.hostileAt(g.homeX + 12, g.homeY)
         g.turretsTick()
         assertEquals("a shell was fired", 2, m.shells)
-        assertEquals(Weapon.MORTAR_SHELL.cooldown, m.cooldown)
+        assertEquals(Weapon.MORTAR_SHELL.cooldownTicks, m.cooldown)
     }
 
     @Test fun turretsOnlyFireAtEnemiesInRange() {

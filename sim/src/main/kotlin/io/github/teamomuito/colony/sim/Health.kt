@@ -231,8 +231,10 @@ internal fun Game.checkDeath(p: Pawn, source: Pawn?) {
 
 // ---------------------------------------------------------------------------- tick
 
+/** Updates health for [dt] ticks. Constants here are per old tick, so they take [ldt], the same span in old ticks. */
 fun Game.healthTick(p: Pawn, dt: Int) {
     if (p.dead) return
+    val ldt = dt / TIME_SCALE
     if (p.injuries.isEmpty() && p.hediffs.isEmpty() && p.bloodLoss <= 0f) {
         if (p.healthDirty) recomputeHealth(p)
         return
@@ -255,11 +257,11 @@ fun Game.healthTick(p: Pawn, dt: Int) {
         bleed += b
         if (inj.missing) {
             // Stumps stop bleeding over time.
-            inj.bleed = max(0f, inj.bleed - 2e-9f * dt)
+            inj.bleed = max(0f, inj.bleed - 2e-9f * ldt)
             continue
         }
         // Tending wears off.
-        if (inj.tended && inj.age % 30000 < dt && (inj.infection > 0f)) inj.tended = false
+        if (inj.tended && inj.age % tk(30000) < dt && (inj.infection > 0f)) inj.tended = false
         // Healing.
         var heal = (if (inj.tended) 8f * (0.55f + inj.tendQuality) else 3.2f) / TICKS_PER_DAY * dt
         if (inBed) heal *= 1.35f
@@ -275,7 +277,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
             p.healthDirty = true
             continue
         }
-        inj.bleed *= (1f - dt / (if (inj.tended) 12000f else 34000f)).coerceAtLeast(0.5f)
+        inj.bleed *= (1f - ldt / (if (inj.tended) 12000f else 34000f)).coerceAtLeast(0.5f)
         if (inj.bleed < 2e-8f) inj.bleed = 0f
         // Infection: an untreated infection grows faster than the body can fight it; good care tips the balance.
         if (inj.infection > 0f) {
@@ -299,10 +301,10 @@ fun Game.healthTick(p: Pawn, dt: Int) {
     }
     // Blood.
     if (bleed > 0f) {
-        p.bloodLoss = min(1.1f, p.bloodLoss + bleed * dt)
+        p.bloodLoss = min(1.1f, p.bloodLoss + bleed * ldt)
         if (p.bloodLoss >= 1f) checkDeath(p, null)
         // Blood on the floor.
-        if (rng.chance(0.04f * dt / 10f)) {
+        if (rng.chance(0.04f * ldt / 10f)) {
             val i = map.idx(p.x, p.y)
             if (map.filth[i] < 4) map.filth[i] = (map.filth[i] + 1).toByte()
         }
@@ -319,7 +321,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
         h.age += dt
         when (h.kind.category) {
             0 -> {
-                if (h.tended && h.age % 15000 < dt) h.tended = false
+                if (h.tended && h.age % tk(15000) < dt) h.tended = false
                 val per = dt / TICKS_PER_DAY.toFloat()
                 var imm = h.kind.immunityPerDay * per * (if (Trait.SUPER_IMMUNE in p.traits) 1.4f else 1f)
                 if (h.tended) imm *= 1f + 0.5f * h.tendQuality

@@ -91,7 +91,7 @@ fun Game.fire(p: Pawn, t: Pawn) {
     if (w.ranged) {
         if (d > w.range + 1) return
         aim(p, t)
-        if (p.warmup < w.warmup) { p.warmup++; return }
+        if (p.warmup < w.warmupTicks) { p.warmup++; return }
         p.warmup = 0
         val path = shotPath(p, t)
         // The shot meets whatever is first on its line; a wall on the line stops it outright.
@@ -112,20 +112,20 @@ fun Game.fire(p: Pawn, t: Pawn) {
                 target.suppressedUntil = max(target.suppressedUntil, tick + TICKS_PER_HOUR)
                 target.addThought("Under fire", -0.04f, tick, TICKS_PER_HOUR)
             }
-            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + 5 + k * 2, anyHit, if (w == Weapon.BOW || w == Weapon.GREATBOW) 3 else 0))
+            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + tk(5) + k * tk(2), anyHit, if (w == Weapon.BOW || w == Weapon.GREATBOW) 3 else 0))
         }
-        p.attackCd = max(8, (w.cooldown * (if (Trait.TRIGGER_HAPPY in p.traits) 0.85f else if (Trait.CAREFUL_SHOOTER in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.attackCd = max(tk(8), (w.cooldownTicks * (if (Trait.TRIGGER_HAPPY in p.traits) 0.85f else if (Trait.CAREFUL_SHOOTER in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
         p.gainXp(SkillType.SHOOTING, 4f * w.burst)
     } else {
         if (d > 2.1f) return
         val hit = rng.chance(hitChance(p, t, w, d, cover = 0f))
-        shots.add(Shot(p.x.toFloat(), p.y.toFloat(), t.x.toFloat(), t.y.toFloat(), tick + 4, hit, 4))
+        shots.add(Shot(p.x.toFloat(), p.y.toFloat(), t.x.toFloat(), t.y.toFloat(), tick + tk(4), hit, 4))
         if (hit) {
             var dmg = w.damage * (0.85f + rng.float() * 0.3f) * p.weaponDamageMult()
             if (p.isAnimal) dmg *= (0.7f + 0.3f * p.race.size)
             dealDamage(t, w.kind, dmg, w.armorPen, p)
         }
-        p.attackCd = max(10, (w.cooldown / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.attackCd = max(tk(10), (w.cooldownTicks / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
         p.gainXp(SkillType.MELEE, 4f)
     }
 }
@@ -216,7 +216,7 @@ private fun Game.nearestWall(p: Pawn): Building? {
 private fun Game.digWall(p: Pawn, wall: Building) {
     if (distance(p.x, p.y, wall.x, wall.y) > 1.5f) { goTo(p, wall.x, wall.y, adjacent = true); return }
     if (p.attackCd == 0) {
-        p.attackCd = p.weapon.cooldown
+        p.attackCd = p.weapon.cooldownTicks
         wall.hp -= 6f
         if (wall.hp <= 0f) { map.removeBuilding(wall); map.roomDirty = true; say("Sappers broke through a ${wall.def.label.lowercase()}!", 3) }
     }
@@ -236,7 +236,7 @@ private fun Game.pickTurretTarget(p: Pawn): Building? {
 
 /** Dormant mechanoids lie still until someone gets close; the whole cluster wakes together. */
 internal fun Game.dormantTick(p: Pawn) {
-    if (tick % 20 != (p.id % 20).toLong()) return
+    if (tick % tk(20) != (p.id % tk(20)).toLong()) return
     if (pawns.any { it.alive && it.faction == Faction.PLAYER && !it.isAnimal && distance(p.x, p.y, it.x, it.y) < 11f }) {
         for (o in pawns) if (o.dormant && o.raidId == p.raidId) o.dormant = false
         say("The mechanoid cluster has awoken!", 3)
@@ -256,20 +256,20 @@ internal fun Game.hostileAI(p: Pawn) {
     }
     // Wounded raiders run away.
     // A badly hurt raider may break and run, but not within the first hour of their wounds.
-    if (!p.colonist && !p.retreating && p.healthFraction() < 0.45f && rng.chance(0.00005f)) { p.retreating = true; endJob(p); return }
+    if (!p.colonist && !p.retreating && p.healthFraction() < 0.45f && rng.chance(0.00005f / TIME_SCALE)) { p.retreating = true; endJob(p); return }
     j.timer++
     // Siege: wait at the camp and lob mortar shells until the clock runs out.
     if (p.raidMode == 2 && p.campX >= 0 && day * TICKS_PER_DAY + 0 < tick) {
-        val waitUntil = raidStartedAt + 9000
+        val waitUntil = raidStartedAt + tk(9000)
         if (tick < waitUntil) {
             val d = distance(p.x, p.y, p.campX, p.campY)
             if (d > 4f) goTo(p, p.campX, p.campY)
-            else if (j.timer % 700 == 0) siegeShell(p)
+            else if (j.timer % tk(700) == 0) siegeShell(p)
             return
         }
     }
     var t = pawnById(j.targetPawn)
-    if (t == null || !t.alive || (t.downed && j.timer % 30 == 0) || j.timer % 100 == 0) {
+    if (t == null || !t.alive || (t.downed && j.timer % tk(30) == 0) || j.timer % tk(100) == 0) {
         t = pickRaidTarget(p)
         j.targetPawn = t?.id ?: -1
     }
@@ -280,15 +280,15 @@ internal fun Game.hostileAI(p: Pawn) {
     val turret = pickTurretTarget(p)
     val w = p.weapon
     if (turret != null && (t == null || distance(p.x, p.y, turret.x, turret.y) + 3f < distance(p.x, p.y, t.x, t.y))) {
-        if (p.attackCd == 0 && p.warmup >= w.warmup) {
-            p.attackCd = w.cooldown
+        if (p.attackCd == 0 && p.warmup >= w.warmupTicks) {
+            p.attackCd = w.cooldownTicks
             turret.hp -= w.damage * w.burst * 0.6f
-            shots.add(Shot(p.x.toFloat(), p.y.toFloat(), turret.x.toFloat(), turret.y.toFloat(), tick + 5, true))
+            shots.add(Shot(p.x.toFloat(), p.y.toFloat(), turret.x.toFloat(), turret.y.toFloat(), tick + tk(5), true))
             if (turret.hp <= 0f) { map.removeBuilding(turret); map.roomDirty = true; say("A ${turret.def.label.lowercase()} was destroyed!", 3) }
         } else p.warmup++
         return
     }
-    if (t == null) { if (j.timer % 90 == 0) wanderAround(p); return }
+    if (t == null) { if (j.timer % tk(90) == 0) wanderAround(p); return }
     val d = distance(p.x, p.y, t.x, t.y)
     if (w.ranged) {
         val stand = w.range * 0.75f
@@ -314,7 +314,7 @@ private fun Game.siegeShell(p: Pawn) {
     val target = colonists.randomOrNull(rng) ?: return
     val tx = (target.x + rng.range(-4, 4)).coerceIn(1, map.w - 2)
     val ty = (target.y + rng.range(-4, 4)).coerceIn(1, map.h - 2)
-    shots.add(Shot(p.x.toFloat(), p.y.toFloat(), tx.toFloat(), ty.toFloat(), tick + 14, true, 1))
+    shots.add(Shot(p.x.toFloat(), p.y.toFloat(), tx.toFloat(), ty.toFloat(), tick + tk(14), true, 1))
     explode(tx, ty, 2.3f, 30f, p, false)
 }
 
@@ -364,14 +364,14 @@ internal fun Game.thinkPrisoner(p: Pawn) {
         p.job = j; return
     }
     val j = Job(if (rng.chance(0.4f)) JobType.WANDER else JobType.IDLE)
-    j.timer = rng.range(60, 140)
+    j.timer = rng.range(tk(60), tk(140))
     p.job = j
 }
 
 internal fun Game.thinkVisitor(p: Pawn) {
     if (p.retreating || p.escapeTick > 0 && tick > p.escapeTick) { p.job = Job(JobType.LEAVE); return }
     val j = Job(if (rng.chance(0.5f)) JobType.WANDER else JobType.IDLE)
-    j.timer = rng.range(80, 200)
+    j.timer = rng.range(tk(80), tk(200))
     p.job = j
 }
 
@@ -412,7 +412,7 @@ internal fun Game.findWarden(p: Pawn): Job? {
             }
         }
         // Recruiting talks.
-        if (tick - o.lastSocial > 6000 && o.recruitMode == 0 && o.food > 0.2f) {
+        if (tick - o.lastSocial > tk(6000) && o.recruitMode == 0 && o.food > 0.2f) {
             o.lastSocial = tick
             reserve(p, k)
             val j = Job(JobType.WARDEN, o.x, o.y)

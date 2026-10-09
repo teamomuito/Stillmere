@@ -39,6 +39,7 @@ import io.github.teamomuito.colony.sim.settle
 import io.github.teamomuito.colony.sim.Weather
 import io.github.teamomuito.colony.sim.ZoneKind
 import io.github.teamomuito.colony.sim.TICKS_PER_DAY
+import io.github.teamomuito.colony.sim.TIME_SCALE
 import io.github.teamomuito.colony.sim.bedCount
 import io.github.teamomuito.colony.sim.totalFoodNutrition
 import io.github.teamomuito.colony.sim.trader
@@ -206,7 +207,7 @@ class MainActivity : Activity() {
 
     fun hookAutosave(g: Game) {
         g.autosaveHook = {
-            val stamp = g.tick / 6000
+            val stamp = g.tick / (6000 * TIME_SCALE).toLong()
             if (stamp != lastSaved) { lastSaved = stamp; save() }
         }
     }
@@ -367,7 +368,7 @@ class MainActivity : Activity() {
             val dt = if (lastFrameNs == 0L) 0.0 else (frameTimeNanos - lastFrameNs) / 1e9
             lastFrameNs = frameTimeNanos
             if (speed > 0 && !game.gameOver) {
-                acc += min(dt, 0.1) * 30.0 * speedMult[speed]
+                acc += min(dt, 0.1) * 60.0 * speedMult[speed]
                 var n = acc.toInt()
                 acc -= n
                 if (n > 70) n = 70

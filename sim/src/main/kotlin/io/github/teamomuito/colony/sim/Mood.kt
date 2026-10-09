@@ -90,7 +90,7 @@ fun Game.comfortTick(p: Pawn) {
         }
     }
     // Disease: occasionally someone gets sick from dirt and cold.
-    if (p.colonist && tick % 5000L == 0L) maybeSick(p)
+    if (p.colonist && tick % tk(5000L) == 0L) maybeSick(p)
 }
 
 private fun Game.maybeSick(p: Pawn) {
@@ -260,12 +260,12 @@ private fun Game.breaksTick(p: Pawn) {
 
 fun Game.startBreak(p: Pawn, kind: Int) {
     p.breakKind = kind
-    p.breakUntil = tick + rng.range(2000, 5000)
+    p.breakUntil = tick + rng.range(tk(2000), tk(5000))
     p.drafted = false
     endJob(p)
     when (kind) {
         Break.BERSERK -> { p.hostileFlag = true; say("${p.name} has gone berserk!", 3) }
-        Break.CATATONIC -> { p.breakUntil = tick + rng.range(5000, 9000); downPawn(p); say("${p.name} has gone catatonic.", 3) }
+        Break.CATATONIC -> { p.breakUntil = tick + rng.range(tk(5000), tk(9000)); downPawn(p); say("${p.name} has gone catatonic.", 3) }
         Break.RUN_WILD -> say("${p.name} is running into the wilds!", 3)
         Break.TANTRUM -> say("${p.name} is throwing a tantrum!", 3)
         Break.FIRE -> say("${p.name} is setting fires!", 3)

@@ -229,7 +229,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
         if (Trait.SLOW_WALKER in traits) t += 2f
         t /= max(0.2f, cap[Cap.MOVING.ordinal])
         if (carryCount > 0) t += 1f
-        return max(3, t.toInt())
+        // Written in the old tick unit; the result is in current ticks.
+        return max(tk(3), Math.round(t * TIME_SCALE))
     }
 
     fun gainXp(s: SkillType, amount: Float) {

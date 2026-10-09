@@ -82,12 +82,14 @@ class SaveStore(private val dir: File) {
 
     fun exists(id: String) = file(id).exists()
 
-    /** A new, unused id for a named save. */
+    /**
+     * A new, unused id for a named save: the lowest free number after [NAMED_PREFIX]. Counting up instead of drawing a
+     * random id keeps all randomness out of the sim module; ids only need to be unique among the files on disk.
+     */
     fun newNamedId(): String {
-        var id: String
-        do id = NAMED_PREFIX + java.util.UUID.randomUUID().toString().replace("-", "").take(16)
-        while (exists(id))
-        return id
+        var n = 1
+        while (exists(NAMED_PREFIX + n)) n++
+        return NAMED_PREFIX + n
     }
 
     /** The name the player typed, cleaned up. Throws with the reason when it can't be used. */
@@ -112,7 +114,9 @@ class SaveStore(private val dir: File) {
      */
     fun write(
         id: String, name: String, game: Game, archives: List<SavedArchive> = emptyList(),
-        playtimeMs: Long = game.playMs, replace: Boolean = false, nowMillis: Long = System.currentTimeMillis(),
+        playtimeMs: Long = game.playMs, replace: Boolean = false,
+        /** The caller's clock (SaveSession passes its monotonic time). The sim reads no clock itself; 0 when none is given. */
+        nowMillis: Long = 0L,
     ) {
         val target = file(id)
         if (target.exists() && !replace) throw SaveException("That save already exists.")

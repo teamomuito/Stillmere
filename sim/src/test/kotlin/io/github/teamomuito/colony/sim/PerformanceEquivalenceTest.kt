@@ -64,13 +64,13 @@ class PerformanceEquivalenceTest {
     @Test fun pruningExpiredMarksChangesNoAnswer() {
         val g = colony(1203)
         val p = g.colonists[0]
-        for (k in 0 until 200) g.markUnreachable(p, k * 7)   // each mark lasts 900 ticks
-        g.tick += 500
+        for (k in 0 until 200) g.markUnreachable(p, k * 7)   // each mark lasts tk(900) ticks
+        g.tick += tk(500)
         val before = (0 until 1400).map { g.isBad(p, it) }
         assertTrue("some marks are still active", before.any { it })
         g.pruneUnreachable()
         assertEquals("pruning active marks changes nothing", before, (0 until 1400).map { g.isBad(p, it) })
-        g.tick += 600      // every mark has now run out
+        g.tick += tk(600)  // every mark has now run out
         val expired = (0 until 1400).map { g.isBad(p, it) }
         assertTrue("nothing is bad once the marks have run out", expired.none { it })
         g.pruneUnreachable()
@@ -84,7 +84,7 @@ class PerformanceEquivalenceTest {
         g.markUnreachable(p, 42)
         g.pruneUnreachable()
         assertTrue(g.isBad(p, 42))
-        g.tick += 1000
+        g.tick += tk(1000)
         assertFalse(g.isBad(p, 42))
     }
 

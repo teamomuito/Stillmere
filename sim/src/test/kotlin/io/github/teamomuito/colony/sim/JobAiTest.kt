@@ -18,7 +18,7 @@ private fun newGame(seed: Long): Game {
 private fun Game.run(ticks: Int) { repeat(ticks) { step() } }
 
 /** Runs until [cond] holds, for at most [limit] ticks. Returns whether it held. */
-private fun Game.runUntil(limit: Int = 900, cond: () -> Boolean): Boolean {
+private fun Game.runUntil(limit: Int = tk(900), cond: () -> Boolean): Boolean {
     repeat(limit) { if (cond()) return true; step() }
     return cond()
 }
@@ -120,7 +120,7 @@ class JobAiTest {
         g.map.drop(ItemType.STEEL, 10, ix, iy)
         val c = g.colonists[0]
         c.onlyHauling()
-        g.run(200)
+        g.run(tk(200))
         assertTrue("the enclosed item is marked unreachable", g.isBad(c, key(g.map.idx(ix, iy), K_ITEM)))
         assertFalse("no hauling toward the enclosed item", c.job?.let { it.type == JobType.HAUL && it.tx == ix && it.ty == iy } ?: false)
     }

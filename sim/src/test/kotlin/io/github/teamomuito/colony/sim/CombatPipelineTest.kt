@@ -35,7 +35,7 @@ private fun Game.enemy(x: Int, y: Int, seedWeapon: ItemType? = null): Pawn {
 /** Fires once, ignoring warmup and cooldown, so each call is one attempt. */
 private fun Game.shoot(p: Pawn, t: Pawn) {
     p.attackCd = 0
-    p.warmup = p.weapon.warmup
+    p.warmup = p.weapon.warmupTicks
     fire(p, t)
 }
 
@@ -72,7 +72,7 @@ class CombatPipelineTest {
         me.attackCd = 0; me.warmup = 0
         var calls = 0
         while (g.shots.isEmpty() && calls < 100) { g.fire(me, target); calls++ }
-        assertEquals("the shot comes after the rifle's warmup", Weapon.RIFLE.warmup + 1, calls)
+        assertEquals("the shot comes after the rifle's warmup", Weapon.RIFLE.warmupTicks + 1, calls)
     }
 
     @Test fun cooldownFollowsTheShot() {
@@ -81,7 +81,7 @@ class CombatPipelineTest {
         me.weaponItem = ItemType.W_RIFLE
         val target = g.enemy(g.homeX + 5, g.homeY)
         g.shoot(me, target)
-        assertTrue("the rifle cools down for its full cooldown", me.attackCd >= Weapon.RIFLE.cooldown)
+        assertTrue("the rifle cools down for its full cooldown", me.attackCd >= Weapon.RIFLE.cooldownTicks)
         val shotsAfterFirst = g.shots.size
         g.fire(me, target)
         assertEquals("no second shot while it cools down", shotsAfterFirst, g.shots.size)
@@ -250,7 +250,7 @@ class CombatPipelineTest {
         raider.weaponItem = ItemType.W_RIFLE
         val colonist = g.place(g.colonists[0], g.homeX + 2, g.homeY)
         raider.job = Job(JobType.RAID); raider.job!!.targetPawn = colonist.id
-        raider.warmup = Weapon.RIFLE.warmup; raider.attackCd = 0
+        raider.warmup = Weapon.RIFLE.warmupTicks; raider.attackCd = 0
         val before = g.shots.size
         g.hostileAI(raider)
         assertEquals("from beyond its standoff range it closes in instead of shooting", before, g.shots.size)
