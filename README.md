@@ -9,6 +9,10 @@
   Survive a hostile frontier, build a settlement, and eventually build a ship to leave.
 </p>
 
+> **Vibecoded project.** Stillmere is a vibecoded project built with Claude, an AI assistant by Anthropic.
+> It is an experiment in trying to recreate vanilla RimWorld as an Android APK, one prompt at a time.
+> Expect rough edges, and treat it as a hobby project rather than a finished or supported product.
+
 <p align="center">
   <a href="https://github.com/teamomuito/rimworld/releases/latest/download/colony.apk"><b>Download the APK</b></a>
   &nbsp;·&nbsp;
