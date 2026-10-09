@@ -108,7 +108,9 @@ enum class BuildDef(
     MINI_TURRET("Mini-turret", listOf(c(ItemType.STEEL, 45), c(ItemType.COMPONENT, 1)), 300, 120f, "Security", blocksMove = true, research = Research.GUN_TURRETS),
     // Appended after the saved entries: saves store building definitions by ordinal, so new entries must go last.
     SOFA("Sofa", listOf(c(ItemType.WOOD, 25), c(ItemType.CLOTH, 40)), 380, 80f, "Furniture", comfort = 0.85f, beauty = 0.8f, research = Research.COMPLEX_FURNITURE, flam = 1f, w = 2, h = 1),
-    BOOKSHELF("Bookshelf", listOf(c(ItemType.WOOD, 40)), 260, 70f, "Furniture", blocksMove = true, beauty = 0.8f, research = Research.COMPLEX_FURNITURE, flam = 1f);
+    BOOKSHELF("Bookshelf", listOf(c(ItemType.WOOD, 40)), 260, 70f, "Furniture", blocksMove = true, beauty = 0.8f, research = Research.COMPLEX_FURNITURE, flam = 1f),
+    WARDROBE("Wardrobe", listOf(c(ItemType.WOOD, 60)), 340, 90f, "Furniture", blocksMove = true, beauty = 0.5f, research = Research.COMPLEX_FURNITURE, flam = 1f, w = 2, h = 1),
+    COFFEE_TABLE("Coffee table", listOf(c(ItemType.WOOD, 15)), 120, 35f, "Furniture", beauty = 0.3f, research = Research.COMPLEX_FURNITURE, flam = 1f);
 
     val isPowered get() = power != 0f
     val producesPower get() = power > 0f

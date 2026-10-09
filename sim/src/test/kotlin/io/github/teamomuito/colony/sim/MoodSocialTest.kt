@@ -169,6 +169,8 @@ class MoodSocialTest {
     @Test fun newFurnitureIsAppendedSoSavedOrdinalsStillMatch() {
         assertEquals(BuildDef.MINI_TURRET.ordinal + 1, BuildDef.SOFA.ordinal)
         assertEquals(BuildDef.SOFA.ordinal + 1, BuildDef.BOOKSHELF.ordinal)
+        assertEquals(BuildDef.BOOKSHELF.ordinal + 1, BuildDef.WARDROBE.ordinal)
+        assertEquals(BuildDef.WARDROBE.ordinal + 1, BuildDef.COFFEE_TABLE.ordinal)
     }
 
     @Test fun aSofaIsComfortableAndNeedsComplexFurniture() {
