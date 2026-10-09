@@ -25,6 +25,7 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
         roll < 0.25f && a.spouse < 0 && a.lover < 0 && b.spouse < 0 && b.lover < 0 && attractedTo(a, b) && attractedTo(b, a) && opinionOf(b, a) > 35 && opinionOf(a, b) > 35 && a.age >= 18 && b.age >= 18 -> kind = "romance"
         roll < 0.3f -> kind = "kind"
     }
+    if (kind == "kind" && Trait.BEAUTIFUL in a.traits) kind = "compliment"
     when (kind) {
         "insult" -> {
             b.addThought("Insulted by ${a.name.substringBefore(' ')}", -0.06f, tick, 2 * TICKS_PER_DAY)
@@ -41,6 +42,10 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
         "kind" -> {
             b.opinion[a.id] = op + 4 + (if (Trait.KIND in a.traits) 4 else 0)
             b.addThought("Kind words", 0.03f, tick, TICKS_PER_DAY)
+        }
+        "compliment" -> {
+            b.opinion[a.id] = op + 6 + (if (Trait.KIND in a.traits) 4 else 0)
+            b.addThought("Complimented", 0.05f, tick, 2 * TICKS_PER_DAY)
         }
         "romance" -> {
             if (rng.chance(0.3f + (soc * 0.02f))) {
@@ -76,6 +81,7 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
         say("${a.name} and ${b.name} got married!", 1)
     }
     a.lastSocial = tick
+    b.lastSocial = tick
 }
 
 /** A brief scuffle between unhappy colonists. */

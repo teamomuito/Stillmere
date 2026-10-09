@@ -177,6 +177,11 @@ fun Game.moodUpdate(p: Pawn) {
     if (Trait.ASCETIC in p.traits) add("Content with little", 0.07f)
     if (Trait.GREEDY in p.traits) { val wl = map.wealth(); if (wl > 9000f) add("Rich colony", 0.1f) else if (wl < 3000f) add("Poor colony", -0.07f) }
     if (Trait.PESSIMIST in p.traits) add("Pessimist", -0.1f)
+    if (Trait.TORTURED_ARTIST in p.traits) add("Tortured soul", -0.05f)
+    // Company matters: a colonist who has not talked to anyone for two days feels it, sociable ones more.
+    if (p.colonist && tick > 2L * TICKS_PER_DAY && tick - p.lastSocial > 2L * TICKS_PER_DAY) {
+        add("Lonely", if (Trait.SOCIABLE in p.traits) -0.1f else -0.05f)
+    }
     // Corpses lying around.
     var seen = 0f
     for (s in map.items.values) {

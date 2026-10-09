@@ -636,7 +636,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
         4 -> {
             b.progress = j.work
             if (doWork(p, j, skill, b.def.work.toFloat())) {
-                val q = if (b.def.category == "Furniture" || b.def.isFloor || b.def.workbench) rollQuality(p.level(skill) + (if (Trait.CREATIVE in p.traits && b.def.art) 4 else 0), b.def.art) else Quality.NORMAL
+                val q = if (b.def.category == "Furniture" || b.def.isFloor || b.def.workbench) rollQuality(p.level(skill) + (if ((Trait.CREATIVE in p.traits || Trait.TORTURED_ARTIST in p.traits) && b.def.art) 4 else 0), b.def.art) else Quality.NORMAL
                 if (b.def.isFloor) {
                     map.floor[i] = b.def
                     map.floorQuality[i] = q
