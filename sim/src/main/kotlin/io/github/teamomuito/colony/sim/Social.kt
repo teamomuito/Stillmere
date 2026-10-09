@@ -26,6 +26,8 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
         roll < 0.3f -> kind = "kind"
     }
     if (kind == "kind" && Trait.BEAUTIFUL in a.traits) kind = "compliment"
+    else if (kind == "kind" && Trait.SOCIABLE in a.traits && rng.chance(0.4f)) kind = "joke"
+    else if (kind == "chitchat" && op < -10 && opinionOf(a, b) < -10 && rng.chance(0.3f)) kind = "argument"
     when (kind) {
         "insult" -> {
             b.addThought("Insulted by ${a.name.substringBefore(' ')}", -0.06f, tick, 2 * TICKS_PER_DAY)
@@ -42,6 +44,16 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
         "kind" -> {
             b.opinion[a.id] = op + 4 + (if (Trait.KIND in a.traits) 4 else 0)
             b.addThought("Kind words", 0.03f, tick, TICKS_PER_DAY)
+        }
+        "joke" -> {
+            a.opinion[b.id] = opinionOf(a, b) + 5; b.opinion[a.id] = op + 5
+            a.addThought("Shared a joke", 0.05f, tick, TICKS_PER_DAY)
+            b.addThought("Shared a joke", 0.05f, tick, TICKS_PER_DAY)
+        }
+        "argument" -> {
+            a.opinion[b.id] = opinionOf(a, b) - 3; b.opinion[a.id] = op - 3
+            a.addThought("Argued with ${b.name.substringBefore(' ')}", -0.04f, tick, TICKS_PER_DAY)
+            b.addThought("Argued with ${a.name.substringBefore(' ')}", -0.04f, tick, TICKS_PER_DAY)
         }
         "compliment" -> {
             b.opinion[a.id] = op + 6 + (if (Trait.KIND in a.traits) 4 else 0)

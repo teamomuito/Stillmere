@@ -179,6 +179,15 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
         Break.CATATONIC -> {
             // Catatonic pawns are downed in place; nothing to do until the break ends.
         }
+        Break.HIDE -> {
+            // Retreat to the nearest free bed and stay there until the break passes.
+            if (j.stage == 0 || j.timer++ % 200 == 0) {
+                val t = nearestCell(p, K_BED) { val b = map.building[it]; b != null && b.built && b.def.sleeps && (b.occupant == -1 || b.occupant == p.id) }
+                if (t >= 0) { j.tx = map.xOf(t); j.ty = map.yOf(t); j.stage = 1 } else j.stage = 9
+            }
+            if (j.stage == 1) goTo(p, j.tx, j.ty)
+            else wanderStep(p, j)
+        }
         else -> wanderStep(p, j)
     }
 }

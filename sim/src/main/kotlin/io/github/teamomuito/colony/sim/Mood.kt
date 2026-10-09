@@ -6,10 +6,11 @@ import kotlin.math.min
 
 object Break {
     const val WANDER = 0; const val BERSERK = 1; const val BINGE_FOOD = 2; const val INSULT = 3; const val TANTRUM = 4
-    const val FIRE = 5; const val CATATONIC = 6; const val RUN_WILD = 7; const val BINGE_DRUGS = 8
+    const val FIRE = 5; const val CATATONIC = 6; const val RUN_WILD = 7; const val BINGE_DRUGS = 8; const val HIDE = 9
     fun label(k: Int) = when (k) {
         WANDER -> "sad wander"; BERSERK -> "berserk"; BINGE_FOOD -> "food binge"; INSULT -> "insulting spree"
         TANTRUM -> "tantrum"; FIRE -> "fire starting"; CATATONIC -> "catatonic"; RUN_WILD -> "running wild"; BINGE_DRUGS -> "drug binge"
+        HIDE -> "hiding"
         else -> "break"
     }
 }
@@ -177,6 +178,8 @@ fun Game.moodUpdate(p: Pawn) {
     if (Trait.ASCETIC in p.traits) add("Content with little", 0.07f)
     if (Trait.GREEDY in p.traits) { val wl = map.wealth(); if (wl > 9000f) add("Rich colony", 0.1f) else if (wl < 3000f) add("Poor colony", -0.07f) }
     if (Trait.PESSIMIST in p.traits) add("Pessimist", -0.1f)
+    if (Trait.BEAUTIFUL in p.traits) add("Pleasant looks", 0.03f)
+    if (Trait.UGLY in p.traits) add("Looks bad", -0.03f)
     if (Trait.TORTURED_ARTIST in p.traits) add("Tortured soul", -0.05f)
     // Company matters: a colonist who has not talked to anyone for two days feels it, sociable ones more.
     if (p.colonist && tick > 2L * TICKS_PER_DAY && tick - p.lastSocial > 2L * TICKS_PER_DAY) {
@@ -206,7 +209,10 @@ fun Game.moodUpdate(p: Pawn) {
     // Relationships.
     if (p.spouse >= 0) {
         val sp = pawnById(p.spouse)
-        if (sp != null && sp.alive) add("Married", 0.06f)
+        if (sp != null && sp.alive) {
+            add("Married", 0.06f)
+            if (distance(p.x, p.y, sp.x, sp.y) > 30f) add("Apart from spouse", -0.05f)
+        }
     } else if (p.lover >= 0) {
         val lv = pawnById(p.lover)
         if (lv != null && lv.alive) add("In a relationship", 0.04f)
@@ -245,7 +251,7 @@ private fun Game.breaksTick(p: Pawn) {
     if (chance <= 0f || rng.float() > chance) return
     val sev = if (mood < 0.10f) 2 else if (mood < 0.20f) 1 else 0
     val options = ArrayList<Int>()
-    options += Break.WANDER; options += Break.BINGE_FOOD; options += Break.INSULT
+    options += Break.WANDER; options += Break.BINGE_FOOD; options += Break.INSULT; options += Break.HIDE
     if (sev >= 1) { options += Break.TANTRUM; options += Break.BERSERK; if (Trait.PYROMANIAC in p.traits) { options += Break.FIRE; options += Break.FIRE } }
     if (sev >= 2) { options += Break.CATATONIC; options += Break.RUN_WILD; options += Break.BERSERK }
     if (map.countItems(ItemType.BEER) + map.countItems(ItemType.JOINT) > 0) options += Break.BINGE_DRUGS

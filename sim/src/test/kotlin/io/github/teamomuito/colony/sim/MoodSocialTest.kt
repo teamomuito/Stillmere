@@ -96,4 +96,71 @@ class MoodSocialTest {
         p.traits += Trait.TORTURED_ARTIST
         assertTrue(p.feels("Tortured soul", g))
     }
+
+    @Test fun looksAffectMood() {
+        val g = calmGame(2208)
+        val pretty = g.colonists[0]; val plain = g.colonists[1]
+        pretty.traits += Trait.BEAUTIFUL
+        plain.traits += Trait.UGLY
+        assertTrue(pretty.feels("Pleasant looks", g))
+        assertTrue(plain.feels("Looks bad", g))
+        assertFalse(pretty.feels("Looks bad", g))
+    }
+
+    @Test fun aSpouseFarAwayIsMissed() {
+        val g = calmGame(2209)
+        val p = g.colonists[0]; val s = g.colonists[1]
+        p.spouse = s.id; s.spouse = p.id
+        s.x = p.x; s.y = p.y
+        assertFalse(p.feels("Apart from spouse", g))
+        s.x = if (p.x < g.map.w / 2) g.map.w - 2 else 1
+        assertTrue(p.feels("Apart from spouse", g))
+    }
+
+    // ----------------------------------------------------------------------------------- hiding
+
+    @Test fun aHidingPawnGoesToABedAndStaysThere() {
+        val g = calmGame(2210)
+        val p = g.colonists.first()
+        val bx = p.x + 3; val by = p.y
+        for (y in by - 2..by + 2) for (x in bx - 2..bx + 2) if (g.map.inB(x, y)) {
+            val i = g.map.idx(x, y)
+            g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null; g.map.building[i] = null
+        }
+        g.map.setBuilding(Building(BuildDef.BED, bx, by, true))
+        p.food = 1f; p.rest = 1f
+        g.startBreak(p, Break.HIDE)
+        repeat(400) { g.step() }
+        assertEquals(Break.HIDE, p.breakKind)
+        assertTrue("the pawn is at the bed", g.distance(p.x, p.y, bx, by) <= 1f)
+    }
+
+    // ----------------------------------------------------------------------------------- conversations
+
+    @Test fun aSociableColonistSometimesSharesAJoke() {
+        val g = calmGame(2211)
+        val a = g.colonists[0]; val b = g.colonists[1]
+        a.traits += Trait.SOCIABLE
+        var joked = false
+        repeat(400) {
+            g.tick += (TICKS_PER_DAY / 4).toLong()
+            g.socialInteract(a, b)
+            if (b.thoughts.any { it.label == "Shared a joke" }) joked = true
+        }
+        assertTrue(joked)
+    }
+
+    @Test fun pawnsWhoDislikeEachOtherCanArgue() {
+        val g = calmGame(2212)
+        val a = g.colonists[0]; val b = g.colonists[1]
+        var argued = false
+        repeat(400) {
+            // Keep the dislike in place: an ordinary chat would otherwise warm them up.
+            a.opinion[b.id] = -12; b.opinion[a.id] = -12
+            g.tick += (TICKS_PER_DAY / 4).toLong()
+            g.socialInteract(a, b)
+            if (a.thoughts.any { it.label.startsWith("Argued") }) argued = true
+        }
+        assertTrue(argued)
+    }
 }
