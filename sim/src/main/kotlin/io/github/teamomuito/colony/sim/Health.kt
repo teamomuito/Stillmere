@@ -337,6 +337,11 @@ fun Game.healthTick(p: Pawn, dt: Int) {
                 if (h.duration <= 0) { hi.remove(); p.healthDirty = true }
             }
             3 -> { /* tolerance and addiction handled by drug logic */ }
+            4 -> {
+                // Anesthesia (and other timed effects in this category) wear off.
+                h.duration -= dt
+                if (h.duration <= 0) { hi.remove(); p.healthDirty = true }
+            }
             5 -> { /* chronic: stays for life */ }
         }
     }

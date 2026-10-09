@@ -1247,10 +1247,11 @@ class CaravanBattleTest {
         val animals = bg.battleMembers.filter { it.isAnimal }
         assertEquals(2, animals.size)
         assertTrue(animals.all { it.drafted && it.faction == Faction.PLAYER && it.tame })
-        val start = animals.associateWith { it.x to it.y }
+        fun nearestEnemy(a: Pawn): Float = bg.pawns.filter { it.faction == Faction.ENEMY && it.alive }.minOf { g.distance(a.x, a.y, it.x, it.y) }
+        val startGap = animals.associateWith { nearestEnemy(it) }
         bg.run(600)
-        // Drafted animals go into the fight under the same AI as drafted colonists: they walk towards the enemy.
-        assertTrue("an animal moved into the fight", animals.any { a -> a in bg.pawns && (a.x to a.y) != start[a] && g.distance(a.x, a.y, start[a]!!.first, start[a]!!.second) >= 5f })
+        // Drafted animals go into the fight under the same AI as drafted colonists: they close in on the nearest enemy.
+        assertTrue("an animal moved into the fight", animals.any { a -> a in bg.pawns && a.alive && nearestEnemy(a) < startGap[a]!! - 2f })
         bg.fightToEnd()
         g.resolveBattle(bg)
         if (g.caravans.contains(c)) assertTrue(c.members.any { it.isAnimal } || animals.none { it.alive })

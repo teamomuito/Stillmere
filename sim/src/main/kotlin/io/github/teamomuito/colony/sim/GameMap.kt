@@ -226,6 +226,25 @@ class GameMap(val w: Int, val h: Int) {
     }
 
     /** True when a line of fire between two cells is blocked by cover that stands right in front of the target. */
+    /** The cells strictly between two cells, in the order a shot passes them. Same line as [lineOfSight]. */
+    fun cellsBetween(x0: Int, y0: Int, x1: Int, y1: Int): IntArray {
+        val out = ArrayList<Int>()
+        var x = x0
+        var y = y0
+        val dx = abs(x1 - x0)
+        val dy = abs(y1 - y0)
+        val sx = if (x0 < x1) 1 else -1
+        val sy = if (y0 < y1) 1 else -1
+        var err = dx - dy
+        while (!(x == x1 && y == y1)) {
+            val e2 = 2 * err
+            if (e2 > -dy) { err -= dy; x += sx }
+            if (e2 < dx) { err += dx; y += sy }
+            if (!(x == x1 && y == y1)) out.add(idx(x, y))
+        }
+        return out.toIntArray()
+    }
+
     fun coverAt(x0: Int, y0: Int, x1: Int, y1: Int): Float {
         // Cover on the cell adjacent to the target along the shot.
         val dx = Integer.signum(x0 - x1)
