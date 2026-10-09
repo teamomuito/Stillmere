@@ -237,6 +237,8 @@ enum class DamageKind(val label: String, val sharp: Boolean, val bleed: Float, v
 enum class Weapon(
     val label: String, val ranged: Boolean, val damage: Float, val range: Float, val cooldown: Int, val accuracy: Float,
     val kind: DamageKind, val burst: Int = 1, val armorPen: Float = 0f, val warmup: Int = 0, val aoe: Float = 0f,
+    /** Projectiles per burst that each roll to hit; [damage] is shared between them. */
+    val pellets: Int = 1,
 ) {
     FISTS("Fists", false, 5f, 1.5f, 38, 0.82f, DamageKind.BRUISE),
     KNIFE("Knife", false, 9f, 1.5f, 34, 0.86f, DamageKind.CUT),
@@ -249,7 +251,7 @@ enum class Weapon(
     REVOLVER("Revolver", true, 12f, 20f, 55, 0.8f, DamageKind.BULLET, warmup = 8),
     AUTOPISTOL("Autopistol", true, 12f, 20f, 55, 0.78f, DamageKind.BULLET, warmup = 7),
     BOLT_RIFLE("Bolt-action rifle", true, 15f, 30f, 80, 0.78f, DamageKind.BULLET, warmup = 14),
-    SHOTGUN("Pump shotgun", true, 18f, 12f, 70, 0.85f, DamageKind.BULLET, warmup = 10, burst = 1),
+    SHOTGUN("Pump shotgun", true, 18f, 12f, 70, 0.85f, DamageKind.BULLET, warmup = 10, burst = 1, pellets = 8),
     SMG("Machine pistol", true, 10f, 16f, 50, 0.72f, DamageKind.BULLET, burst = 3, warmup = 8),
     RIFLE("Assault rifle", true, 11f, 28f, 55, 0.76f, DamageKind.BULLET, burst = 3, warmup = 10),
     LMG("Light machine gun", true, 11f, 30f, 70, 0.74f, DamageKind.BULLET, burst = 5, warmup = 20),
@@ -258,7 +260,7 @@ enum class Weapon(
     PLASTEEL_SWORD("Plasteel sword", false, 24f, 1.5f, 36, 0.88f, DamageKind.CUT, armorPen = 0.4f),
     RECURVE_BOW("Recurve bow", true, 11f, 24f, 55, 0.74f, DamageKind.STAB, warmup = 11),
     LEVER_RIFLE("Lever-action rifle", true, 14f, 24f, 68, 0.78f, DamageKind.BULLET, warmup = 12),
-    CHAIN_SHOTGUN("Chain shotgun", true, 16f, 14f, 60, 0.85f, DamageKind.BULLET, burst = 2, warmup = 10),
+    CHAIN_SHOTGUN("Chain shotgun", true, 16f, 14f, 60, 0.85f, DamageKind.BULLET, burst = 2, warmup = 10, pellets = 8),
     HEAVY_SMG("Heavy SMG", true, 11f, 18f, 52, 0.74f, DamageKind.BULLET, burst = 3, warmup = 9),
     MINIGUN("Minigun", true, 10f, 26f, 64, 0.68f, DamageKind.BULLET, burst = 8, warmup = 26),
     CHARGE_RIFLE("Charge rifle", true, 18f, 30f, 70, 0.8f, DamageKind.BULLET, burst = 3, armorPen = 0.3f, warmup = 14),

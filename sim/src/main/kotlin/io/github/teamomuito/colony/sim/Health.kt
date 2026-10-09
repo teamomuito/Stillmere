@@ -45,8 +45,7 @@ fun Game.recomputeHealth(p: Pawn) {
     for (h in p.hediffs) pain += h.kind.pain * h.severity
     if (Trait.WIMP in p.traits) pain *= 1.4f
     if (Trait.TOUGH in p.traits) pain *= 0.7f
-    // Painkilling drugs.
-    if (p.hediffs.any { it.kind == HediffKind.ALCOHOL_HIGH }) pain *= 0.8f
+    // Painkilling drugs (yayo, go-juice) already lower pain through their hediff values above.
     p.pain = pain.coerceIn(0f, 1f)
 
     val legs = p.avgEff(PartTag.LEG)

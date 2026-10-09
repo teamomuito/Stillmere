@@ -64,6 +64,15 @@ private fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float):
     return base.coerceIn(0.05f, 0.95f)
 }
 
+/**
+ * Records the pawn's target. Switching from one target to another loses the aim built up on the first, so warmup
+ * starts again. Choosing a first target keeps whatever warmup there is.
+ */
+internal fun Game.aim(p: Pawn, t: Pawn) {
+    if (p.fightTarget != -1 && p.fightTarget != t.id) p.warmup = 0
+    p.fightTarget = t.id
+}
+
 fun Game.fire(p: Pawn, t: Pawn) {
     if (p.attackCd > 0) return
     if (t.dead) return
@@ -71,6 +80,7 @@ fun Game.fire(p: Pawn, t: Pawn) {
     val d = distance(p.x, p.y, t.x, t.y)
     if (w.ranged) {
         if (d > w.range + 1) return
+        aim(p, t)
         if (p.warmup < w.warmup) { p.warmup++; return }
         p.warmup = 0
         val path = shotPath(p, t)
@@ -78,13 +88,16 @@ fun Game.fire(p: Pawn, t: Pawn) {
         val target = path.interceptor ?: t
         val td = distance(p.x, p.y, target.x, target.y)
         for (k in 0 until w.burst) {
-            val hit = !path.blocked && rng.chance(hitChance(p, target, w, td, path.cover))
-            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + 5 + k * 2, hit, if (w == Weapon.BOW || w == Weapon.GREATBOW) 3 else 0))
-            if (hit) {
-                val dmg = w.damage * (0.85f + rng.float() * 0.3f) * p.weaponDamageMult()
+            var anyHit = false
+            for (pellet in 0 until w.pellets) {
+                if (path.blocked || !rng.chance(hitChance(p, target, w, td, path.cover))) continue
+                anyHit = true
+                // Each pellet is armored separately, which is why shotguns do little against armor.
+                val dmg = w.damage / w.pellets * (0.85f + rng.float() * 0.3f) * p.weaponDamageMult()
                 if (w.aoe > 0f) explode(target.x, target.y, w.aoe, dmg, p, w == Weapon.MOLOTOV)
                 else dealDamage(target, w.kind, dmg, w.armorPen, p)
             }
+            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + 5 + k * 2, anyHit, if (w == Weapon.BOW || w == Weapon.GREATBOW) 3 else 0))
         }
         p.attackCd = max(8, (w.cooldown * (if (Trait.TRIGGER_HAPPY in p.traits) 0.85f else if (Trait.CAREFUL_SHOOTER in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
         p.gainXp(SkillType.SHOOTING, 4f * w.burst)
@@ -121,14 +134,22 @@ internal fun Game.draftedAI(p: Pawn) {
             return
         }
     }
-    var target: Pawn? = null
-    var bd = 1e9f
-    for (h in pawns) {
-        if (!h.hostile || !h.alive || h.downed || h === p) continue
-        if (h.faction == p.faction && !h.hostileFlag) continue
+    // Keep the current target while it can still be hit; only then look for the nearest one.
+    val reach = if (p.weapon.ranged) p.weapon.range else 1.9f
+    fun inReach(h: Pawn): Boolean {
+        if (!h.hostile || !h.alive || h.downed || h === p) return false
+        if (h.faction == p.faction && !h.hostileFlag) return false
         val d = distance(p.x, p.y, h.x, h.y)
-        val reach = if (p.weapon.ranged) p.weapon.range else 1.9f
-        if (d <= reach && d < bd && (d < 1.9f || map.lineOfSight(p.x, p.y, h.x, h.y))) { target = h; bd = d }
+        return d <= reach && (d < 1.9f || map.lineOfSight(p.x, p.y, h.x, h.y))
+    }
+    var target: Pawn? = pawnById(p.fightTarget)?.takeIf { inReach(it) }
+    if (target == null) {
+        var bd = 1e9f
+        for (h in pawns) {
+            if (!inReach(h)) continue
+            val d = distance(p.x, p.y, h.x, h.y)
+            if (d < bd) { target = h; bd = d }
+        }
     }
     if (target != null) {
         if (p.moveCd > 0) p.moveCd-- else fire(p, target)

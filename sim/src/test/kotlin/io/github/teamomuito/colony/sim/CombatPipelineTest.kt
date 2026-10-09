@@ -195,6 +195,75 @@ class CombatPipelineTest {
         assertTrue("the blast reaches the ally next to it", ally.injuries.isNotEmpty() || blast.injuries.isNotEmpty())
     }
 
+    @Test fun shotgunPelletsEachLandOnTheirOwn() {
+        val g = arena(615)
+        val me = g.place(g.colonists[0], g.homeX, g.homeY)
+        me.weaponItem = ItemType.W_SHOTGUN
+        val target = g.enemy(g.homeX + 4, g.homeY)
+        repeat(5) { g.shoot(me, target) }
+        val landed = g.shots.count { it.hit }
+        assertTrue("some pellets landed", landed > 0)
+        assertTrue("each landed shot wounds more than once ($landed shots, ${target.injuries.size} wounds)", target.injuries.size > landed)
+    }
+
+    @Test fun aimingAtANewTargetLosesTheWarmupBuiltUpOnTheOld() {
+        val g = arena(616)
+        val me = g.place(g.colonists[0], g.homeX, g.homeY)
+        me.weaponItem = ItemType.W_RIFLE
+        val first = g.enemy(g.homeX + 5, g.homeY)
+        val second = g.enemy(g.homeX + 5, g.homeY + 2)
+        me.attackCd = 0; me.warmup = 0
+        g.fire(me, first); g.fire(me, first); g.fire(me, first)
+        assertEquals("the aim builds up on the first target", 3, me.warmup)
+        g.fire(me, second)
+        assertEquals("switching target starts the warmup again", 1, me.warmup)
+    }
+
+    @Test fun aDraftedPawnKeepsItsTargetWhileItCanBeHit() {
+        val g = arena(617)
+        val me = g.place(g.colonists[0], g.homeX, g.homeY)
+        me.weaponItem = ItemType.W_RIFLE
+        me.drafted = true
+        val near = g.enemy(g.homeX + 3, g.homeY)
+        val far = g.enemy(g.homeX + 9, g.homeY)
+        me.fightTarget = far.id
+        repeat(3) { g.draftedAI(me) }
+        assertEquals("the pawn stays on the target it chose, though a nearer one is in reach", far.id, me.fightTarget)
+        assertTrue("the nearer enemy is not shot at", near.injuries.isEmpty())
+    }
+
+    @Test fun aRaiderPicksTheStandingColonistOverADownedOne() {
+        val g = arena(618)
+        val raider = g.enemy(g.homeX + 20, g.homeY)
+        raider.weaponItem = ItemType.W_RIFLE
+        val downed = g.place(g.colonists[0], g.homeX + 18, g.homeY)
+        downed.downed = true
+        val standing = g.place(g.colonists[1], g.homeX + 24, g.homeY)
+        raider.job = Job(JobType.RAID)
+        g.hostileAI(raider)
+        assertEquals("the downed colonist is passed over", standing.id, raider.job!!.targetPawn)
+    }
+
+    @Test fun aRaiderHoldsItsRangeAndDoesNotFireFromTooFar() {
+        val g = arena(619)
+        val raider = g.enemy(g.homeX + 30, g.homeY)
+        raider.weaponItem = ItemType.W_RIFLE
+        val colonist = g.place(g.colonists[0], g.homeX + 2, g.homeY)
+        raider.job = Job(JobType.RAID); raider.job!!.targetPawn = colonist.id
+        raider.warmup = Weapon.RIFLE.warmup; raider.attackCd = 0
+        val before = g.shots.size
+        g.hostileAI(raider)
+        assertEquals("from beyond its standoff range it closes in instead of shooting", before, g.shots.size)
+    }
+
+    @Test fun aRetreatingRaiderLeavesTheMap() {
+        val g = arena(620)
+        val raider = g.enemy(g.homeX + 10, g.homeY)
+        raider.retreating = true
+        g.hostileAI(raider)
+        assertEquals("a retreating raider heads for the edge", JobType.LEAVE, raider.job?.type)
+    }
+
     @Test fun theSameSeedGivesTheSameFight() {
         fun run(seed: Long): List<Int> {
             val g = arena(seed)
