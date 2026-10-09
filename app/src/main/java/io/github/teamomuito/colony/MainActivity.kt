@@ -2,6 +2,7 @@ package io.github.teamomuito.colony
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
@@ -22,6 +23,10 @@ import io.github.teamomuito.colony.sim.LogEntry
 import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.Research
 import io.github.teamomuito.colony.sim.SaveGame
+import io.github.teamomuito.colony.sim.SaveException
+import io.github.teamomuito.colony.sim.SaveStore
+import io.github.teamomuito.colony.sim.SavedArchive
+import io.github.teamomuito.colony.sim.LoadedSave
 import io.github.teamomuito.colony.sim.TutorialState
 import io.github.teamomuito.colony.sim.acceptRansom
 import io.github.teamomuito.colony.sim.beginBattle
@@ -45,6 +50,12 @@ class MainActivity : Activity() {
         const val ACTION_CONTINUE = "continue"
         const val ACTION_NEW = "new"
         const val ACTION_TUTORIAL = "tutorial"
+        /** Loads the save slot named by [EXTRA_SLOT]. */
+        const val ACTION_LOAD = "load"
+        const val EXTRA_SLOT = "slot"
+        /** Set by the main menu when a load or start could not happen; shown there once. */
+        const val EXTRA_ERROR = "error"
+        const val UNSAVED_MESSAGE = "Your progress since the last save will be lost."
     }
 
     lateinit var view: GameView
@@ -84,21 +95,60 @@ class MainActivity : Activity() {
     private var lastSaved = -1L
     private var started = false
 
+    // Save slots. Autosave is the Continue game; named saves and the quicksave are only written when the player asks.
+    private val store by lazy { SaveStore(File(filesDir, "saves")) }
+    /** The named save this game was loaded from or last saved to. Null until it has one. */
+    private var currentSlot: String? = null
+    /** Game tick at the last explicit save or load. Progress past it is unsaved. */
+    private var savedTick = -1L
+    /** Play time carried over from the save, and the moment this session started running (0 while paused). */
+    private var playBaseMs = 0L
+    private var runningSince = 0L
+    /** Set when the player has agreed to discard the current game, so leaving it does not save it again. */
+    private var discardOnLeave = false
+
     private val speedMult = intArrayOf(0, 1, 3, 6)
-    private val saveFile get() = File(filesDir, "colony.sav")
 
     // ------------------------------------------------------------------ lifecycle
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ui = UiKit(this)
         prefs = Prefs(this)
-        // The main menu starts the game with one of these; the default is to carry on from the save.
+        migrateLegacySave()
+        // The main menu starts the game with one of these; the default is to carry on from the autosave.
         val action = intent.getStringExtra(EXTRA_ACTION) ?: ACTION_CONTINUE
-        val loaded = if (action == ACTION_CONTINUE) loadSave() else null
-        if (loaded == null && action != ACTION_CONTINUE) saveFile.delete()
-        game = loaded ?: Game(System.currentTimeMillis()).also { it.startNewColony() }
-        tutorial = if (action == ACTION_CONTINUE) prefs.loadTutorial() else TutorialState()
-        if (action != ACTION_CONTINUE) prefs.saveTutorial(tutorial)
+        val slot = intent.getStringExtra(EXTRA_SLOT)
+        val loaded: LoadedSave? = try {
+            when {
+                action == ACTION_LOAD && slot != null -> store.read(slot)
+                action == ACTION_CONTINUE && store.exists(SaveStore.AUTOSAVE) -> store.read(SaveStore.AUTOSAVE)
+                else -> null
+            }
+        } catch (e: SaveException) {
+            // Nothing is deleted: the save stays on disk, and the menu says why it could not be used.
+            val what = if (action == ACTION_LOAD) "That save" else "Your last game"
+            startActivity(Intent(this, MenuActivity::class.java).putExtra(EXTRA_ERROR, "$what couldn't be loaded: ${e.message}"))
+            finish()
+            return
+        }
+        if (loaded != null) {
+            game = loaded.game
+            playBaseMs = loaded.info.playtimeMs
+            applyArchives(loaded.archives)
+            currentSlot = if (action == ACTION_LOAD) slot else prefs.currentSlot?.takeIf { store.exists(it) }
+        } else {
+            // A new game has no settled colonies from the last one, and no slot yet.
+            clearArchives()
+            if (action == ACTION_NEW || action == ACTION_TUTORIAL) store.delete(SaveStore.AUTOSAVE)
+            game = Game(System.currentTimeMillis()).also { it.startNewColony() }
+            currentSlot = null
+            playBaseMs = 0L
+        }
+        savedTick = game.tick
+        prefs.currentSlot = currentSlot
+        val freshTutorial = loaded == null && action != ACTION_CONTINUE || action == ACTION_NEW || action == ACTION_TUTORIAL
+        tutorial = if (freshTutorial) TutorialState() else prefs.loadTutorial()
+        if (freshTutorial) prefs.saveTutorial(tutorial)
         if (!prefs.tutorialOn && action != ACTION_TUTORIAL) tutorial.hide()
         hookAutosave(game)
         buildUi()
@@ -157,15 +207,6 @@ class MainActivity : Activity() {
 
     fun lastError(): String? = try { File(filesDir, "error.txt").takeIf { it.exists() }?.readText() } catch (_: Throwable) { null }
 
-    private fun loadSave(): Game? {
-        try {
-            if (saveFile.exists()) return SaveGame.read(saveFile.readBytes())
-        } catch (e: Throwable) {
-            saveFile.delete()
-        }
-        return null
-    }
-
     fun hookAutosave(g: Game) {
         g.autosaveHook = {
             val stamp = g.tick / 6000
@@ -173,27 +214,131 @@ class MainActivity : Activity() {
         }
     }
 
-    fun save() {
-        if (game.gameOver) { saveFile.delete(); return }
-        try {
-            val tmp = File(filesDir, "colony.sav.tmp")
-            tmp.writeBytes(SaveGame.write(game))
-            tmp.renameTo(saveFile)
-        } catch (_: Throwable) {
+    /** The settled colonies that belong with the game, written into a save so they come back with it. */
+    private fun archivesNow(): List<SavedArchive> = colonies().mapNotNull { e ->
+        try { SavedArchive(e.tile, e.name, File(filesDir, e.file).readBytes()) } catch (_: Throwable) { null }
+    }
+
+    /** Replaces the settled colonies with the ones a save carries. */
+    private fun applyArchives(list: List<SavedArchive>) {
+        clearArchives()
+        val entries = list.mapNotNull { a ->
+            val file = "colony_${System.nanoTime()}.sav"
+            try { File(filesDir, file).writeBytes(a.bytes); ColonyEntry(a.tile, a.name, file) } catch (_: Throwable) { null }
         }
+        writeColonies(entries)
+    }
+
+    private fun clearArchives() {
+        for (e in colonies()) File(filesDir, e.file).delete()
+        writeColonies(emptyList())
+    }
+
+    /** Autosave: the Continue game. Quiet, and it does nothing to any named save. */
+    fun save() {
+        if (game.gameOver) { store.delete(SaveStore.AUTOSAVE); return }
+        try {
+            store.write(SaveStore.AUTOSAVE, "Autosave", game, archivesNow(), playtimeMs(), replace = true)
+        } catch (e: SaveException) {
+            reportError(e)
+        }
+    }
+
+    fun savesStore(): SaveStore = store
+
+    /** The one-time move from the old single save file to the autosave slot. */
+    private fun migrateLegacySave() {
+        val legacy = File(filesDir, "colony.sav")
+        if (!legacy.exists() || store.exists(SaveStore.AUTOSAVE)) return
+        try {
+            val g = SaveGame.read(legacy.readBytes())
+            store.write(SaveStore.AUTOSAVE, "Autosave", g, archivesNow(), 0L)
+            legacy.delete()
+        } catch (e: Throwable) {
+            reportError(e)   // the old file is kept, so nothing is lost
+        }
+    }
+
+    fun playtimeMs(): Long = playBaseMs + if (runningSince > 0L) android.os.SystemClock.elapsedRealtime() - runningSince else 0L
+
+    fun hasUnsavedProgress(): Boolean = game.tick != savedTick
+
+    /**
+     * Writes the game to [id]. Only that slot changes, and an existing slot is replaced only when [replace] is set.
+     * Returns the reason it did not save, or null.
+     */
+    private fun writeSlot(id: String, name: String, replace: Boolean): String? {
+        if (game.gameOver) return "A finished game can't be saved to a slot."
+        return try {
+            store.write(id, name, game, archivesNow(), playtimeMs(), replace)
+            savedTick = game.tick
+            if (id != SaveStore.QUICKSAVE) { currentSlot = id; prefs.currentSlot = id }
+            null
+        } catch (e: SaveException) {
+            e.message
+        }
+    }
+
+    /** Save: writes to this game's own named save. Without one yet, it asks for a name, as Save as does. */
+    fun saveGame() {
+        // A damaged save is not treated as this game's slot: Save as asks for a fresh name instead of overwriting it.
+        val mine = currentSlot?.let { id -> store.list().firstOrNull { it.id == id && !it.damaged } }
+        if (mine == null) { saveAs(); return }
+        writeSlot(mine.id, mine.name, replace = true)?.let { toast(it); return }
+        toast("Saved \"${mine.name}\"")
+    }
+
+    /** Save as: a new named save. It never replaces another save. */
+    fun saveAs() {
+        if (game.gameOver) { toast("A finished game can't be saved to a slot."); return }
+        SaveUi.promptName(this, store, "Save as", initial = game.colonyName, onName = { name ->
+            val error = writeSlot(store.newNamedId(), name, replace = false)
+            if (error != null) toast(error) else { toast("Saved as \"$name\""); refreshHud() }
+        })
+    }
+
+    fun quicksave() {
+        writeSlot(SaveStore.QUICKSAVE, "Quicksave", replace = true)?.let { toast(it); return }
+        toast("Quicksaved")
+    }
+
+    /** Quickload: the latest quicksave, after asking about progress that has not been saved. */
+    fun quickload() {
+        if (!store.exists(SaveStore.QUICKSAVE)) { toast("There is no quicksave yet. Use Quicksave in the game menu first."); return }
+        SaveUi.ifNothingUnsaved(this, hasUnsavedProgress(), UNSAVED_MESSAGE) { relaunch(ACTION_LOAD, SaveStore.QUICKSAVE, discard = true) }
+    }
+
+    /** Loads a named save from the game menu, after asking about progress that has not been saved. */
+    fun loadSlot(info: io.github.teamomuito.colony.sim.SaveInfo) {
+        SaveUi.ifNothingUnsaved(this, hasUnsavedProgress(), UNSAVED_MESSAGE) { relaunch(ACTION_LOAD, info.id, discard = true) }
+    }
+
+    /** Starts the game again from a load or a new game: the screen is recreated, so the game is loaded from its slot. */
+    private fun relaunch(action: String, slot: String?, discard: Boolean) {
+        if (discard) discardOnLeave = true
+        val intent = Intent(this, MainActivity::class.java).putExtra(EXTRA_ACTION, action)
+        slot?.let { intent.putExtra(EXTRA_SLOT, it) }
+        startActivity(intent)
+        finish()
     }
 
     override fun onResume() {
         super.onResume()
+        // A start that handed over to the main menu never built the game; there is nothing to resume.
+        if (!started) return
         immersive()
+        runningSince = android.os.SystemClock.elapsedRealtime()
         lastFrameNs = 0
         Choreographer.getInstance().postFrameCallback(frame)
     }
 
     override fun onPause() {
         super.onPause()
+        if (!started) return
         Choreographer.getInstance().removeFrameCallback(frame)
-        if (started) save()
+        if (runningSince > 0L) playBaseMs += android.os.SystemClock.elapsedRealtime() - runningSince
+        runningSince = 0L
+        if (!discardOnLeave) save()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -774,8 +919,12 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------------ whole-game control
     fun restart(newGame: Game) {
-        saveFile.delete()
+        store.delete(SaveStore.AUTOSAVE)
+        clearArchives()
         game = newGame
+        currentSlot = null; prefs.currentSlot = null
+        playBaseMs = 0L
+        savedTick = game.tick
         // A new colony starts the tutorial again, if the player wants it.
         if (prefs.tutorialOn) tutorial.restart() else tutorial.hide()
         prefs.saveTutorial(tutorial)

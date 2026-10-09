@@ -217,7 +217,6 @@ internal fun Game.hostileAI(p: Pawn) {
     }
 }
 
-var raidStartedAt = 0L
 
 private fun Game.wanderAround(p: Pawn) {
     val x = (p.x + rng.range(-5, 5)).coerceIn(1, map.w - 2)

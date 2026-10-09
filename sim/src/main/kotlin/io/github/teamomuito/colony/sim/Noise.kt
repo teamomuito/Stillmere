@@ -40,12 +40,39 @@ class Noise(private val seed: Int) {
     }
 }
 
-/** Small seeded RNG (java.util.Random wrapper with conveniences). */
+/**
+ * Small seeded RNG. It is the same generator as java.util.Random, so every seeded result is unchanged, but its state is
+ * one Long that can be saved and restored, so a loaded game continues the exact same sequence.
+ */
 class Rng(seed: Long) {
-    private val r = java.util.Random(seed)
-    fun float() = r.nextFloat()
-    fun int(n: Int) = if (n <= 0) 0 else r.nextInt(n)
+    /** The 48-bit generator state. Save this to resume exactly where the game was. */
+    var state: Long = (seed xor MULTIPLIER) and MASK
+        private set
+
+    fun restore(s: Long) { state = s and MASK }
+
+    private fun next(bits: Int): Int {
+        state = (state * MULTIPLIER + 0xBL) and MASK
+        return (state ushr (48 - bits)).toInt()
+    }
+
+    fun float(): Float = next(24) / (1 shl 24).toFloat()
+
+    fun int(n: Int): Int {
+        if (n <= 0) return 0
+        var u = next(31)
+        if (n and (n - 1) == 0) return ((n * u.toLong()) shr 31).toInt()
+        var v = u % n
+        while (u - v + (n - 1) < 0) { u = next(31); v = u % n }
+        return v
+    }
+
     fun range(a: Int, b: Int) = a + int(b - a + 1)
-    fun chance(p: Float) = r.nextFloat() < p
+    fun chance(p: Float) = float() < p
     fun <T> pick(list: List<T>): T = list[int(list.size)]
+
+    private companion object {
+        const val MULTIPLIER = 0x5DEECE66DL
+        const val MASK = (1L shl 48) - 1
+    }
 }

@@ -10,13 +10,16 @@ import android.view.View
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import io.github.teamomuito.colony.sim.SaveStore
 import java.io.File
 
 /** The main menu: the app opens here. Every choice starts [MainActivity] with an action, or opens a dialog. */
 class MenuActivity : Activity() {
     private lateinit var ui: UiKit
     private lateinit var prefs: Prefs
-    private val saveFile get() = File(filesDir, "colony.sav")
+    private val store by lazy { SaveStore(File(filesDir, "saves")) }
+    /** Continue has a game when there is an autosave, or the old single save file that has not been moved over yet. */
+    private fun continueAvailable() = store.exists(SaveStore.AUTOSAVE) || File(filesDir, "colony.sav").exists()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +27,9 @@ class MenuActivity : Activity() {
         prefs = Prefs(this)
         build()
         if (!prefs.tutorialAsked) root.post { askAboutTutorial() }
+        intent.getStringExtra(MainActivity.EXTRA_ERROR)?.let { msg ->
+            root.post { AlertDialog.Builder(this).setTitle("Couldn't load").setMessage(msg).setPositiveButton("OK", null).show() }
+        }
     }
 
     private lateinit var root: LinearLayout
@@ -39,12 +45,13 @@ class MenuActivity : Activity() {
         root.addView(ui.label("A RimWorld-style colony sim. Survive, build, and leave the rim.", 12f, ui.dim).apply { gravity = Gravity.CENTER }, ui.lin(-2, -2, 0f, 0, 0, 0, 24))
 
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val hasSave = saveFile.exists()
         fun item(label: String, enabled: Boolean = true, onClick: () -> Unit) {
             column.addView(ui.button(label, 15f) { if (enabled) ui.guard(onClick) }.apply { alpha = if (enabled) 1f else 0.4f },
                 ui.lin(-1, -2, 0f, 0, 0, 0, 8))
         }
-        item("Continue", hasSave) { start(MainActivity.ACTION_CONTINUE) }
+        item("Continue", continueAvailable()) { start(MainActivity.ACTION_CONTINUE) }
+        item("Load game") { SaveUi.showList(this, ui, store, "Load game") { info -> start(MainActivity.ACTION_LOAD, info.id) } }
+        item("Quickload", store.exists(SaveStore.QUICKSAVE)) { start(MainActivity.ACTION_LOAD, SaveStore.QUICKSAVE) }
         item("New colony") { confirmReplace { start(MainActivity.ACTION_NEW) } }
         item("Tutorial colony") { confirmReplace { start(MainActivity.ACTION_TUTORIAL) } }
         item("Settings") { settings() }
@@ -57,16 +64,18 @@ class MenuActivity : Activity() {
         setContentView(scroll)
     }
 
-    private fun start(action: String) {
-        startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_ACTION, action))
+    private fun start(action: String, slot: String? = null) {
+        val intent = Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_ACTION, action)
+        slot?.let { intent.putExtra(MainActivity.EXTRA_SLOT, it) }
+        startActivity(intent)
         finish()
     }
 
-    /** A new colony or the tutorial colony replaces the save; ask first if there is one. */
+    /** A new colony or the tutorial colony replaces the Continue game; saved games are kept. Ask first if there is one. */
     private fun confirmReplace(go: () -> Unit) {
-        if (!saveFile.exists()) { go(); return }
-        AlertDialog.Builder(this).setTitle("Replace your colony?")
-            .setMessage("Starting a new colony replaces the one you saved.")
+        if (!continueAvailable()) { go(); return }
+        AlertDialog.Builder(this).setTitle("Replace your Continue game?")
+            .setMessage("Starting a new colony replaces the game Continue resumes. Your saved games are kept.")
             .setPositiveButton("Replace") { _, _ -> go() }
             .setNegativeButton("Cancel", null).show()
     }

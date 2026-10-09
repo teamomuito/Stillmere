@@ -76,7 +76,11 @@ class Dialogs(val a: MainActivity) {
     fun menu() {
         dialog("Menu", { body, d ->
             fun item(t: String, act: () -> Unit) = body.addView(ui.button(t, 13f) { d.dismiss(); act() }, ui.lin(-1, -2, 0f, 0, 4, 0, 0))
-            item("Save game") { a.save(); a.toast("Game saved") }
+            item("Save") { a.saveGame() }
+            item("Save as…") { a.saveAs() }
+            item("Quicksave") { a.quicksave() }
+            item("Quickload") { a.quickload() }
+            item("Load game…") { SaveUi.showList(a, ui, a.savesStore(), "Load game") { info -> a.loadSlot(info) } }
             item("Colony statistics") { a.panels.toggle("stats") }
             item("Storyteller & difficulty") { settings() }
             item("How to play") { help() }
@@ -87,7 +91,9 @@ class Dialogs(val a: MainActivity) {
                 AlertDialog.Builder(a).setMessage("Launch the ship and leave the rim for good? This ends the game.")
                     .setPositiveButton("Launch") { _, _ -> if (game.launchShip()) a.refreshHud() }.setNegativeButton("Not yet", null).show()
             }
-            item("New colony…") { newColony(false) }
+            item("New colony…") {
+                SaveUi.ifNothingUnsaved(a, a.hasUnsavedProgress(), "Starting a new colony discards your progress since the last save. Saved games are kept.") { newColony(false) }
+            }
             body.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 10, 0, 0))
         }, false)
     }

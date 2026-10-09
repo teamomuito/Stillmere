@@ -17,6 +17,11 @@ class Prefs(c: Context) {
         get() = p.getBoolean("tutorial_asked", false)
         set(v) { p.edit().putBoolean("tutorial_asked", v).apply() }
 
+    /** The named save this device last played from or saved to, so Save keeps writing to it after a restart. */
+    var currentSlot: String?
+        get() = p.getString("current_slot", null)
+        set(v) { p.edit().putString("current_slot", v).apply() }
+
     fun loadTutorial(): TutorialState = TutorialState(p.getInt("tut_index", 0), p.getBoolean("tut_active", true))
 
     fun saveTutorial(t: TutorialState) {

@@ -72,6 +72,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var nextMisc = 0L
     var nextTrader = 0L
     var raidActive = false
+    /** Tick the current raid started. Per game, so a new game never inherits a raid timer. */
+    var raidStartedAt = 0L
     var raidStartCount = 0
     var raidEnds = 0L
     var raidsSurvived = 0

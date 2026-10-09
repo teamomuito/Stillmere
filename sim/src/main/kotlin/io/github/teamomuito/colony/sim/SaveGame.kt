@@ -8,7 +8,7 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 17
+    private const val VERSION = 18
     private const val OLDEST_READABLE = 14
 
     private fun DataOutputStream.writePlan(p: BattlePlan, version: Int) {
@@ -40,7 +40,7 @@ object SaveGame {
         o.writeInt(g.scenario.ordinal); o.writeInt(g.storyteller.ordinal); o.writeInt(g.difficulty.ordinal)
         o.writeInt(g.nextPawnId); o.writeInt(g.raidCounter); o.writeInt(g.raidsSurvived)
         o.writeLong(g.nextRaid); o.writeLong(g.nextWanderer); o.writeLong(g.nextPod); o.writeLong(g.nextTempEvent); o.writeLong(g.nextMisc); o.writeLong(g.nextTrader)
-        o.writeBoolean(g.raidActive); o.writeInt(g.raidStartCount); o.writeLong(g.raidEnds); o.writeLong(raidStartedAt)
+        o.writeBoolean(g.raidActive); o.writeInt(g.raidStartCount); o.writeLong(g.raidEnds); o.writeLong(g.raidStartedAt)
         o.writeInt(g.weather.ordinal); o.writeLong(g.weatherUntil)
         o.writeFloat(g.tempOffset); o.writeLong(g.tempEventUntil); o.writeUTF(g.tempEventName)
         o.writeLong(g.solarFlareUntil); o.writeLong(g.toxicFalloutUntil); o.writeLong(g.eclipseUntil)
@@ -106,7 +106,7 @@ object SaveGame {
         // A battle map's people are written with its battle, not here.
         val pawns = g.pawns.filter { it.alive && it !in g.battleMembers }
         o.writeInt(pawns.size)
-        for (p in pawns) writePawn(o, p, g.tick)
+        for (p in pawns) writePawn(o, p, g.tick, version)
         // World state
         for (g2 in g.world.goodwill) o.writeInt(g2)
         o.writeInt(g.world.settlements.size)
@@ -129,7 +129,7 @@ object SaveGame {
             o.writeInt(c.inventory.size); for ((k, v) in c.inventory) { o.writeInt(k.ordinal); o.writeInt(v) }
             if (version >= 16) o.writeBoolean(c.inBattle)
             val ms = c.members.filter { it.alive }
-            o.writeInt(ms.size); for (p in ms) writePawn(o, p, g.tick)
+            o.writeInt(ms.size); for (p in ms) writePawn(o, p, g.tick, version)
         }
         val recent = g.log.takeLast(60)
         o.writeInt(recent.size)
@@ -143,7 +143,7 @@ object SaveGame {
             if (bp != null) {
                 o.writePlan(bp, version)
                 o.writeInt(g.battleMembers.size)
-                for (p in g.battleMembers) { o.writeBoolean(p in g.pawns); writePawn(o, p, g.tick) }
+                for (p in g.battleMembers) { o.writeBoolean(p in g.pawns); writePawn(o, p, g.tick, version) }
                 val world = write(g.parent!!, version)
                 o.writeInt(world.size); o.write(world)
             }
@@ -156,11 +156,16 @@ object SaveGame {
             o.writeInt(g.ransomCooldown.size)
             for ((k, v) in g.ransomCooldown) { o.writeInt(k); o.writeLong(v) }
         }
+        // The generator state, so a loaded game continues the same random sequence; and how the game stands.
+        if (version >= 18) {
+            o.writeLong(g.rng.state)
+            o.writeBoolean(g.gameOver); o.writeBoolean(g.won); o.writeBoolean(g.encounter); o.writeBoolean(g.mentalBreaksEnabled)
+        }
         o.flush()
         return bytes.toByteArray()
     }
 
-    private fun writePawn(o: DataOutputStream, p: Pawn, now: Long) {
+    private fun writePawn(o: DataOutputStream, p: Pawn, now: Long, version: Int) {
         o.writeInt(p.id); o.writeUTF(p.name); o.writeInt(p.race.ordinal); o.writeInt(p.faction.ordinal)
         o.writeShort(p.x); o.writeShort(p.y)
         o.writeBoolean(p.downed); o.writeBoolean(p.drafted); o.writeBoolean(p.prisoner); o.writeBoolean(p.hostileFlag)
@@ -199,6 +204,11 @@ object SaveGame {
         o.writeInt(p.herdLeader)
         o.writeBoolean(p.refugee); o.writeInt(p.areaRestriction)
         o.writeInt(p.implants.size); for ((k, v) in p.implants) { o.writeInt(k); o.writeInt(v.ordinal) }
+        if (version >= 18) {
+            o.writeInt(p.carryType?.ordinal ?: -1); o.writeInt(p.carryCount); o.writeInt(p.carryQuality.ordinal)
+            o.writeInt(p.surgeries.size)
+            for (s in p.surgeries) { o.writeInt(s.kind.ordinal); o.writeInt(s.part); o.writeInt(s.implant?.ordinal ?: -1) }
+        }
     }
 
     fun read(data: ByteArray): Game {
@@ -291,7 +301,7 @@ object SaveGame {
         g.scenario = scenario; g.storyteller = story; g.difficulty = diff
         g.nextPawnId = nextPawn; g.raidCounter = raidCounter; g.raidsSurvived = survived
         g.nextRaid = nr; g.nextWanderer = nw; g.nextPod = np; g.nextTempEvent = nt; g.nextMisc = nm; g.nextTrader = ntr
-        g.raidActive = raidActive; g.raidStartCount = raidStart; g.raidEnds = raidEnds; raidStartedAt = rsa
+        g.raidActive = raidActive; g.raidStartCount = raidStart; g.raidEnds = raidEnds; g.raidStartedAt = rsa
         g.weather = weather; g.weatherUntil = weatherUntil
         g.tempOffset = tempOffset; g.tempEventUntil = tempUntil; g.tempEventName = tempName
         g.solarFlareUntil = flare; g.toxicFalloutUntil = toxic; g.eclipseUntil = eclipse
@@ -303,7 +313,7 @@ object SaveGame {
         for ((r, v) in prog) g.researchProgress[r] = v
         g.traders.addAll(traderList)
 
-        repeat(i.readInt()) { g.pawns.add(readPawn(i, tick)) }
+        repeat(i.readInt()) { g.pawns.add(readPawn(i, tick, version)) }
         run {
             g.worldBiome = wBiome
             g.world = World.generate(seed, wBiome)
@@ -326,7 +336,7 @@ object SaveGame {
                 repeat(i.readInt()) { c.route.add(i.readInt()) }
                 repeat(i.readInt()) { c.inventory[ItemType.entries[i.readInt()]] = i.readInt() }
                 if (version >= 16) c.inBattle = i.readBoolean()
-                repeat(i.readInt()) { c.members.add(readPawn(i, tick)) }
+                repeat(i.readInt()) { c.members.add(readPawn(i, tick, version)) }
                 g.caravans.add(c)
             }
         }
@@ -337,7 +347,7 @@ object SaveGame {
             if (i.readBoolean()) {
                 val plan = i.readPlan(version)
                 val members = ArrayList<Pair<Pawn, Boolean>>()
-                repeat(i.readInt()) { val onMap = i.readBoolean(); members.add(readPawn(i, tick) to onMap) }
+                repeat(i.readInt()) { val onMap = i.readBoolean(); members.add(readPawn(i, tick, version) to onMap) }
                 val worldBytes = ByteArray(i.readInt()); i.readFully(worldBytes)
                 val world = read(worldBytes)
                 g.battle = plan
@@ -357,6 +367,10 @@ object SaveGame {
             repeat(i.readInt()) { g.ransomOffers.add(RansomOffer(i.readInt(), i.readInt(), i.readUTF(), i.readInt(), i.readInt(), i.readLong())) }
             repeat(i.readInt()) { g.ransomCooldown[i.readInt()] = i.readLong() }
         }
+        if (version >= 18) {
+            g.rng.restore(i.readLong())
+            g.gameOver = i.readBoolean(); g.won = i.readBoolean(); g.encounter = i.readBoolean(); g.mentalBreaksEnabled = i.readBoolean()
+        }
         map.rebuildRooms(g.outdoorTemp())
         // Jobs and reservations are not saved, so no patient is in a hospital bed after loading.
         for (b in map.buildings()) if (b.def.medical) b.occupant = -1
@@ -365,7 +379,7 @@ object SaveGame {
         return g
     }
 
-    private fun readPawn(i: DataInputStream, now: Long): Pawn {
+    private fun readPawn(i: DataInputStream, now: Long, version: Int): Pawn {
         val id = i.readInt(); val name = i.readUTF()
         val p = Pawn(id, name, Race.entries[i.readInt()], Faction.entries[i.readInt()])
         p.x = i.readShort().toInt(); p.y = i.readShort().toInt(); p.fromX = p.x; p.fromY = p.y
@@ -406,6 +420,14 @@ object SaveGame {
         p.herdLeader = i.readInt()
         p.refugee = i.readBoolean(); p.areaRestriction = i.readInt()
         repeat(i.readInt()) { p.implants[i.readInt()] = Implant.entries[i.readInt()] }
+        if (version >= 18) {
+            val carry = i.readInt(); p.carryType = if (carry >= 0) ItemType.entries[carry] else null
+            p.carryCount = i.readInt(); p.carryQuality = Quality.entries[i.readInt()]
+            repeat(i.readInt()) {
+                val kind = SurgeryKind.entries[i.readInt()]; val part = i.readInt(); val imp = i.readInt()
+                p.surgeries.add(SurgeryOrder(kind, part, if (imp >= 0) Implant.entries[imp] else null))
+            }
+        }
         return p
     }
 }
