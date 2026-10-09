@@ -17,6 +17,7 @@ import io.github.teamomuito.colony.sim.BuildDef
 import io.github.teamomuito.colony.sim.Desig
 import io.github.teamomuito.colony.sim.Faction
 import io.github.teamomuito.colony.sim.Game
+import io.github.teamomuito.colony.sim.GameMap
 import io.github.teamomuito.colony.sim.ItemCat
 import io.github.teamomuito.colony.sim.ItemType
 import io.github.teamomuito.colony.sim.LogEntry
@@ -140,7 +141,12 @@ class MainActivity : Activity() {
         if (!fromSave) {
             // A new game has no settled colonies from the last one.
             clearArchives()
-            session.startNew(Game(System.currentTimeMillis()).also { it.startNewColony() }, clockNow(), emptyList())
+            // The planet decides the colony's biome, from the tile the colony sits on.
+            val seed = System.currentTimeMillis()
+            session.startNew(
+                Game(seed, GameMap.generateFor(Game.MAP_SIZE, Game.MAP_SIZE, seed)).also { it.startNewColony() },
+                clockNow(), emptyList()
+            )
         }
         val freshTutorial = !fromSave && action != ACTION_CONTINUE || action == ACTION_NEW || action == ACTION_TUTORIAL
         tutorial = if (freshTutorial) TutorialState() else prefs.loadTutorial()

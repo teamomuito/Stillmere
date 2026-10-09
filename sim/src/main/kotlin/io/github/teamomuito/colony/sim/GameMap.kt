@@ -1,5 +1,6 @@
 package io.github.teamomuito.colony.sim
 
+import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -159,6 +160,9 @@ class GameMap(val w: Int, val h: Int) {
     val light = FloatArray(size)
     val snow = FloatArray(size)
     var biome = Biome.TEMPERATE
+    /** The colony's start cell, chosen when the map is generated; -1 on a map built by hand. Not saved: the save keeps the colony's home. */
+    var spawnX = -1
+    var spawnY = -1
 
     fun idx(x: Int, y: Int) = y * w + x
     fun inB(x: Int, y: Int) = x in 0 until w && y in 0 until h
@@ -450,15 +454,141 @@ class GameMap(val w: Int, val h: Int) {
         return v
     }
 
+    /** Cells of [side] (0 west, 1 east, 2 north, 3 south) that a raider, wanderer or trader can enter from. Corners are left out. */
+    fun sideCells(side: Int): IntArray {
+        val out = ArrayList<Int>()
+        if (side < 2) for (y in 3 until h - 3) out.add(idx(if (side == 0) 1 else w - 2, y))
+        else for (x in 3 until w - 3) out.add(idx(x, if (side == 2) 1 else h - 2))
+        return out.toIntArray()
+    }
+
+    /**
+     * Cells reachable from [from] over the terrain alone, with the same moves as [Pathfinder] (eight directions, no cutting
+     * corners). Buildings are ignored: this is the map's shape, not what the player has walled off.
+     */
+    fun reachableFrom(from: Int): BooleanArray {
+        val seen = BooleanArray(size)
+        if (!terrain[from].passable) return seen
+        val queue = IntArray(size)
+        var head = 0; var tail = 0
+        seen[from] = true; queue[tail++] = from
+        while (head < tail) {
+            val c = queue[head++]
+            val cx = xOf(c); val cy = yOf(c)
+            for (d in 0 until 8) {
+                val nx = cx + DX8[d]; val ny = cy + DY8[d]
+                if (!inB(nx, ny)) continue
+                val n = idx(nx, ny)
+                if (seen[n] || !terrain[n].passable) continue
+                if (d >= 4 && (!terrain[idx(cx + DX8[d], cy)].passable || !terrain[idx(cx, cy + DY8[d])].passable)) continue
+                seen[n] = true; queue[tail++] = n
+            }
+        }
+        return seen
+    }
+
+    /**
+     * The first open 7x7 pad (every cell passable and not shallow water), searched outward from the middle of the map.
+     * Soil is preferred to other ground. Null when the map has no such pad.
+     */
+    fun findOpenPad(): Pair<Int, Int>? {
+        val cx = w / 2; val cy = h / 2
+        val desertLike = biome == Biome.DESERT || biome == Biome.ARID
+        fun open(x: Int, y: Int): Boolean {
+            for (yy in y - 3..y + 3) for (xx in x - 3..x + 3) {
+                if (!inB(xx, yy)) return false
+                val t = terrain[idx(xx, yy)]
+                if (!t.passable || t == Terrain.WATER_SHALLOW) return false
+            }
+            return true
+        }
+        for (soilOnly in listOf(true, false)) for (r in 0 until max(w, h)) for (y in cy - r..cy + r) for (x in cx - r..cx + r) {
+            if (!inB(x, y)) continue
+            val t = terrain[idx(x, y)]
+            if (soilOnly && !(t == Terrain.SOIL || t == Terrain.RICH_SOIL || (desertLike && t == Terrain.SAND))) continue
+            if (open(x, y)) return x to y
+        }
+        return null
+    }
+
+    /**
+     * Every side of the map gets at least one entry the colony can walk to. Where water or rock cuts the start off from a side,
+     * the cheapest crossing is cut: deep water becomes a ford (shallow) and rock becomes a pass (gravel) up to the edge.
+     */
+    private fun connectSides(sx: Int, sy: Int) {
+        val start = idx(sx, sy)
+        for (side in 0 until 4) {
+            val reach = reachableFrom(start)
+            if (sideCells(side).any { reach[it] && terrain[it] != Terrain.WATER_SHALLOW }) continue
+            val route = crossing(start, side)
+            if (route.isEmpty()) continue
+            for (i in route) when (terrain[i]) {
+                Terrain.WATER_DEEP -> terrain[i] = Terrain.WATER_SHALLOW
+                Terrain.ROCK -> { terrain[i] = Terrain.GRAVEL; natRoof[i] = false }
+                else -> {}
+            }
+            // The entry cell itself must be dry, passable ground.
+            val entry = route.last()
+            if (terrain[entry] == Terrain.WATER_SHALLOW || terrain[entry] == Terrain.WATER_DEEP || terrain[entry] == Terrain.ROCK) {
+                terrain[entry] = Terrain.GRAVEL; natRoof[entry] = false
+            }
+        }
+    }
+
+    /** Cheapest route from [start] to any cell of [side], as cells after the start. Rock costs most, then deep water, then shallows. */
+    private fun crossing(start: Int, side: Int): List<Int> {
+        val goals = sideCells(side).toHashSet()
+        val dist = IntArray(size) { Int.MAX_VALUE }
+        val prev = IntArray(size) { -1 }
+        val queue = PriorityQueue<Pair<Int, Int>>(compareBy { it.first })
+        dist[start] = 0; queue.add(0 to start)
+        var goal = -1
+        while (queue.isNotEmpty()) {
+            val (d, c) = queue.poll()
+            if (d > dist[c]) continue
+            if (c in goals) { goal = c; break }
+            val cx = xOf(c); val cy = yOf(c)
+            for (k in 0 until 4) {
+                val nx = cx + DX4[k]; val ny = cy + DY4[k]
+                if (!inB(nx, ny)) continue
+                val n = idx(nx, ny)
+                val step = when (terrain[n]) { Terrain.ROCK -> 10; Terrain.WATER_DEEP -> 6; Terrain.WATER_SHALLOW -> 2; else -> 1 }
+                val nd = d + step
+                if (nd < dist[n]) { dist[n] = nd; prev[n] = c; queue.add(nd to n) }
+            }
+        }
+        val out = ArrayList<Int>()
+        if (goal < 0) return out
+        var c = goal
+        while (c != start) { out.add(c); c = prev[c] }
+        out.reverse()
+        return out
+    }
+
     companion object {
+        /**
+         * Scale of the noise that patches rock types, and the cut points that split it over the rock tiles of generated maps:
+         * granite 40%, then slate, limestone and sandstone 15% each, marble 15%.
+         */
+        const val ROCK_PATCH = 40f
+        val ROCK_CUTS = floatArrayOf(0.451f, 0.518f, 0.586f, 0.669f)
+        /** Scale and threshold of the tundra gravel patches: about 30% of the soil. */
+        const val GRAVEL_PATCH = 12f
+        const val GRAVEL_SHARE = 0.58f
+
         val DX4 = intArrayOf(1, -1, 0, 0)
         val DY4 = intArrayOf(0, 0, 1, -1)
         val DX8 = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
         val DY8 = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
 
-        /** A map whose river, lake and ruggedness follow the world tile the colony sits on. */
-        fun generateFor(w: Int, h: Int, seed: Long, biome: Biome): GameMap =
-            generate(w, h, seed, biome, World.generate(seed, biome).localTerrain())
+        /**
+         * The colony's map. The planet picks the home tile: the nearest tile of [biome] to the middle, or of any land when [biome]
+         * is null. The map takes that tile's biome, and its river, lake and ruggedness.
+         */
+        fun generateFor(w: Int, h: Int, seed: Long, biome: Biome? = null): GameMap {
+            val world = World.generate(seed, biome)
+            return generate(w, h, seed, world.biome[world.homeTile], world.localTerrain())
+        }
 
         fun generate(w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null): GameMap {
             val m = GameMap(w, h)
@@ -469,23 +599,27 @@ class GameMap(val w: Int, val h: Int) {
             val wet = Noise(seed.toInt() xor 0x9abc)
             val tree = Noise(seed.toInt() xor 0xdef0)
             val rockN = Noise(seed.toInt() xor 0x2468)
+            val gravelN = Noise(seed.toInt() xor 0x3579)
             val cx = w / 2
             val cy = h / 2
             val desert = biome == Biome.DESERT || biome == Biome.ARID
             val cold = biome == Biome.TUNDRA || biome == Biome.BOREAL
-            // A river meanders across the map for most seeds.
+            val tundra = biome == Biome.TUNDRA
+            // A river meanders across the map for most seeds. Its direction and the lake's side come from the world tile when it has them.
             val riverY = FloatArray(w)
             val riverNoise = Noise(seed.toInt() xor 0x77)
             val riverRoll = rng.chance(0.65f) && !desert
             val riverOn = if (local != null) local.river else riverRoll
             val rockThr = when (local?.hills) { Hills.FLAT -> 0.70f; Hills.SMALL -> 0.64f; Hills.LARGE -> 0.58f; Hills.MOUNTAIN -> 0.5f; null -> 0.62f }
             // A lake when the world tile borders water.
-            val lakeAng = rng.float() * 6.283f
+            val lakeRoll = rng.float() * 6.283f
             val lakeR = 8f + rng.float() * 5f
+            val lakeAng = local?.lakeAngle ?: lakeRoll
             val lakeX = cx + (Math.cos(lakeAng.toDouble()) * (w * 0.3)).toFloat()
             val lakeY = cy + (Math.sin(lakeAng.toDouble()) * (h * 0.3)).toFloat()
             val lakeOn = local?.lake == true
-            val horizontal = rng.chance(0.5f)
+            val horizontalRoll = rng.chance(0.5f)
+            val horizontal = local?.riverHorizontal ?: horizontalRoll
             for (x in 0 until w) riverY[x] = (if (horizontal) h * 0.22f else w * 0.22f) + (riverNoise.fractal(x.toFloat(), 0f, 24f) - 0.5f) * 30f
             for (y in 0 until h) for (x in 0 until w) {
                 val i = m.idx(x, y)
@@ -518,16 +652,19 @@ class GameMap(val w: Int, val h: Int) {
                     val dl = Math.hypot((x - lakeX).toDouble(), (y - lakeY).toDouble()).toFloat() + (e - 0.5f) * 8f
                     if (dl < lakeR * 0.6f) t = Terrain.WATER_DEEP else if (dl < lakeR) t = Terrain.WATER_SHALLOW
                 }
-                if (biome == Biome.TUNDRA && (t == Terrain.SOIL || t == Terrain.RICH_SOIL) && rng.chance(0.3f)) t = Terrain.GRAVEL
+                // Frozen shallows in the tundra are walkable ice; deep water stays open.
+                if (tundra && t == Terrain.WATER_SHALLOW) t = Terrain.ICE
+                // Gravel in the tundra comes in patches from its own noise, not as scattered single tiles.
+                if (tundra && (t == Terrain.SOIL || t == Terrain.RICH_SOIL) && gravelN.fractal(x.toFloat(), y.toFloat(), GRAVEL_PATCH) > GRAVEL_SHARE) t = Terrain.GRAVEL
                 m.terrain[i] = t
                 if (t == Terrain.ROCK) {
                     m.natRoof[i] = true
-                    val r = rockN.fractal(x.toFloat(), y.toFloat(), 40f)
+                    val r = rockN.fractal(x.toFloat(), y.toFloat(), ROCK_PATCH)
                     m.rockType[i] = when {
-                        r < 0.3f -> RockType.GRANITE
-                        r < 0.45f -> RockType.SLATE
-                        r < 0.58f -> RockType.LIMESTONE
-                        r < 0.72f -> RockType.SANDSTONE
+                        r < ROCK_CUTS[0] -> RockType.GRANITE
+                        r < ROCK_CUTS[1] -> RockType.SLATE
+                        r < ROCK_CUTS[2] -> RockType.LIMESTONE
+                        r < ROCK_CUTS[3] -> RockType.SANDSTONE
                         else -> RockType.MARBLE
                     }
                 }
@@ -543,17 +680,35 @@ class GameMap(val w: Int, val h: Int) {
                 }
                 if (rockNb >= 14) m.natRoof[i] = true
             }
-            // Ore veins.
+            // The colony's start: an open pad near the middle, with a walkable way from it to every side of the map. The pad is
+            // made outright when the terrain has none, so the start is always open ground.
+            val (sx, sy) = m.findOpenPad() ?: run {
+                for (y in cy - 3..cy + 3) for (x in cx - 3..cx + 3) { val i = m.idx(x, y); m.terrain[i] = Terrain.SOIL; m.natRoof[i] = false }
+                cx to cy
+            }
+            m.spawnX = sx; m.spawnY = sy
+            m.connectSides(sx, sy)
+            // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. Lump sizes
+            // keep the ore per map where the old scattered veins left it.
             val ores = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.PLASTEEL to 2, Ore.COMPONENTS to 3)
             for ((ore, veins) in ores) {
+                val lump = if (ore == Ore.STEEL) 7 else if (ore == Ore.COMPONENTS) 3 else 4
                 repeat(veins) {
                     for (attempt in 0 until 80) {
                         val ox = rng.int(w); val oy = rng.int(h)
-                        if (m.terrain[m.idx(ox, oy)] != Terrain.ROCK) continue
-                        val n = if (ore == Ore.STEEL) 11 else if (ore == Ore.COMPONENTS) 4 else 6
-                        for (k in 0 until n) {
-                            val x = ox + rng.range(-2, 2); val y = oy + rng.range(-2, 2)
-                            if (m.inB(x, y) && m.terrain[m.idx(x, y)] == Terrain.ROCK) m.ore[m.idx(x, y)] = ore
+                        val start = m.idx(ox, oy)
+                        if (m.terrain[start] != Terrain.ROCK || m.ore[start] != Ore.NONE) continue
+                        val cells = arrayListOf(start)
+                        m.ore[start] = ore
+                        var tries = 0
+                        while (cells.size < lump && tries++ < lump * 12) {
+                            val c = cells[rng.int(cells.size)]
+                            val k = rng.int(4)
+                            val nx = m.xOf(c) + DX4[k]; val ny = m.yOf(c) + DY4[k]
+                            if (!m.inB(nx, ny)) continue
+                            val n = m.idx(nx, ny)
+                            if (m.terrain[n] != Terrain.ROCK || m.ore[n] != Ore.NONE) continue
+                            m.ore[n] = ore; cells.add(n)
                         }
                         break
                     }

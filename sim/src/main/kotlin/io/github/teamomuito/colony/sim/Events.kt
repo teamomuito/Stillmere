@@ -3,14 +3,20 @@ package io.github.teamomuito.colony.sim
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * Cells of [side] that raiders, wanderers and traders may enter from: walkable, not shallow water, and reachable from the
+ * colony's home. An edge the colony cannot walk to is no entry at all.
+ */
+fun Game.spawnCells(side: Int): List<Pair<Int, Int>> {
+    val reach = map.reachableFrom(map.idx(homeX, homeY))
+    return map.sideCells(side)
+        .filter { reach[it] && map.walkable(it) && map.terrain[it] != Terrain.WATER_SHALLOW }
+        .map { map.xOf(it) to map.yOf(it) }
+}
+
 fun Game.edgeCell(side: Int): Pair<Int, Int>? {
-    repeat(120) {
-        val t = rng.int(map.w - 6) + 3
-        val (x, y) = when (side) { 0 -> 1 to t; 1 -> map.w - 2 to t; 2 -> t to 1; else -> t to map.h - 2 }
-        val i = map.idx(x, y)
-        if (map.walkable(i) && map.terrain[i] != Terrain.WATER_SHALLOW) return x to y
-    }
-    return null
+    val cells = spawnCells(side)
+    return if (cells.isEmpty()) null else cells[rng.int(cells.size)]
 }
 
 private fun Game.hint(bit: Int, text: String) {
