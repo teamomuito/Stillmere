@@ -37,9 +37,31 @@ fun Game.factionsDaily() {
             if (g < 0) world.goodwill[f.id] = g + 1 else if (g > 50) world.goodwill[f.id] = g - 1
         }
     }
+    driftRelations()
     questsDaily()
     // A faction that likes you may ask for a favour: clear a rival camp.
     if (day >= 6 && world.sites.size < 3 && rng.chance(0.12f)) offerSite()
+}
+
+/**
+ * Relations between the factions move on their own: neutral pairs sometimes fall into war or make an alliance, and
+ * wars sometimes cool back to neutral. Alliances last longer than wars, and pirates keep their own counsel.
+ */
+private fun Game.driftRelations() {
+    for (a in world.factions) for (b in world.factions) {
+        if (a.id >= b.id || a.permanentEnemy || b.permanentEnemy) continue
+        val r = world.relation[a.id][b.id]
+        val next = when (r) {
+            0 -> if (rng.chance(1f / 40f)) (if (rng.chance(0.5f)) -1 else 1) else 0
+            -1 -> if (rng.chance(1f / 60f)) 0 else -1
+            else -> if (rng.chance(1f / 90f)) 0 else 1
+        }
+        if (next == r) continue
+        world.relation[a.id][b.id] = next
+        world.relation[b.id][a.id] = next
+        val news = when (next) { -1 -> "are now at war"; 1 -> "have made an alliance"; else -> "have made peace" }
+        say("${a.name} and ${b.name} $news.", 0)
+    }
 }
 
 /** A bandit camp appears near a friendly faction and they ask you to clear it. */

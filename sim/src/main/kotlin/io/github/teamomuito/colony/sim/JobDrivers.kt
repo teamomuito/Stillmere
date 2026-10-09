@@ -326,7 +326,7 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
             if (map.roomRole[r] == 2) p.addThought("Slept in a barracks", -0.04f, tick, TICKS_PER_DAY)
             if (map.roomTemp[r] < p.comfyMin() - 5f) p.addThought("Slept in the cold", -0.05f, tick, TICKS_PER_DAY)
         }
-        if (map.light[i] < 0.15f && false) p.addThought("Slept in the dark", -0.02f, tick, TICKS_PER_DAY)
+        if (map.light[i] < 0.15f) p.addThought("Slept in the dark", -0.02f, tick, TICKS_PER_DAY)
         endJob(p)
     }
 }

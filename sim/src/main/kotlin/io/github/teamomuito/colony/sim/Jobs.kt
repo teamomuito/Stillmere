@@ -201,7 +201,8 @@ fun Game.think(p: Pawn) {
     findFeedBaby(p)?.let { p.job = it; return }
     if (p.surgeries.isNotEmpty() && map.building[map.idx(p.x, p.y)]?.def?.sleeps != true && startRest(p)) return
     if (p.needsMedical && p.priority[WorkType.PATIENT.ordinal] > 0 && patientShouldRest(p) && startRest(p)) return
-    val sleepy = p.rest < 0.25f || (act == 3 && p.rest < 0.92f) || (Trait.NIGHT_OWL in p.traits && false)
+    val sleepHourRest = if (Trait.NIGHT_OWL in p.traits) 0.7f else 0.92f
+    val sleepy = p.rest < 0.25f || (act == 3 && p.rest < sleepHourRest)
     if (sleepy && startSleep(p)) return
     // Gear.
     if (tick % 5 == (p.id % 5).toLong()) findGear(p)?.let { p.job = it; return }

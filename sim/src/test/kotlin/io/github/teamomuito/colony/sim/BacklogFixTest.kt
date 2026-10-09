@@ -133,6 +133,27 @@ class BacklogFixTest {
         assertFalse(g.canBuildAt(BuildDef.WOOD_FLOOR, x, y))
     }
 
+    // ----------------------------------------------------------------------------------- sappers and relations
+
+    @Test fun aSapperDigsThroughAWallWhenNoOneIsNear() {
+        val g = calm(1313)
+        g.pawns.removeAll { it.colonist }
+        val wall = Building(BuildDef.WOOD_WALL, g.homeX + 8, g.homeY, true)
+        g.map.setBuilding(wall)
+        val s = g.newRaider(g.homeX + 9, g.homeY, ItemType.W_CLUB, 1)
+        s.raidMode = 1
+        g.pawns.add(s)
+        repeat(400) { s.attackCd = 0; s.job = null; g.hostileAI(s) }
+        assertTrue("the sapper chips at the wall (hp ${wall.hp})", wall.hp < 150f)
+    }
+
+    @Test fun factionRelationsChangeOverTime() {
+        val g = calm(1314)
+        val before = g.world.relation.map { it.toList() }
+        repeat(400) { g.factionsDaily() }
+        assertNotEquals("some pair of factions changes its relation", before, g.world.relation.map { it.toList() })
+    }
+
     // ----------------------------------------------------------------------------------- raids and storytelling
 
     @Test fun aRaidDoesNotStartStraightAfterTheLastOne() {

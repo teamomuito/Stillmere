@@ -195,6 +195,27 @@ private fun Game.pickRaidTarget(p: Pawn): Pawn? {
     return best
 }
 
+private fun Game.nearestWall(p: Pawn): Building? {
+    var best: Building? = null
+    var bd = 40f
+    for (b in map.buildings()) {
+        if (!b.built || !b.def.isWall) continue
+        val d = distance(p.x, p.y, b.x, b.y)
+        if (d < bd) { best = b; bd = d }
+    }
+    return best
+}
+
+/** Walk to a wall and chip at it; the wall falls when its hit points run out. */
+private fun Game.digWall(p: Pawn, wall: Building) {
+    if (distance(p.x, p.y, wall.x, wall.y) > 1.5f) { goTo(p, wall.x, wall.y, adjacent = true); return }
+    if (p.attackCd == 0) {
+        p.attackCd = p.weapon.cooldown
+        wall.hp -= 6f
+        if (wall.hp <= 0f) { map.removeBuilding(wall); map.roomDirty = true; say("Sappers broke through a ${wall.def.label.lowercase()}!", 3) }
+    }
+}
+
 private fun Game.pickTurretTarget(p: Pawn): Building? {
     var best: Building? = null
     var bd = p.weapon.range * p.weapon.range
@@ -245,6 +266,10 @@ internal fun Game.hostileAI(p: Pawn) {
     if (t == null || !t.alive || (t.downed && j.timer % 30 == 0) || j.timer % 100 == 0) {
         t = pickRaidTarget(p)
         j.targetPawn = t?.id ?: -1
+    }
+    // Sappers dig in: with no one close, they break through the nearest wall.
+    if (p.raidMode == 1 && (t == null || distance(p.x, p.y, t.x, t.y) > 10f)) {
+        nearestWall(p)?.let { digWall(p, it); return }
     }
     val turret = pickTurretTarget(p)
     val w = p.weapon

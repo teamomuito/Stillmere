@@ -394,7 +394,7 @@ private fun Game.plantsTick(out: Float) {
             val days = if (pl.type.growDays <= 0f) 1f else pl.type.growDays
             var rate = 1f / (days * TICKS_PER_DAY * 0.55f) * 250f * max(0.2f, fert)
             if (weather == Weather.RAIN) rate *= 1.1f
-            if (Trait.GREEN_THUMB in pawns.firstOrNull { it.colonist }?.traits.orEmpty()) rate *= 1f
+            if (Trait.GREEN_THUMB in pawns.firstOrNull { it.colonist }?.traits.orEmpty()) rate *= 1.25f
             pl.growth = min(1f, pl.growth + rate)
         }
     }
