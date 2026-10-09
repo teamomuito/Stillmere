@@ -295,6 +295,10 @@ class GameMap(val w: Int, val h: Int) {
     var roomImpress = FloatArray(0)
     var roomRole = IntArray(0) // 0 none, 1 bedroom, 2 barracks, 3 dining, 4 hospital, 5 prison, 6 rec, 7 workshop, 8 kitchen
     var roomWealth = FloatArray(0)
+    /** Heat paths of indoor rooms: room [linkA] exchanges with [linkB] (a room id, or [Thermal.OUTDOORS] / [Thermal.GROUND]) with conductance [linkC]. */
+    var linkA = IntArray(0)
+    var linkB = IntArray(0)
+    var linkC = FloatArray(0)
 
     private fun separates(i: Int): Boolean {
         val b = building[i]
@@ -351,7 +355,39 @@ class GameMap(val w: Int, val h: Int) {
         roomImpress = FloatArray(sizes.size)
         roomRole = IntArray(sizes.size)
         roomWealth = FloatArray(sizes.size)
+        buildHeatLinks()
         roomDirty = false
+    }
+
+    /** One link per wall, door or rock edge of an indoor room, to whatever lies straight through it. */
+    private fun buildHeatLinks() {
+        val a = ArrayList<Int>(); val b = ArrayList<Int>(); val c = ArrayList<Float>()
+        for (cell in 0 until size) {
+            val r = roomId[cell]
+            if (r < 0 || !roomIndoor[r]) continue
+            val cx = xOf(cell); val cy = yOf(cell)
+            for (d in 0 until 4) {
+                val nx = cx + DX4[d]; val ny = cy + DY4[d]
+                if (!inB(nx, ny)) continue
+                val n = idx(nx, ny)
+                if (!separates(n)) continue
+                val bd = building[n]
+                val cond: Float
+                var other = Thermal.OUTDOORS
+                if (terrain[n] == Terrain.ROCK) { cond = Thermal.ROCK_CONDUCTANCE; other = Thermal.GROUND }
+                else {
+                    cond = if (bd!!.def.isDoor) Thermal.DOOR_CONDUCTANCE else Thermal.wallConductance(bd.material)
+                    val ox = nx + DX4[d]; val oy = ny + DY4[d]
+                    if (inB(ox, oy)) {
+                        val q = roomId[idx(ox, oy)]
+                        if (q == r) continue
+                        if (q >= 0) other = q
+                    }
+                }
+                a.add(r); b.add(other); c.add(cond)
+            }
+        }
+        linkA = a.toIntArray(); linkB = b.toIntArray(); linkC = c.toFloatArray()
     }
 
     fun roomIndoorAt(i: Int): Boolean {

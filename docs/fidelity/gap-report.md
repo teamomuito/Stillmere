@@ -134,22 +134,33 @@ berry bushes, wild healroot, brambles, wildlife herds, a flat start area.
 
 ### 3.3 Temperature and rooms
 
-**Status: Divergent.** **Priority 1.**
-**Files:** `GameMap.kt` (`rebuildRooms`, `tempAt`), `World.kt` (`roomClimate`, `roomStats`, `impressLabel`), `Game.kt` (`outdoorTemp`, `Biome` seasonal temperatures), `Mood.kt` (`comfortTick`), `Pawn.kt` (`comfyMin/Max`).
+**Status: Partial** (was Divergent). Details and sources: `docs/fidelity/temperature-rooms.md`. **Priority 1.**
+**Files:** `Climate.kt` (outdoor temperature, `Thermal.step`), `GameMap.kt` (`rebuildRooms`, `buildHeatLinks`, `tempAt`), `Rooms.kt` (`computeRoomStats`, `RoomRules`), `World.kt` (`roomClimate`), `Game.kt` (`outdoorTemp`), `Mood.kt` (`comfortTick`), `Pawn.kt` (`comfyMin/Max`).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
 | Comfortable range | 16 to 26 C, shifted by apparel insulation | 16 to 26 C | none | M |
-| Day/night swing | +/-7 C (+/-10 in desert, arid) | ? | | ? |
-| Heat wave / cold snap offset | +16 / -17 C | ? (recalled near +17 / -20) | **UNVERIFIED** | M |
-| Volcanic winter offset | -13 C for 6 days | ? | | ? |
-| Room warm-up | 4% of the gap to outdoors per 250 ticks, plus `heat / size * 1.2` | vanilla exchanges heat through walls, doors and vents | model differs | C |
-| Heater / cooler | +14 / -14 heat units, only below/above 21 C | ? | | ? |
-| Rooms | flood fill; walls and doors separate; indoor if it does not touch the map edge and has at most 700 cells, or a roofed majority | a room needs a roof to be indoors | **Divergent** | M |
-| Room stats | beauty, cleanliness, wealth, impressiveness, role (9 roles) | beauty, cleanliness, space, wealth, impressiveness with named stages | stages exist (`impressLabel`) but thresholds are custom | C |
+| Temperature granularity | per room, with heat links to neighbouring rooms and the outdoors | per room (every cell of a room shares one temperature) | **none** (a per-cell grid was not built: it would be less faithful) | V |
+| Day/night swing | +/-7 C (+/-10 in desert, arid), coldest 03:00, warmest 15:00 | ? | | UNVERIFIED |
+| Heat wave / cold snap offset | +16 / -17 C | ? (recalled near +17 / -20) | | UNVERIFIED |
+| Volcanic winter offset | -13 C for 6 days | ? | | UNVERIFIED |
+| Heat exchange | `0.048 * sum(edge conductance) / cells` of the gap per slow tick; wall 1.0, door 3.0, rock 0.3 | doors, vents and missing roof speed it up; rates not found | model differs in detail | V for the qualitative part, rates UNVERIFIED |
+| Wall material insulation | none (all materials equal) | none recalled | | M |
+| Heater / cooler | +14 / -14 heat units, only below / above 21 C | ? | | UNVERIFIED |
+| Rooms | flood fill; walls, doors and rock separate; a door splits rooms and belongs to none; indoor if it does not touch the map edge and has at most 700 cells, or a mostly natural-roofed majority | a room that is 75% roofed or less is outdoors | **Divergent** (no roofs) | V |
+| Room stats | beauty, cleanliness, wealth, impressiveness, role (9 roles); constants in `RoomRules` | impressiveness from wealth, beauty, space, cleanliness with named stages | structure matches, all numbers custom | V (structure), C (numbers) |
 
-**Missing:** roofs (above), wall material insulation, doors and vents as heat paths, rain and snow on roofless rooms, overhead mountain
-rock as a room property, per-cell temperature (it is per room), sunlight beyond a day/night curve, seasonal day length.
+**Done in phase 4:** outdoor temperature moved into a pure `Climate` object (`StrictMath`, fixing R3 for this curve); heat now flows
+between neighbouring rooms through doors, walls and rock instead of only to the outdoors; heater and cooler thermostat extracted;
+room stats moved out of `Game` into `computeRoomStats` with named constants. 18 tests in `TemperatureRoomsTest`.
+
+**Could not be verified** (no direct wiki access; see the doc): heater and cooler output, heat-exchange rates, the day/night curve,
+the impressiveness formula and thresholds, and which buildings and terrain contribute to beauty and cleanliness and by how much.
+All are marked UNVERIFIED and are Stillmere's own numbers.
+
+**Missing:** roofs (and so the 75% rule, roof collapse and roofless rooms), vents, doors that are open versus closed, rain and snow on
+roofless rooms, overhead mountain rock as a room property beyond the natural-roof flag, sunlight beyond a day/night curve, seasonal
+day length, latitude-dependent seasonal swing.
 
 ### 3.4 Health and medicine
 

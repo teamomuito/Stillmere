@@ -161,22 +161,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         return l
     }
 
-    private fun seasonTemp(s: Season): Float {
-        val b = map.biome
-        return when (s) { Season.SPRING -> b.springT; Season.SUMMER -> b.summerT; Season.FALL -> b.fallT; Season.WINTER -> b.winterT }
-    }
-
-    fun outdoorTemp(): Float {
-        val h = (tick % TICKS_PER_DAY) / TICKS_PER_HOUR.toFloat()
-        val diurnal = sin(((h - 9f) / 24f) * 2f * PI.toFloat()) * (if (map.biome == Biome.DESERT || map.biome == Biome.ARID) 10f else 7f)
-        val s = season
-        val next = Season.entries[(s.ordinal + 1) % SEASONS_PER_YEAR]
-        val blend = (dayOfSeason - 1) / DAYS_PER_SEASON.toFloat()
-        val base = seasonTemp(s) + (seasonTemp(next) - seasonTemp(s)) * blend * 0.5f
-        var w = 0f
-        when (weather) { Weather.RAIN -> w = -2f; Weather.SNOW -> w = -3f; Weather.THUNDER -> w = -3f; Weather.CLOUDY -> w = -1f; else -> {} }
-        return base + diurnal + tempOffset + w
-    }
+    fun outdoorTemp(): Float = Climate.outdoorTemp(map.biome, tick, tempOffset, weather)
 
     fun dateLabel() = "${hour.toString().padStart(2, '0')}:00  Day $dayOfSeason of ${season.label}, $year"
 

@@ -320,7 +320,7 @@ private fun Game.lightTick() {
     }
 }
 
-private fun Game.roomClimate(out: Float) {
+internal fun Game.roomClimate(out: Float) {
     val m = map
     val heat = FloatArray(m.roomTemp.size)
     for (b in m.buildings()) {
@@ -331,11 +331,7 @@ private fun Game.roomClimate(out: Float) {
         val r = m.roomId[i]
         if (d.power != 0f) {
             if (!b.powered) continue
-            if (r >= 0) {
-                val t = m.roomTemp[r]
-                if (d.heat > 0f && t < 21f) heat[r] += d.heat
-                if (d.heat < 0f && t > 21f) heat[r] += d.heat
-            }
+            if (r >= 0 && Thermal.thermostatAllows(d.heat, m.roomTemp[r])) heat[r] += d.heat
             continue
         }
         var active = false
@@ -353,20 +349,8 @@ private fun Game.roomClimate(out: Float) {
         // Weather puts out outdoor fires.
         if (r >= 0 && !m.roomIndoor[r] && d == BuildDef.CAMPFIRE && (weather == Weather.RAIN || weather == Weather.THUNDER)) b.fuel = max(0f, b.fuel - 2f)
     }
-    for (r in m.roomTemp.indices) {
-        if (!m.roomIndoor[r]) { m.roomTemp[r] = out; continue }
-        val sz = max(1, m.roomSize[r])
-        m.roomTemp[r] += (out - m.roomTemp[r]) * 0.04f + heat[r] / sz * 1.2f
-        m.roomTemp[r] = m.roomTemp[r].coerceIn(-60f, 80f)
-    }
-    // Underground rooms hold a mild constant.
-    for (i in 0 until m.size) {
-        val r = m.roomId[i]
-        if (r >= 0 && m.roomIndoor[r] && m.natRoof[i] && m.roomSize[r] < 400 && heat[r] <= 0f) {
-            val target = (out + 14f) / 2f
-            m.roomTemp[r] += (target - m.roomTemp[r]) * 0.01f
-        }
-    }
+    val next = Thermal.step(m.roomTemp, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, out)
+    next.copyInto(m.roomTemp)
 }
 
 private fun Game.plantsTick(out: Float) {
@@ -463,66 +447,7 @@ private fun Game.spoilTick(out: Float) {
     if (spoiled > 0 && rem.any { m.items[it] == null }) { /* silent: rot is routine */ }
 }
 
-private fun Game.roomStats() {
-    val m = map
-    val n = m.roomTemp.size
-    if (n == 0) return
-    val beauty = FloatArray(n)
-    val filth = FloatArray(n)
-    val wealth = FloatArray(n)
-    val beds = IntArray(n); val ownedBeds = IntArray(n); val tables = IntArray(n); val chairs = IntArray(n); val joy = IntArray(n)
-    val hosp = IntArray(n); val prison = IntArray(n); val bench = IntArray(n); val kitchen = IntArray(n)
-    for (i in 0 until m.size) {
-        val r = m.roomId[i]
-        if (r < 0 || !m.roomIndoor[r]) continue
-        var b = 0f
-        val fl = m.floor[i]
-        b += fl?.beauty ?: -0.2f
-        val bd = m.building[i]
-        if (bd != null && bd.built && bd.x == i % m.w && bd.y == i / m.w) {
-            b += bd.beauty * bd.quality.mult
-            wealth[r] += bd.def.totalCost
-            when {
-                bd.def.sleeps -> { beds[r]++; if (bd.ownerId >= 0) ownedBeds[r]++; if (bd.def.medical) hosp[r]++; if (bd.prisonerBed) prison[r]++ }
-                bd.def == BuildDef.TABLE -> tables[r]++
-                bd.def == BuildDef.CHAIR || bd.def == BuildDef.STOOL -> chairs[r]++
-                bd.def.joy > 0f -> joy[r]++
-                bd.def == BuildDef.STOVE_FUEL || bd.def == BuildDef.STOVE_ELEC -> kitchen[r]++
-                bd.def.workbench -> bench[r]++
-            }
-        }
-        val s = m.items[i]
-        if (s != null) wealth[r] += s.type.value * s.count * 0.5f
-        val pl = m.plant[i]
-        if (pl != null && !pl.type.isTree) b += 0.4f
-        b -= m.filth[i] * 0.9f
-        b += if (m.terrain[i] == Terrain.ROCK) 0f else if (m.natRoof[i]) -0.1f else 0f
-        beauty[r] += b
-        filth[r] += m.filth[i]
-    }
-    for (r in 0 until n) {
-        if (!m.roomIndoor[r]) continue
-        val sz = max(1, m.roomSize[r])
-        m.roomBeauty[r] = beauty[r] / sz
-        m.roomClean[r] = -filth[r] / sz
-        m.roomWealth[r] = wealth[r]
-        val space = min(sz, 60)
-        // Impressiveness: beauty, space, and wealth together.
-        val score = m.roomBeauty[r] * 6f * min(1f, sz / 14f) + space * 0.18f + min(wealth[r] / 450f, 9f) + m.roomClean[r] * 2.5f
-        m.roomImpress[r] = score
-        m.roomRole[r] = when {
-            prison[r] > 0 -> 5
-            hosp[r] > 0 -> 4
-            ownedBeds[r] + beds[r] >= 3 -> 2
-            beds[r] > 0 -> 1
-            tables[r] > 0 && chairs[r] > 0 -> 3
-            joy[r] > 0 -> 6
-            kitchen[r] > 0 -> 8
-            bench[r] > 0 -> 7
-            else -> 0
-        }
-    }
-}
+private fun Game.roomStats() = map.computeRoomStats()
 
 fun impressLabel(score: Float): String = when {
     score < 4f -> "awful"
