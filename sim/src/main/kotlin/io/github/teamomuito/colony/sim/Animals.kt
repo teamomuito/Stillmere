@@ -75,8 +75,7 @@ internal fun Game.animalTick(p: Pawn) {
     }
     // Predators hunt when hungry.
     if (p.race.predator && p.faction == Faction.WILD && p.food < 0.5f && danger == null) {
-        val prey = pawns.filter { it.alive && it !== p && it.isAnimal && !it.race.predator && !it.downed && it.race.size < p.race.size * 1.6f && distance(p.x, p.y, it.x, it.y) < 35f }
-            .minByOrNull { distance(p.x, p.y, it.x, it.y) }
+        val prey = nearestPawn(p) { it.alive && it !== p && it.isAnimal && !it.race.predator && !it.downed && it.race.size < p.race.size * 1.6f && distance(p.x, p.y, it.x, it.y) < 35f }
         if (prey != null) {
             if (distance(p.x, p.y, prey.x, prey.y) < 1.9f) {
                 fire(p, prey)
@@ -88,7 +87,7 @@ internal fun Game.animalTick(p: Pawn) {
         }
         // Hungry enough to go after people nearby.
         if (p.food < 0.08f && day >= 6) {
-            val human = pawns.filter { it.alive && !it.isAnimal && it.faction == Faction.PLAYER && !it.downed && distance(p.x, p.y, it.x, it.y) < 20f }.minByOrNull { distance(p.x, p.y, it.x, it.y) }
+            val human = nearestPawn(p) { it.alive && !it.isAnimal && it.faction == Faction.PLAYER && !it.downed && distance(p.x, p.y, it.x, it.y) < 20f }
             if (human != null) { p.manhunter = true; return }
         }
     }
@@ -131,8 +130,7 @@ internal fun Game.animalHostileAI(p: Pawn) {
         t = prov
     }
     if (t == null || !t.alive || t.downed && j.timer % 20 == 0 || j.timer % 80 == 0 && p.predatorTarget < 0) {
-        t = pawns.filter { it.alive && it !== p && (it.faction == Faction.PLAYER || it.faction == Faction.VISITOR) && !it.downed }
-            .minByOrNull { distance(p.x, p.y, it.x, it.y) }
+        t = nearestPawn(p) { it.alive && it !== p && (it.faction == Faction.PLAYER || it.faction == Faction.VISITOR) && !it.downed }
         j.targetPawn = t?.id ?: -1
     }
     if (t == null) { p.manhunter = false; p.job = null; return }

@@ -57,8 +57,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var colonyName = "New Arrivals"
 
     // Research
-    val researchDone = HashSet<Research>()
-    val researchProgress = HashMap<Research, Float>()
+    // Enum-keyed collections iterate in declaration order. Hash-based ones depend on identity hashes, which change
+    // between runs, so the same game would not save to the same bytes.
+    val researchDone: MutableSet<Research> = java.util.EnumSet.noneOf(Research::class.java)
+    val researchProgress: MutableMap<Research, Float> = java.util.EnumMap(Research::class.java)
     var researchCurrent: Research? = null
 
     // Weather and temperature
@@ -685,6 +687,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     // ------------------------------------------------------------------ slow tick (every 250)
     private fun slowTick() {
         pruneReservations()
+        pruneUnreachable()
         worldSlowTick()
         if (caravans.isNotEmpty() && pendingBattle == null) caravansTick()
         for (p in pawns) if (p.alive) {

@@ -381,7 +381,7 @@ object SaveGame {
                 val bill = Bill(Recipe.entries[i.readInt()])
                 bill.mode = BillMode.entries[i.readInt()]; bill.target = i.readInt(); bill.done = i.readInt()
                 bill.paused = i.readBoolean(); bill.minSkill = i.readInt()
-                if (i.readBoolean()) { val set = HashSet<ItemType>(); repeat(i.readInt()) { set.add(ItemType.entries[i.readInt()]) }; bill.allowedItems = set }
+                if (i.readBoolean()) { val set = java.util.EnumSet.noneOf(ItemType::class.java); repeat(i.readInt()) { set.add(ItemType.entries[i.readInt()]) }; bill.allowedItems = set }
                 b.bills.add(bill)
             }
             map.setBuilding(b)

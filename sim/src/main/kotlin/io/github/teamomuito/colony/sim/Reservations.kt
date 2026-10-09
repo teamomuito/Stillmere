@@ -30,7 +30,15 @@ internal fun Game.holdersOf(key: Int): List<Pawn> {
 fun Game.isFree(p: Pawn, key: Int): Boolean {
     if (reservations[key] == null) return true
     if (p.reserved.contains(key) && reservations[key]?.contains(p.id) == true) return true
-    return holdersOf(key).count { it.id != p.id } < capacityOf(key)
+    return holderCountExcept(key, p.id) < capacityOf(key)
+}
+
+/** How many live pawns other than [except] hold [key]. Counts in place: this runs for every candidate a job considers. */
+private fun Game.holderCountExcept(key: Int, except: Int): Int {
+    val ids = reservations[key] ?: return 0
+    var n = 0
+    for (q in pawns) if (q.id != except && q.alive && q.id in ids && q.reserved.contains(key)) n++
+    return n
 }
 
 /** Claims [key] for [p]. Returns false, claiming nothing, when the key is full. */

@@ -40,8 +40,15 @@ internal fun Game.releaseMedicalBeds(p: Pawn) {
 
 internal fun Game.markUnreachable(p: Pawn, k: Int) { unreachable[p.id * 10_000_000L + k] = tick + 900 }
 internal fun Game.isBad(p: Pawn, k: Int): Boolean {
+    // Checked for every candidate a job considers, so skip the boxed lookup when nothing is marked.
+    if (unreachable.isEmpty()) return false
     val e = unreachable[p.id * 10_000_000L + k] ?: return false
     return e > tick
+}
+
+/** Forgets marks that have run out. An expired mark already reads as "not bad", so this changes nothing a job sees. */
+internal fun Game.pruneUnreachable() {
+    if (unreachable.isNotEmpty()) unreachable.entries.removeIf { it.value <= tick }
 }
 
 fun Game.allowedFor(p: Pawn, cell: Int): Boolean = p.areaRestriction == 0 || map.areas[(p.areaRestriction - 1).coerceIn(0, 2)][cell]
@@ -53,9 +60,9 @@ internal fun Game.nearestCell(p: Pawn, kind: Int, pred: (Int) -> Boolean): Int {
     val start = map.idx(p.x, p.y)
     for (i in 0 until map.size) {
         if (restricted && !allowedFor(p, i)) continue
-        if (!pred(i)) continue
         val d = abs(map.xOf(i) - p.x) + abs(map.yOf(i) - p.y)
         if (d >= bd) continue
+        if (!pred(i)) continue
         val k = key(i, kind)
         if (!isFree(p, k) || isBad(p, k)) continue
         if (!finder.regions.mayReachTarget(start, i)) continue
@@ -201,9 +208,11 @@ fun Game.think(p: Pawn) {
     if (act == 2 && p.joy < 0.95f) startJoy(p)?.let { p.job = it; return }
     val workHour = act == 1 || act == 0 || act == 3 && p.rest >= 0.92f
     if (workHour) {
-        val order = WorkType.entries.filter { p.priority[it.ordinal] > 0 && !p.workBlocked(it) }
-            .sortedBy { p.priority[it.ordinal] * 100 + it.ordinal }
-        for (w in order) {
+        // Work types by priority (1 first), then by their order: the same order as sorting by priority and ordinal.
+        var top = 0
+        for (v in p.priority) if (v > top) top = v
+        for (pr in 1..top) for (w in WorkType.entries) {
+            if (p.priority[w.ordinal] != pr || p.workBlocked(w)) continue
             val j = tryWork(p, w) ?: continue
             p.job = j
             return
@@ -359,8 +368,7 @@ internal fun Game.startJoy(p: Pawn): Job? {
         return j
     }
     // Chat with someone idle.
-    val o = pawns.filter { it !== p && it.colonist && it.alive && !it.downed && it.job?.type in listOf(JobType.IDLE, JobType.WANDER, JobType.JOY) && distance(p.x, p.y, it.x, it.y) < 20f }
-        .minByOrNull { distance(p.x, p.y, it.x, it.y) }
+    val o = nearestPawn(p) { it !== p && it.colonist && it.alive && !it.downed && (it.job?.type == JobType.IDLE || it.job?.type == JobType.WANDER || it.job?.type == JobType.JOY) && distance(p.x, p.y, it.x, it.y) < 20f }
     if (o != null && rng.chance(0.6f)) {
         val j = Job(JobType.SOCIAL, o.x, o.y); j.targetPawn = o.id
         return j
@@ -606,13 +614,14 @@ internal fun Game.findConstruct(p: Pawn): Job? {
         val ob = map.building[map.idx(oj.tx, oj.ty)] ?: continue
         for ((k, c) in ob.cost.withIndex()) claims[c.first] = (claims[c.first] ?: 0) + ob.missing(k)
     }
-    val stock = ItemType.entries.associateWith { map.countItems(it) - (claims[it] ?: 0) }
+    val totals = map.itemTotals()
+    val stock = { t: ItemType -> totals[t.ordinal] - (claims[t] ?: 0) }
     val i = nearestCell(p, K_BUILD) {
         val b = map.building[it]
         if (b == null || b.built || b.forbidden) return@nearestCell false
         if (!b.researchMet(researchDone)) return@nearestCell false
         if (b.def.art) return@nearestCell false
-        for ((k, c) in b.cost.withIndex()) if (b.missing(k) > 0 && (stock[c.first] ?: 0) < b.missing(k)) return@nearestCell false
+        for ((k, c) in b.cost.withIndex()) if (b.missing(k) > 0 && stock(c.first) < b.missing(k)) return@nearestCell false
         true
     }
     if (i >= 0) {
@@ -692,8 +701,7 @@ internal fun Game.findHaul(p: Pawn): Job? {
         }
     }
     // Corpses to graves or dumps.
-    val corpse = map.items.values.filter { it.corpseOf != null && !it.forbidden && isFree(p, key(map.idx(it.x, it.y), K_ITEM)) && !isBad(p, key(map.idx(it.x, it.y), K_ITEM)) }
-        .minByOrNull { abs(it.x - p.x) + abs(it.y - p.y) }
+    val corpse = nearestStack(p) { it.corpseOf != null && !it.forbidden && isFree(p, key(map.idx(it.x, it.y), K_ITEM)) && !isBad(p, key(map.idx(it.x, it.y), K_ITEM)) }
     if (corpse != null) {
         val ci = map.idx(corpse.x, corpse.y)
         val human = corpse.corpseRace == Race.HUMAN
@@ -712,10 +720,8 @@ internal fun Game.findHaul(p: Pawn): Job? {
         }
     }
     // Loose items to the best stockpile, meals first. Check the nearest few.
-    val candidates = map.items.values.filter { it.corpseOf == null && !it.forbidden }
-        .sortedBy { abs(it.x - p.x) + abs(it.y - p.y) - (if (it.type.cat == ItemCat.FOOD_MEAL) 15 else 0) }
     var tries = 0
-    for (s in candidates) {
+    for (s in nearestHaulCandidates(p)) {
         if (tries++ > 25) break
         val i = map.idx(s.x, s.y)
         val k = key(i, K_ITEM)
@@ -730,6 +736,50 @@ internal fun Game.findHaul(p: Pawn): Job? {
     return null
 }
 
+/** The first pawn in the colony list that [pred] accepts and that is nearest to [p]. Allocates nothing. */
+internal fun Game.nearestPawn(p: Pawn, pred: (Pawn) -> Boolean): Pawn? {
+    var best: Pawn? = null
+    var bd = Float.MAX_VALUE
+    for (o in pawns) {
+        if (!pred(o)) continue
+        val d = distance(p.x, p.y, o.x, o.y)
+        if (d < bd) { best = o; bd = d }
+    }
+    return best
+}
+
+/** The first stack [pred] accepts that is nearest to [p] by walking distance. Allocates nothing. */
+internal fun Game.nearestStack(p: Pawn, pred: (ItemStack) -> Boolean): ItemStack? {
+    var best: ItemStack? = null
+    var bd = Int.MAX_VALUE
+    for (s in map.items.values) {
+        if (!pred(s)) continue
+        val d = abs(s.x - p.x) + abs(s.y - p.y)
+        if (d < bd) { best = s; bd = d }
+    }
+    return best
+}
+
+/**
+ * The stacks a hauler should try first, nearest first (meals a little sooner), in the order a stable sort would give.
+ * The haul search gives up after 26 candidates, so only the best 26 are kept, in one pass rather than a full sort.
+ */
+internal fun Game.nearestHaulCandidates(p: Pawn, limit: Int = 26): List<ItemStack> {
+    val best = arrayOfNulls<ItemStack>(limit)
+    val keys = IntArray(limit)
+    var n = 0
+    for (s in map.items.values) {
+        if (s.corpseOf != null || s.forbidden) continue
+        val key = abs(s.x - p.x) + abs(s.y - p.y) - (if (s.type.cat == ItemCat.FOOD_MEAL) 15 else 0)
+        if (n == limit && key >= keys[limit - 1]) continue
+        var pos = if (n < limit) n else limit - 1
+        while (pos > 0 && keys[pos - 1] > key) { keys[pos] = keys[pos - 1]; best[pos] = best[pos - 1]; pos-- }
+        keys[pos] = key; best[pos] = s
+        if (n < limit) n++
+    }
+    return List(n) { best[it]!! }
+}
+
 // ---------------------------------------------------------------- bills
 
 internal fun Game.billRunnable(b: Building, bill: Bill, p: Pawn): Boolean {
@@ -740,7 +790,8 @@ internal fun Game.billRunnable(b: Building, bill: Bill, p: Pawn): Boolean {
     when (bill.mode) {
         BillMode.DO_X -> if (bill.done >= bill.target) return false
         BillMode.UNTIL_HAVE -> {
-            val have = map.items.values.filter { it.type == r.out && it.corpseOf == null && map.zoneKind(map.idx(it.x, it.y)) != ZoneKind.NONE }.sumOf { it.count }
+            var have = 0
+            for (s in map.items.values) if (s.type == r.out && s.corpseOf == null && map.zoneKind(map.idx(s.x, s.y)) != ZoneKind.NONE) have += s.count
             if (have >= bill.target) return false
         }
         BillMode.FOREVER -> {}
@@ -792,10 +843,10 @@ internal fun Game.findBill(p: Pawn, wt: WorkType): Job? {
 internal fun Game.findButcher(p: Pawn): Job? {
     val table = nearestCell(p, K_STATION) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.BUTCHER_TABLE && !b.forbidden }
     if (table < 0) return null
-    val corpse = map.items.values.filter {
+    val corpse = nearestStack(p) {
         it.corpseOf != null && it.corpseRace != null && it.corpseRace != Race.HUMAN && !it.forbidden && it.rot < 0.7f &&
             isFree(p, key(map.idx(it.x, it.y), K_ITEM)) && !isBad(p, key(map.idx(it.x, it.y), K_ITEM)) && (it.corpseRace?.meat ?: 0) > 0
-    }.minByOrNull { abs(it.x - p.x) + abs(it.y - p.y) } ?: return null
+    } ?: return null
     if (!reserveAll(p, key(map.idx(corpse.x, corpse.y), K_ITEM), key(table, K_STATION))) return null
     val j = Job(JobType.BUTCHER, corpse.x, corpse.y)
     j.dx = map.xOf(table); j.dy = map.yOf(table); j.key = key(map.idx(corpse.x, corpse.y), K_ITEM)

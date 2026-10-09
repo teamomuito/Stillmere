@@ -73,6 +73,8 @@ class GameView(context: Context) : View(context) {
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD; textAlign = Paint.Align.CENTER }
     private val rect = RectF()
+    /** Grass tufts on each cell, as fractions of the cell. Built once: the ground loop runs for every visible cell, every frame. */
+    private val GRASS_TUFTS = listOf(Triple(0.3f, 0.35f, 0.1f), Triple(0.65f, 0.55f, 0.12f), Triple(0.4f, 0.75f, 0.075f), Triple(0.72f, 0.25f, 0.06f))
     private val path = Path()
     private val sprites = Sprites(fill, stroke)
     private val facing = HashMap<Int, Float>()
@@ -275,7 +277,7 @@ class GameView(context: Context) : View(context) {
             sprites.ground(c, m, x, y, sx, sy, s, frame, m.biome)
             if (t == Terrain.ROCK && m.ore[i] != Ore.NONE) {
                 val oc = oreColor(m.ore[i])
-                for ((ox, oy, r) in listOf(Triple(0.3f, 0.35f, 0.1f), Triple(0.65f, 0.55f, 0.12f), Triple(0.4f, 0.75f, 0.075f), Triple(0.72f, 0.25f, 0.06f))) {
+                for ((ox, oy, r) in GRASS_TUFTS) {
                     fill.color = 0x66000000; c.drawCircle(sx + s * ox + s * 0.02f, sy + s * oy + s * 0.025f, s * r, fill)
                     fill.color = oc; c.drawCircle(sx + s * ox, sy + s * oy, s * r, fill)
                     fill.color = 0x66FFFFFF; c.drawCircle(sx + s * (ox - 0.03f), sy + s * (oy - 0.03f), s * r * 0.35f, fill)

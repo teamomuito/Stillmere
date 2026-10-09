@@ -396,6 +396,13 @@ class GameMap(val w: Int, val h: Int) {
         return t
     }
 
+    /** Counts of every kind of item in one pass, indexed by [ItemType.ordinal]. Corpses are not counted. */
+    fun itemTotals(): IntArray {
+        val out = IntArray(ItemType.entries.size)
+        for (s in items.values) if (s.corpseOf == null) out[s.type.ordinal] += s.count
+        return out
+    }
+
     fun countItems(type: ItemType): Int {
         var n = 0
         for (s in items.values) if (s.type == type && s.corpseOf == null) n += s.count
