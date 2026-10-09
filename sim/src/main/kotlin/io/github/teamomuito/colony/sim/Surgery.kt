@@ -31,7 +31,7 @@ fun Game.availableSurgeries(p: Pawn): List<SurgeryOrder> {
     for ((i, d) in p.race.body.withIndex()) {
         val missing = p.partMissing(i)
         val has = p.implants[i]
-        if (!missing && d.tag in setOf(PartTag.ARM, PartTag.HAND, PartTag.LEG, PartTag.FOOT, PartTag.EAR, PartTag.NOSE) && has == null) out += SurgeryOrder(SurgeryKind.AMPUTATE, i, null)
+        if (!missing && d.tag in setOf(PartTag.ARM, PartTag.HAND, PartTag.LEG, PartTag.FOOT, PartTag.EAR, PartTag.NOSE, PartTag.FINGER, PartTag.TOE) && has == null) out += SurgeryOrder(SurgeryKind.AMPUTATE, i, null)
         for (imp in Implant.entries) {
             if (d.tag !in imp.tags) continue
             if (imp.research != null && imp.research !in researchDone) continue

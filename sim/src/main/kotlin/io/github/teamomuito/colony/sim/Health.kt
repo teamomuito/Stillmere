@@ -50,10 +50,13 @@ fun Game.recomputeHealth(p: Pawn) {
 
     val legs = p.avgEff(PartTag.LEG)
     val feet = p.avgEff(PartTag.FOOT)
-    var moving = legs * (0.75f + 0.25f * feet)
+    val toes = p.avgEff(PartTag.TOE)
+    var moving = legs * (0.75f + 0.25f * feet) * (0.9f + 0.1f * toes)
     val hands = p.avgEff(PartTag.HAND)
     val arms = p.avgEff(PartTag.ARM)
-    var manip = if (p.hasTag(PartTag.HAND)) hands * 0.7f + arms * 0.3f else 1f
+    // Fingers carry most of a hand's grip: a hand without them still works, but clumsily.
+    val fingers = p.avgEff(PartTag.FINGER)
+    var manip = if (p.hasTag(PartTag.HAND)) hands * (0.6f + 0.4f * fingers) * 0.7f + arms * 0.3f else 1f
     var sight = if (p.hasTag(PartTag.EYE)) p.avgEff(PartTag.EYE) else 1f
     var hearing = if (p.hasTag(PartTag.EAR)) p.avgEff(PartTag.EAR) else 1f
     val jaw = if (p.hasTag(PartTag.JAW)) p.avgEff(PartTag.JAW) else 1f

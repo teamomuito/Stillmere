@@ -1,6 +1,6 @@
 package io.github.teamomuito.colony.sim
 
-enum class PartTag { TORSO, NECK, HEAD, BRAIN, EYE, EAR, NOSE, JAW, ARM, HAND, LEG, FOOT, HEART, LUNG, STOMACH, LIVER, KIDNEY }
+enum class PartTag { TORSO, NECK, HEAD, BRAIN, EYE, EAR, NOSE, JAW, ARM, HAND, LEG, FOOT, HEART, LUNG, STOMACH, LIVER, KIDNEY, FINGER, TOE }
 
 class PartDef(
     val label: String, val tag: PartTag, val hp: Float, val coverage: Float, val parent: Int = -1,
@@ -38,6 +38,11 @@ object Bodies {
         PartDef("right ear", PartTag.EAR, 12f, 0f, 2, 1),
         PartDef("nose", PartTag.NOSE, 10f, 0f, 2, 1),
         PartDef("jaw", PartTag.JAW, 20f, 0f, 2, 1),
+        // Appended last so existing injuries keep their part indexes.
+        PartDef("left fingers", PartTag.FINGER, 12f, 0.015f, -1, 4),
+        PartDef("right fingers", PartTag.FINGER, 12f, 0.015f, -1, 4),
+        PartDef("left toes", PartTag.TOE, 12f, 0.015f, -1, 8),
+        PartDef("right toes", PartTag.TOE, 12f, 0.015f, -1, 8),
     )
 
     val QUAD: List<PartDef> = listOf(

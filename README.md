@@ -40,7 +40,7 @@ control of the outcome beyond drafting, moving and retreating.
 - Per-colonist outfit and drug policies, food policies, and drug use with tolerance, addiction and withdrawal.
 
 **Health**
-- Body-part health for 25 human parts, with organs, hit locations, armor, penetration, bleeding, pain,
+- Body-part health for 29 human parts, with organs, hit locations, armor, penetration, bleeding, pain,
   consciousness, infection, scarring and lost limbs. Capacities such as moving and manipulation follow the parts.
 - Doctors tend wounds with herbal or industrial medicine; hospital beds heal faster.
 - Illness and environmental hazards: flu, plague, malaria, sleeping sickness, parasites, hypothermia, heatstroke,
