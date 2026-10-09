@@ -47,8 +47,8 @@ class MenuActivity : Activity() {
             setBackgroundColor(0xFF15130F.toInt())
             setPadding(ui.dp(24), ui.dp(24), ui.dp(24), ui.dp(24))
         }
-        root.addView(ui.label("COLONY", 34f, ui.accent, true).apply { gravity = Gravity.CENTER; letterSpacing = 0.12f }, ui.lin(-2, -2, 0f, 0, 24, 0, 2))
-        root.addView(ui.label("A RimWorld-style colony sim. Survive, build, and leave the rim.", 12f, ui.dim).apply { gravity = Gravity.CENTER }, ui.lin(-2, -2, 0f, 0, 0, 0, 24))
+        root.addView(ui.label("STILLMERE", 34f, ui.accent, true).apply { gravity = Gravity.CENTER; letterSpacing = 0.12f }, ui.lin(-2, -2, 0f, 0, 24, 0, 2))
+        root.addView(ui.label("A colony survival sim. Survive the frontier, build a settlement, and leave.", 12f, ui.dim).apply { gravity = Gravity.CENTER }, ui.lin(-2, -2, 0f, 0, 0, 0, 24))
 
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun item(label: String, enabled: Boolean = true, onClick: () -> Unit) {

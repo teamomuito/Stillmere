@@ -9,7 +9,7 @@ class TutorialLesson(val text: String, val doneWhen: ((Game) -> Boolean)?)
 
 object Tutorial {
     val lessons: List<TutorialLesson> = listOf(
-        TutorialLesson("Welcome. You crashed on a hostile rimworld with a few survivors. Drag to look around, pinch to zoom, and tap people or things to inspect them.", null),
+        TutorialLesson("Welcome. You crashed on a hostile frontier with a few survivors. Drag to look around, pinch to zoom, and tap people or things to inspect them.", null),
         TutorialLesson("Every colonist has needs (food, rest, joy) and a mood. Tap a colonist to see theirs, then press Next.", null),
         TutorialLesson("Colonists only work on what you mark. Open Architect → Orders, pick Chop trees, and drag over a few trees.") { g ->
             g.map.desig.any { it.toInt() == Desig.CUT }

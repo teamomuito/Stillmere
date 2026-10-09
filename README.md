@@ -1,109 +1,125 @@
-# Colony
+<p align="center">
+  <img src="assets/logo.svg" alt="Stillmere logo" width="220">
+</p>
 
-A RimWorld-style colony simulator for Android, written from scratch in Kotlin. A few survivors land on a hostile
-rimworld; you keep them fed, warm, healthy and sane, fight off raiders, and eventually build a ship to leave.
+<h1 align="center">Stillmere</h1>
 
-Everything is original code with no copied assets (the art is drawn procedurally on a canvas: textured ground, wall
-autotiling, shadowed furniture, per-species animals, rotating pawns with hair and clothing, item sprites). It is built
-to play like the base game, including a children-and-pregnancy life cycle, without other DLC. It is not a literal clone:
-there is no mod support, balance numbers are my own tuning, and caravan battles run on a small throwaway map without
-player control.
+<p align="center">
+  A colony survival simulation for Android, written from scratch in Kotlin.<br>
+  Survive a hostile frontier, build a settlement, and eventually build a ship to leave.
+</p>
 
-## what's in it
+<p align="center">
+  <a href="https://github.com/teamomuito/rimworld/releases/latest/download/colony.apk"><b>Download the APK</b></a>
+  &nbsp;·&nbsp;
+  <a href="#building-from-source">Build from source</a>
+  &nbsp;·&nbsp;
+  <a href="#support-rimworld">Support RimWorld</a>
+</p>
+
+---
+
+## About
+
+Stillmere is a fan-made, original implementation of the colony-simulation genre, inspired by
+RimWorld by Ludeon Studios. It is not affiliated with or endorsed by Ludeon Studios, and it contains no
+RimWorld code or assets. All art is drawn procedurally at runtime, and all code in this repository is
+original.
+
+The project aims to play like its inspiration without adding DLC content. Balance numbers are the author's own
+tuning. There is no mod support, and caravan battles take place on a small temporary map without player
+control of the outcome beyond drafting, moving and retreating.
+
+## Features
 
 **Colonists**
-- Backstories (33), 12 skills with passions, 42 traits (including sexual orientation), work priorities (1-4) for 18 job types, and a 24-hour schedule.
-- Needs: food, rest, joy and temperature comfort, plus a mood built from dozens of thoughts (room beauty and cleanliness,
-  bedroom impressiveness, meals, clothing, pain, weather, drugs, relationships, corpses...).
-- Mental breaks (wandering, food binge, insult spree, tantrum, fire starting, berserk, catatonia, running into the wilds).
-- Social: chitchat, deep talks, insults, romance (by orientation), marriage, breakups, rivals, family and fights.
-- Life stages: birthdays every 60 days, babies fed by adults, children who do light chores and grow up (passions at 7, 10, 13;
-  a trait at 13), pregnancy for couples, and old age with bad backs, arthritis, cataracts, hearing loss and dementia.
-- Outfit and drug policies per colonist, plus food policy and schedule.
-- Drug use with highs, tolerance, addiction and withdrawal.
+- 33 backstories, 12 skills with passions, 42 traits, work priorities for 18 job types, and a 24-hour schedule.
+- Needs for food, rest, joy and temperature, combined into a mood built from dozens of thoughts.
+- Mental breaks, social interaction, romance, marriage, rivalries and family.
+- Life stages: children grow up, adults form pregnancies, and old age brings chronic conditions.
+- Per-colonist outfit and drug policies, food policies, and drug use with tolerance, addiction and withdrawal.
 
 **Health**
-- Full body-part health: 25 human parts, organs, hit locations, armor, penetration into organs, bleeding, pain,
-  consciousness, blood loss, infections, scars and lost limbs. Capacities (moving, manipulation, sight...) follow the parts.
-- Doctors tend wounds with herbal or industrial medicine; hospital beds heal better. Colonists rescue the downed.
-- Illnesses (flu, plague, malaria, sleeping sickness, gut worms, parasites), hypothermia, frostbite, heatstroke,
-  malnutrition, food poisoning, toxic buildup.
+- Body-part health for 25 human parts, with organs, hit locations, armor, penetration, bleeding, pain,
+  consciousness, infection, scarring and lost limbs. Capacities such as moving and manipulation follow the parts.
+- Doctors tend wounds with herbal or industrial medicine; hospital beds heal faster.
+- Illness and environmental hazards: flu, plague, malaria, sleeping sickness, parasites, hypothermia, heatstroke,
+  frostbite, malnutrition and food poisoning.
 
 **Base building**
-- 65 buildings, many multi-tile (beds 1×2, tables 2×2, long workbenches, generators and ship parts; rotate while placing): walls, doors, floors, beds, hospital beds, tables, chairs, lamps, recreation, workbenches, power,
-  heaters and coolers, sandbags, traps, turrets, mortars, graves, art, comms console, trade beacon, sun lamps and the ship parts.
-- Rooms are detected from walls; they have temperature, beauty, cleanliness, space and impressiveness.
-- Zones: stockpiles with item filters, quality limits and priorities, dumping zones, and growing zones.
-- Workbenches with bills (do X times, until you have X, forever) for cooking, butchering, tailoring, smithing,
-  machining, stonecutting, drugs and medicine. Items have quality; art has beauty.
-- Power grids: conduits, solar, wind, wood generators, batteries; lamps, heaters, coolers, hydroponics, stoves.
-- Fire that spreads, rain that puts it out, lightning, and firefighting.
+- 65 buildings, many of them multi-tile: walls, doors, beds, tables, workbenches, lighting, heating, power,
+  defences, traps, turrets, mortars, graves and art.
+- Rooms are detected from walls and have temperature, beauty, cleanliness and impressiveness values.
+- Stockpile, growing and dumping zones with item filters, quality limits and priorities.
+- Workbench bills for cooking, butchery, tailoring, smithing, machining, stonecutting and medicine.
+- Power grids with solar, wind, wood and battery storage. Fire spreads, rain puts it out, and lightning can start it.
 
 **World**
-- Six biomes, rivers, lakes, five rock types, six ores, caves under natural roof, trees that regrow.
-- Day and night with real lighting, four seasons, rain, fog, snow and thunderstorms, wind, cold snaps and heat waves.
-- Crops that grow by temperature, light and soil; frost and blight; spoilage of food and corpses.
-- Wildlife herds (40 kinds of creatures: grazers, predators, farm animals, boomalopes...), hunting, taming, slaughtering, butchering,
-  wool, milk, eggs, and breeding with juveniles that grow up.
-- Items wear away outdoors, faster in rain.
+- Six biomes, rivers, lakes, five rock types, six ores, caves, seasons, rain, fog, snow, thunderstorms,
+  cold snaps and heat waves.
+- Crops that depend on temperature, light and soil; spoilage of food and corpses; items that wear outdoors.
+- Wildlife for hunting, taming, slaughter and breeding.
 
 **World map, factions and caravans**
-- A generated 60×40 planet with six biomes, hills, impassable mountains, rivers, lakes and the sea, roads that halve travel
-  cost, six factions (two tribes, two outlander unions, two pirate gangs) and their settlements. Your colony's tile decides
-  its biome, river, lake and ruggedness. Map sizes from 75 to 200.
-- Factions have goodwill, standing (hostile to allied), and relations with each other: a gift to one pleases its friends
-  and annoys its enemies. Hostile factions raid you with their own gear; at the comms console you can pay for peace talks,
-  request traders, and ask allies for soldiers. A trade beacon and comms console call orbital trade ships.
-- Form a caravan from colonists and tame pack animals (35 kg per person, 70-140 kg for big animals), pack goods by weight,
-  and send it anywhere. On the road: food, rest, foraging, spoilage, medicine. Ambushes become battles you command on a
-  small map: draft your people and animals, move, shoot and melee, retreat (downed people are carried out), and win or lose
-  with the same weapons, cover, wounds and AI as colony fights. Survivors come home with their injuries; cargo stays with the
-  caravan until you win.
-- At settlements: trade, fulfil requests, gift, or attack them (defenders fight behind sandbags; a win loots and ruins the
-  settlement). Clear bandit camps for friendly factions' rewards. Found a second colony anywhere and switch between colonies.
+- A generated planet with hills, mountains, rivers, lakes, roads and six factions. The colony's tile sets its biome.
+- Faction goodwill and standing, and relations between factions. Hostile factions raid with their own gear.
+- Caravans carry goods by weight and travel across the map. Ambushes become battles on a temporary map,
+  using the same weapons, cover, wounds and AI as colony fights.
+- Settlements can be traded with, supplied, or attacked. Bandit camps can be cleared for rewards.
+- Quests with acceptance, deadlines and consequences, and rescue missions for colonists taken captive.
 
 **Threats and events**
-- Storytellers (Marlowe, Juniper, Orrin) and difficulty levels.
-- Raids that scale with wealth: assaults, sappers, sieges with mortars and drop pods, with tiered gear.
-- Manhunter packs, insect infestations, disease outbreaks, solar flares, eclipses, toxic fallout, short circuits,
-  blight, thrumbos, meteorites, aurora, psychic drone and soothe, volcanic winter, crashed mechanoid ships (dormant
-  until approached), tame animals wandering in, wanderers joining, supply pods, trade caravans.
-- Prisoners: capture, feed, recruit or release. Escape attempts. A prisoner's faction may offer silver to ransom them back (accept or decline in the alerts; needs a powered comms console).
+- Three storytellers and five difficulty levels.
+- Raids that scale with colony wealth: assaults, sappers, sieges and drop pods.
+- Manhunter packs, insect infestations, disease, solar flares, eclipses, toxic fallout, short circuits, blight,
+  meteorites, volcanic winter, crashed mechanoid ships, wandering colonists and trade caravans.
+- Prisoners can be captured, recruited, or ransomed back to their faction.
 
 **Progress**
-- A 53-item tech tree (plus 64 recipes and 91 items, including heavy weapons, powered armor, flake, yayo and go-juice) from basic crafts to the ship parts. Build the ship and launch to win.
-- Scenarios: Crashlanded, Lost tribe, Rich explorer, Naked brutality. Character reroll before landing.
-- Saves automatically.
+- A research tree of 53 projects covering crafts, firearms, power and the ship.
+- Four scenarios. Launch the ship to win.
+- Automatic and manual saves.
 
-## install
+## Install
 
-1. Download **[colony.apk](https://github.com/teamomuito/rimworld/releases/latest/download/colony.apk)** on your Android phone
-   (Android 8.0+). That link always points at the newest build; older ones are on the
+1. Download **[colony.apk](https://github.com/teamomuito/rimworld/releases/latest/download/colony.apk)** on an
+   Android phone running Android 8.0 or later. This link always points to the newest build. Older builds are on the
    [releases page](https://github.com/teamomuito/rimworld/releases).
-2. Open the file and allow installs from your browser or files app when asked.
-3. Uninstall an older build first if Android refuses to update it (builds are signed with a throwaway debug key).
+2. Open the file and allow installs from your browser or file manager when Android asks.
+3. If Android refuses to update an older build, uninstall it first.
 
-## how to play
+Saves are kept on the device. The in-app updater downloads newer builds and keeps saves across updates.
 
-The app opens on the main menu: **Continue**, **New colony**, **Tutorial colony**, **Settings** and **How to play**.
-On first start it asks whether you want the optional tutorial. The tutorial is a short walkthrough of the basics: each
-step either waits for you to press Next or finishes when you do the thing (mark trees, build a bed, make a stockpile,
-add a cooking bill, start research). Skip any step, hide the tutorial, or turn it off in Settings. Progress is kept
-per device, and the in-game **Menu** can show or hide it or return you to the main menu.
+## How to play
 
-Landscape only. Drag to pan, pinch to zoom, tap to inspect. **Menu → How to play** has the full help.
+The main menu offers **Continue**, **New colony**, **Tutorial colony**, **Settings** and **How to play**.
+The optional tutorial walks through the basics one step at a time. It can be skipped or turned off in Settings.
 
-## building it
+The game is landscape only. Drag to pan, pinch to zoom, and tap to inspect. **Menu → How to play** has the full
+guide.
 
-The code is split in two:
+## Building from source
 
-- `sim/` is plain Kotlin (JVM) with the whole simulation and its unit tests. No Android dependencies.
-- `app/` is the Android app: a canvas renderer, touch controls and the interface.
+The code is split into two modules:
+
+- `sim/` is plain Kotlin (JVM): the whole simulation and its unit tests. It has no Android dependencies.
+- `app/` is the Android application: the canvas renderer, touch controls and interface.
 
 ```sh
-./gradlew :sim:test                        # simulation tests, no Android SDK needed
-./gradlew -PwithApp :app:assembleRelease   # needs the Android SDK
+./gradlew :sim:test                        # simulation tests; no Android SDK needed
+./gradlew -PwithApp :app:assembleRelease   # requires the Android SDK
 ```
 
-The APK ends up in `app/build/outputs/apk/release/`. The `Build APK` workflow builds it on every push and uploads
-it as an artifact.
+The APK is written to `app/build/outputs/apk/release/`. The `Build APK` workflow builds it on every push
+and uploads it as an artifact.
+
+## Support RimWorld
+
+Stillmere exists because RimWorld exists. If you enjoy this game, please support the original developers and
+buy **RimWorld** from [rimworldgame.com](https://rimworldgame.com/). Its depth, mods and expansions are the work of
+Ludeon Studios, and buying it is the best way to keep that work going.
+
+## Legal
+
+Stillmere is an independent fan project. "RimWorld" is a trademark of Ludeon Studios. This project is not affiliated
+with, sponsored by or endorsed by Ludeon Studios.

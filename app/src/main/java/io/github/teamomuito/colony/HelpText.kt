@@ -3,7 +3,7 @@ package io.github.teamomuito.colony
 /** The How-to-play text, shared by the in-game help and the main menu. */
 object HelpText {
     val text: String = """
-            Survive on a hostile rimworld, build a colony, and eventually build a ship to leave it.
+            Survive on a hostile frontier, build a colony, and eventually build a ship to leave it.
 
             BASICS
             • Drag to look around, pinch to zoom. Tap people and things for details.
@@ -26,5 +26,9 @@ object HelpText {
             LONG GAME
             • Research unlocks power, firearms, hydroponics, bionics and finally the ship parts.
             • Traders visit; sell your surplus and buy what you lack.
+
+            ABOUT
+            • Stillmere is a fan-made game for Android, inspired by RimWorld by Ludeon Studios. It is not affiliated with or endorsed by Ludeon.
+            • If you enjoy Stillmere, please support the original: buy RimWorld at rimworldgame.com.
         """.trimIndent()
 }

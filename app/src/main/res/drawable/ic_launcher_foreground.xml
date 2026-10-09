@@ -3,7 +3,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#E8B04A" android:pathData="M30,70 L54,34 L78,70 Z" />
-    <path android:fillColor="#7A4B25" android:pathData="M42,70 L54,50 L66,70 Z" />
-    <path android:fillColor="#4E8A3A" android:pathData="M24,76 L84,76 L84,80 L24,80 Z" />
+    <!-- A low sun, setting behind the shelter. -->
+    <path android:fillColor="#E8B04A" android:pathData="M54,19 a15,15 0 1,0 0.01,0 Z" />
+    <!-- The shelter: a dome with a door. -->
+    <path android:fillColor="#C98A4B" android:pathData="M32,70 A22,22 0 0 1 76,70 Z" />
+    <path android:fillColor="#15130F" android:pathData="M48,70 A6,6 0 0 1 60,70 Z" />
+    <!-- Ground. -->
+    <path android:fillColor="#4E8A3A" android:pathData="M20,70 L88,70 L88,76 L20,76 Z" />
+    <!-- Still water: three ripples narrowing away from the colony. -->
+    <path android:fillColor="#E8B04A" android:pathData="M28,82 L80,82 L80,84.5 L28,84.5 Z" />
+    <path android:fillColor="#E8B04AB3" android:pathData="M36,89 L72,89 L72,91 L36,91 Z" />
+    <path android:fillColor="#E8B04A73" android:pathData="M45,95 L63,95 L63,96.8 L45,96.8 Z" />
 </vector>
