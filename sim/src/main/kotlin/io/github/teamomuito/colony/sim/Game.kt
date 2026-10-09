@@ -84,6 +84,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var raidStartCount = 0
     var raidEnds = 0L
     var raidsSurvived = 0
+    /** Tick the last raid ended; -1 if none has. Threat incidents wait a little after it. */
+    var raidLastEnded = -1L
+    /** When each incident last happened. Cooldowns and the quiet after raids read this. Saved. */
+    val incidentLast = HashMap<Incident, Long>()
     var raidCounter = 0
     var gameOver = false
     var won = false

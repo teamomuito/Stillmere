@@ -3,15 +3,6 @@ package io.github.teamomuito.colony.sim
 import kotlin.math.max
 import kotlin.math.min
 
-private fun Game.threatPoints(): Float {
-    val cols = colonists.size
-    val animalsPower = tamedAnimals.sumOf { (it.race.dangerous * 6f).toDouble() }.toFloat()
-    var pts = cols * 17f + map.wealth() / 95f + animalsPower
-    pts *= difficulty.threat * storyteller.threat
-    pts *= min(1f, 0.34f + day / 34f)
-    return max(pts, 22f * difficulty.threat)
-}
-
 fun Game.edgeCell(side: Int): Pair<Int, Int>? {
     repeat(120) {
         val t = rng.int(map.w - 6) + 3
@@ -57,7 +48,7 @@ fun Game.hourlyEvents() {
         if (alive == 0 || (standing == 0 && !anyRetreat)) {
             // Nobody left on their feet: the raid is over. Downed raiders will limp away once they recover.
             for (r in pawns) if (r.faction == Faction.ENEMY && r.raidId > 0 && r.alive) r.retreating = true
-            raidActive = false; raidsSurvived++
+            raidActive = false; raidLastEnded = tick; raidsSurvived++
             say("The raid has been beaten back.", 1)
         } else if (!anyRetreat && standing > 0 && (standing * 2 <= raidStartCount || tick > raidEnds)) {
             for (r in pawns) if (r.faction == Faction.ENEMY && r.raidId > 0 && r.alive && !r.downed) { r.retreating = true; endJob(r) }
@@ -71,39 +62,7 @@ fun Game.hourlyEvents() {
     if (eclipseUntil in 1..tick) { eclipseUntil = 0; say("The eclipse is over.", 0) }
     if (toxicFalloutUntil in 1..tick) { toxicFalloutUntil = 0; say("The toxic fallout has settled.", 1) }
 
-    if (difficulty == Difficulty.PEACEFUL) {
-        // No hostile events; still friendly ones.
-    } else if (tick >= nextRaid && !raidActive) {
-        launchRaid()
-    }
-    if (tick >= nextWanderer) {
-        nextWanderer = tick + chaosInterval(4, 10)
-        if (colonists.size < 14 && rng.chance(0.8f)) spawnWanderer()
-    }
-    if (tick >= nextPod) {
-        nextPod = tick + chaosInterval(3, 8)
-        spawnPod()
-    }
-    if (tick >= nextTrader) {
-        nextTrader = tick + chaosInterval(6, 13)
-        spawnTrader()
-    }
-    if (tick >= nextTempEvent && tempEventUntil == 0L) {
-        nextTempEvent = tick + chaosInterval(8, 16)
-        if (rng.chance(0.75f)) {
-            val hotSeason = season == Season.SUMMER || map.biome == Biome.DESERT || map.biome == Biome.TROPICAL
-            if (hotSeason) { tempOffset = 16f; tempEventName = "heat wave"; say("A heat wave is sweeping in!", 2) }
-            else { tempOffset = -17f; tempEventName = "cold snap"; say("A cold snap has hit. Keep warm and protect your crops!", 2) }
-            tempEventUntil = tick + rng.range(2 * TICKS_PER_DAY, 4 * TICKS_PER_DAY)
-        }
-    }
-    if (tick >= nextMisc && difficulty != Difficulty.PEACEFUL && day >= 4) {
-        nextMisc = tick + chaosInterval(2, 6)
-        miscEvent()
-    } else if (tick >= nextMisc) {
-        nextMisc = tick + chaosInterval(3, 8)
-        miscFriendly()
-    }
+    runIncidentChannels()
     // Visitors leaving and arriving.
     tradersHourly()
     ransomTick()
@@ -112,66 +71,6 @@ fun Game.hourlyEvents() {
         p.escaping = true; endJob(p)
         say("${p.name} is trying to escape!", 3)
     }
-    // Juniper throws in extra random trouble.
-    if (storyteller == Storyteller.JUNIPER && rng.chance(0.03f) && difficulty != Difficulty.PEACEFUL) miscEvent()
-}
-
-private fun Game.chaosInterval(minDays: Int, maxDays: Int): Int {
-    val lo = minDays * TICKS_PER_DAY
-    val hi = maxDays * TICKS_PER_DAY
-    val chaos = storyteller.chaos
-    val base = rng.range(lo, hi)
-    return (base * (1f - 0.5f * chaos + chaos * rng.float())).toInt().coerceAtLeast(TICKS_PER_DAY / 2)
-}
-
-private fun Game.miscEvent() {
-    val weights = ArrayList<Pair<Int, Float>>()
-    weights += 0 to (if (day > 10) 2f else 0f)   // manhunter pack
-    weights += 1 to (if (day > 10) 2f else 0f) // infestation
-    weights += 2 to 1.2f // disease outbreak
-    weights += 3 to (if (power.nets > 0) 1.5f else 0f) // solar flare
-    weights += 4 to 1f   // eclipse
-    weights += 5 to (if (day > 10) 1f else 0f) // toxic fallout
-    weights += 6 to (if (map.buildings().any { it != null && it.def == BuildDef.BATTERY && it.built }) 1.5f else 0f) // short circuit
-    weights += 7 to 1f   // blight
-    weights += 8 to 1.2f // animal joins
-    weights += 9 to (if (day > 8) 0.5f else 0f)  // thrumbo
-    weights += 10 to (if (prisoners.isNotEmpty()) 0.8f else 0f) // prison break handled hourly
-    weights += 11 to 1.0f // heat/cold done elsewhere: lightning storm
-    weights += 12 to (if (day > 9) 1.2f else 0f) // refugee
-    weights += 13 to 1.0f // meteorite
-    weights += 14 to (if (map.biome == Biome.TUNDRA || map.biome == Biome.BOREAL) 1.2f else 0.3f) // aurora
-    weights += 15 to (if (day > 6) 0.9f else 0f) // psychic drone / soothe
-    weights += 16 to (if (day > 24) 0.9f else 0f) // mechanoid ship crash
-    weights += 17 to (if (day > 16 && tempEventUntil == 0L) 0.6f else 0f) // volcanic winter
-    val total = weights.sumOf { it.second.toDouble() }.toFloat()
-    var r = rng.float() * total
-    var pick = 0
-    for ((k, w) in weights) { r -= w; if (r <= 0f) { pick = k; break } }
-    when (pick) {
-        0 -> manhunterPack()
-        1 -> infestation()
-        2 -> outbreak()
-        3 -> { solarFlareUntil = tick + (0.9f * TICKS_PER_DAY).toInt(); say("A solar flare knocks out all electrical power!", 2) }
-        4 -> { eclipseUntil = tick + (0.7f * TICKS_PER_DAY).toInt(); say("An eclipse blots out the sun.", 2) }
-        5 -> { toxicFalloutUntil = tick + 3 * TICKS_PER_DAY; say("Toxic fallout! Stay indoors; crops will wither.", 3) }
-        6 -> shortCircuit()
-        7 -> blight()
-        8 -> animalJoins()
-        9 -> thrumboPasses()
-        12 -> refugees()
-        13 -> meteorite()
-        14 -> { for (c in colonists) c.addThought("Beautiful aurora", 0.1f, tick, 2 * TICKS_PER_DAY); say("An aurora lights the night sky. Everyone is moved.", 1) }
-        15 -> psychicWave()
-        16 -> mechCrash()
-        17 -> { tempOffset = -13f; tempEventName = "volcanic winter"; tempEventUntil = tick + 6 * TICKS_PER_DAY; say("Volcanic ash darkens the sky: a volcanic winter begins.", 3) }
-        11 -> { weather = Weather.THUNDER; weatherUntil = tick + 5000; lightning(); say("A violent thunderstorm hits.", 2) }
-        else -> {}
-    }
-}
-
-private fun Game.miscFriendly() {
-    if (rng.chance(0.5f)) animalJoins()
 }
 
 // ----------------------------------------------------------------------------------------- raids
@@ -262,7 +161,6 @@ fun Game.launchRaid() {
         if (dx == 0) cx = homeX; if (dy == 0) cy = homeY
         for (r in spawned) { r.campX = (cx + rng.range(-3, 3)).coerceIn(2, map.w - 3); r.campY = (cy + rng.range(-3, 3)).coerceIn(2, map.h - 3) }
     }
-    nextRaid = tick + chaosInterval(3, 6)
     val dir = arrayOf("west", "east", "north", "south")[side]
     val label = when (kind) {
         1 -> "Sappers"; 2 -> "A siege force"; 3 -> "Raiders in drop pods"; 4 -> "Mechanoids"; else -> "Raiders"
@@ -271,7 +169,7 @@ fun Game.launchRaid() {
     say("RAID! $label$who ($count) ${if (kind == 3) "drop in near your colony" else "approach from the $dir"}.", 3)
 }
 
-private fun Game.spawnWanderer() {
+internal fun Game.spawnWanderer() {
     val e = edgeCell(rng.int(4)) ?: return
     val p = newHuman(e.first, e.second, Faction.PLAYER)
     p.wanderer = true
@@ -280,7 +178,7 @@ private fun Game.spawnWanderer() {
     say("${p.name} (${p.backstory.lowercase()}) wanders in and joins your colony.", 1)
 }
 
-private fun Game.spawnPod() {
+internal fun Game.spawnPod() {
     val cols = colonists
     if (cols.isEmpty()) return
     val c = cols[rng.int(cols.size)]
@@ -298,7 +196,7 @@ private fun Game.spawnPod() {
     if (map.drop(type, n, x, y) < n) say("A cargo pod crashed nearby with ${type.label.lowercase()}.", 1)
 }
 
-private fun Game.manhunterPack() {
+internal fun Game.manhunterPack() {
     val race = when (map.biome) {
         Biome.TUNDRA, Biome.BOREAL -> rng.pick(listOf(Race.WOLF, Race.WOLF, Race.BEAR))
         Biome.DESERT, Biome.ARID -> rng.pick(listOf(Race.BOAR, Race.WOLF))
@@ -314,7 +212,7 @@ private fun Game.manhunterPack() {
     say("A pack of $count ${race.label.lowercase()}s has gone manhunter and is heading your way!", 3)
 }
 
-private fun Game.infestation() {
+internal fun Game.infestation() {
     // Insects emerge from under a mountain close to the colony.
     var best = -1
     var bd = 1e9f
@@ -333,16 +231,20 @@ private fun Game.infestation() {
     say("An infestation! $n insects have burst out of the ground.", 3)
 }
 
-private fun Game.outbreak() {
+internal fun Game.outbreak() {
     val cols = colonists
     if (cols.isEmpty()) return
-    val kind = if (day < 12) HediffKind.FLU else rng.pick(listOf(HediffKind.FLU, HediffKind.FLU, HediffKind.PLAGUE, HediffKind.MALARIA))
+    val kind = when {
+        day < 12 -> HediffKind.FLU
+        map.biome == Biome.TROPICAL -> rng.pick(listOf(HediffKind.FLU, HediffKind.FLU, HediffKind.PLAGUE, HediffKind.MALARIA))
+        else -> rng.pick(listOf(HediffKind.FLU, HediffKind.FLU, HediffKind.PLAGUE))
+    }
     val victims = cols.shuffled(java.util.Random(rng.int(1_000_000).toLong())).take(max(1, cols.size / 3))
     for (v in victims) if (v.hediffs.none { it.kind.category == 0 }) addHediff(v, kind, 0.1f)
     say("A ${kind.label.lowercase()} outbreak is spreading through the colony!", 3)
 }
 
-private fun Game.shortCircuit() {
+internal fun Game.shortCircuit() {
     val bats = map.buildings().filter { it.def == BuildDef.BATTERY && it.built && it.charge > 150f }
     if (bats.isEmpty()) return
     val b = rng.pick(bats)
@@ -351,7 +253,7 @@ private fun Game.shortCircuit() {
     map.removeBuilding(b)
 }
 
-private fun Game.blight() {
+internal fun Game.blight() {
     val crops = (0 until map.size).filter { map.plant[it]?.type?.crop == true }
     if (crops.isEmpty()) return
     val c = rng.pick(crops)
@@ -361,7 +263,7 @@ private fun Game.blight() {
     say("Blight destroyed $n ${t.label.lowercase()} plants.", 3)
 }
 
-private fun Game.animalJoins() {
+internal fun Game.animalJoins() {
     val cands = pawns.filter { it.alive && it.isAnimal && it.faction == Faction.WILD && !it.race.predator && it.race.dangerous < 0.5f && !it.manhunter && it.race.tameDifficulty < 1.2f }
     if (cands.isEmpty()) return
     val a = rng.pick(cands)
@@ -373,13 +275,13 @@ private fun Game.animalJoins() {
     say("A ${e.race.label.lowercase()} has wandered in and decided to stay: ${a.name}.", 1)
 }
 
-private fun Game.thrumboPasses() {
+internal fun Game.thrumboPasses() {
     val e = edgeCell(rng.int(4)) ?: return
     newAnimal(Race.THRUMBO, e.first, e.second)
     say("A rare thrumbo has been spotted nearby!", 1)
 }
 
-private fun Game.refugees() {
+internal fun Game.refugees() {
     val side = rng.int(4)
     val e = edgeCell(side) ?: return
     val ref = newHuman(e.first, e.second, Faction.VISITOR)
@@ -403,7 +305,7 @@ private fun Game.refugees() {
     say("${ref.name} staggers in from the ${arrayOf("west", "east", "north", "south")[side]}, wounded and chased by raiders. Rescue them to gain a colonist.", 2)
 }
 
-private fun Game.meteorite() {
+internal fun Game.meteorite() {
     val x = rng.range(8, map.w - 9); val y = rng.range(8, map.h - 9)
     val steel = rng.range(60, 140)
     map.drop(ItemType.STEEL, steel, x, y)
@@ -413,7 +315,7 @@ private fun Game.meteorite() {
     say("A meteorite crashes into the ground nearby, scattering metal.", 1)
 }
 
-private fun Game.psychicWave() {
+internal fun Game.psychicWave() {
     val female = rng.chance(0.5f)
     val drone = rng.chance(0.6f)
     var n = 0
@@ -423,7 +325,7 @@ private fun Game.psychicWave() {
     say(if (drone) "A psychic drone assaults the minds of ${if (female) "women" else "men"} in the colony." else "A psychic soothe calms the ${if (female) "women" else "men"} of the colony.", if (drone) 2 else 1)
 }
 
-private fun Game.mechCrash() {
+internal fun Game.mechCrash() {
     var cx = 0; var cy = 0
     var tries = 0
     do {
@@ -443,4 +345,49 @@ private fun Game.mechCrash() {
     map.drop(ItemType.COMPONENT, rng.range(2, 5), cx, cy)
     blasts.add(Blast(cx, cy, 2.5f, tick + 20))
     say("A mechanoid ship has crashed to the ${if (cx < homeX) "west" else "east"}. Its cluster lies dormant... for now.", 2)
+}
+
+internal fun Game.heatWave() {
+    tempOffset = 16f; tempEventName = "heat wave"; say("A heat wave is sweeping in!", 2)
+    tempEventUntil = tick + rng.range(2 * TICKS_PER_DAY, 4 * TICKS_PER_DAY)
+}
+
+internal fun Game.coldSnap() {
+    tempOffset = -17f; tempEventName = "cold snap"; say("A cold snap has hit. Keep warm and protect your crops!", 2)
+    tempEventUntil = tick + rng.range(2 * TICKS_PER_DAY, 4 * TICKS_PER_DAY)
+}
+
+internal fun Game.solarFlare() {
+    solarFlareUntil = tick + (0.9f * TICKS_PER_DAY).toInt(); say("A solar flare knocks out all electrical power!", 2)
+}
+
+internal fun Game.eclipse() {
+    eclipseUntil = tick + (0.7f * TICKS_PER_DAY).toInt(); say("An eclipse blots out the sun.", 2)
+}
+
+internal fun Game.toxicFallout() {
+    toxicFalloutUntil = tick + 3 * TICKS_PER_DAY; say("Toxic fallout! Stay indoors; crops will wither.", 3)
+}
+
+internal fun Game.aurora() {
+    for (c in colonists) c.addThought("Beautiful aurora", 0.1f, tick, 2 * TICKS_PER_DAY)
+    say("An aurora lights the night sky. Everyone is moved.", 1)
+}
+
+internal fun Game.volcanicWinter() {
+    tempOffset = -13f; tempEventName = "volcanic winter"; tempEventUntil = tick + 6 * TICKS_PER_DAY
+    say("Volcanic ash darkens the sky: a volcanic winter begins.", 3)
+}
+
+internal fun Game.thunderstorm() {
+    weather = Weather.THUNDER; weatherUntil = tick + 5000; lightning(); say("A violent thunderstorm hits.", 2)
+}
+
+/** A spark in dry grass or forest well away from the base. Rain and thunder put it out before it starts. */
+internal fun Game.wildfire() {
+    val spots = (0 until map.size).filter { cellFlammability(it) > 0.3f && distance(map.xOf(it), map.yOf(it), homeX, homeY) > 15f }
+    if (spots.isEmpty()) return
+    val i = rng.pick(spots)
+    igniteCell(i, 0.6f)
+    say("A wildfire has broken out to the ${if (map.xOf(i) < homeX) "west" else "east"}. Smoke is drifting your way.", 2)
 }

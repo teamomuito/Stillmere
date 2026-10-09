@@ -8,7 +8,7 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 19
+    private const val VERSION = 20
     private const val OLDEST_READABLE = 14
 
     private fun DataOutputStream.writePlan(p: BattlePlan, version: Int) {
@@ -96,6 +96,11 @@ object SaveGame {
         for (t in g.traders) {
             o.writeInt(t.pawnId); o.writeUTF(t.name); o.writeLong(t.arrival); o.writeLong(t.leaveAt); o.writeInt(t.silver)
             o.writeInt(t.stock.size); for ((k, v) in t.stock) { o.writeInt(k.ordinal); o.writeInt(v) }
+        }
+        if (version >= 20) {
+            o.writeLong(g.raidLastEnded)
+            o.writeInt(g.incidentLast.size)
+            for ((k, v) in g.incidentLast) { o.writeUTF(k.name); o.writeLong(v) }
         }
 
         val m = g.map
@@ -297,6 +302,12 @@ object SaveGame {
             repeat(i.readInt()) { t.stock[ItemType.entries[i.readInt()]] = i.readInt() }
             t
         }
+        var raidEnded = -1L
+        val incidents = HashMap<Incident, Long>()
+        if (version >= 20) {
+            raidEnded = i.readLong()
+            repeat(i.readInt()) { val name = i.readUTF(); val at = i.readLong(); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
+        }
 
         val w = i.readInt(); val h = i.readInt()
         val map = GameMap(w, h)
@@ -374,6 +385,8 @@ object SaveGame {
         g.researchDone.addAll(done)
         for ((r, v) in prog) g.researchProgress[r] = v
         g.traders.addAll(traderList)
+        g.raidLastEnded = raidEnded
+        g.incidentLast.putAll(incidents)
 
         repeat(i.readInt()) { g.pawns.add(readPawn(i, tick, version)) }
         run {
