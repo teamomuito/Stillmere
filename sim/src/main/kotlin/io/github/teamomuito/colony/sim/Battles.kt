@@ -141,12 +141,12 @@ fun Game.resolveBattle(bg: Game) {
         }
         BattleOutcome.VICTORY -> {
             // Battlefield loot: what the dead and the enemy left behind. Corpses are not taken.
-            for (s in bg.map.items.values) if (s.corpseOf == null) c.inventory[s.type] = (c.inventory[s.type] ?: 0) + s.count
+            for (s in bg.map.items.values) if (s.corpseOf == null) c.inventory.add(s.lot(), s.count)
             // Enemies still down are taken prisoner.
             for (e in bg.pawns.toList()) if (e.faction == Faction.ENEMY && e.downed && e.alive && !e.isAnimal) {
                 makePrisoner(e, -1); back.add(e)
             }
-            if (plan.kind == 0) c.inventory[ItemType.SILVER] = caravanSilver(c) + rng.range(20, 90)
+            if (plan.kind == 0) c.inventory.add(ItemType.SILVER, rng.range(20, 90))
             // Nobody took them, so the people left on the field walk home with the rest.
             back.addAll(left)
             c.members.clear(); c.members.addAll(back)
@@ -167,7 +167,7 @@ private fun Game.afterVictory(c: Caravan, plan: BattlePlan) {
             val q = openQuestAt(site.id)
             if (q != null && q.state == QuestState.ACCEPTED) {
                 q.state = QuestState.COMPLETED; q.resolveAt(tick)
-                c.inventory[ItemType.SILVER] = caravanSilver(c) + q.reward
+                c.inventory.add(ItemType.SILVER, q.reward)
                 adjustGoodwill(patronOf(q), CAMP_BOUNTY_GOODWILL)
                 say("The ${site.name} is cleared. Reward: ${q.reward} silver.", 1)
             } else {
@@ -188,9 +188,9 @@ private fun Game.afterVictory(c: Caravan, plan: BattlePlan) {
         BattleAftermath.SETTLEMENT_ASSAULT -> {
             val s = world.settlements.getOrNull(plan.settlement) ?: return
             var looted = 0
-            for ((t, n) in s.stock.toList()) { val take = (n * 0.7f).toInt(); if (take > 0) { c.inventory[t] = (c.inventory[t] ?: 0) + take; looted += take } }
+            for ((lot, n) in s.stock.entries()) { val take = (n * 0.7f).toInt(); if (take > 0) { s.stock.remove(lot, take); c.inventory.add(lot, take); looted += take } }
             val silver = (s.silver * 0.8f).toInt() + (if (plan.wasHostile) 150 else 0)
-            c.inventory[ItemType.SILVER] = caravanSilver(c) + silver
+            c.inventory.add(ItemType.SILVER, silver)
             s.stock.clear(); s.silver = 0
             s.destroyedUntil = tick + 30L * TICKS_PER_DAY
             say("${s.name} falls. The caravan takes $looted goods and $silver silver.", 1)

@@ -424,7 +424,7 @@ class Dialogs(val a: MainActivity) {
                 }
                 body.addView(ui.label("Buy", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 12, 0, 2))
                 if (t.stock.isEmpty()) body.addView(ui.label("The trader has nothing left.", 11.5f, ui.dim))
-                for ((type, n) in t.stock.entries.sortedBy { it.key.cat.ordinal }) {
+                for ((type, n) in t.stock.totals().entries.sortedBy { it.key.cat.ordinal }) {
                     val price = game.buyPrice(type)
                     val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                     row.addView(ui.label("${type.label} ×$n  (${String.format("%.1f", price)} each)", 11.5f), ui.lin(0, -2, 1f))

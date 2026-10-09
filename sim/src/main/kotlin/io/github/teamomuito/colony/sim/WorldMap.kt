@@ -21,7 +21,7 @@ class WorldFaction(val id: Int, val name: String, val kind: Int, val color: Int)
 class SettlementRequest(val type: ItemType, val count: Int, val reward: Int, val expires: Long)
 
 class Settlement(val index: Int, val name: String, val tile: Int, val faction: WorldFaction) {
-    val stock = LinkedHashMap<ItemType, Int>()
+    val stock = Stock()
     var silver = 0
     var stockTick = -1_000_000L
     var request: SettlementRequest? = null

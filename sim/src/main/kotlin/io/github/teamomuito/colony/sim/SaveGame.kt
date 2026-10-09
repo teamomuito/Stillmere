@@ -8,8 +8,33 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 21
+    private const val VERSION = 22
     private const val OLDEST_READABLE = 14
+
+    /** Goods off the map: one entry per lot. Before version 22 these were plain kind-and-count pairs. */
+    private fun DataOutputStream.writeStock(s: Stock, version: Int) {
+        if (version < 22) {
+            // Older saves kept only kind and count.
+            val totals = s.totals()
+            writeInt(totals.size)
+            for ((t, n) in totals) { writeInt(t.ordinal); writeInt(n) }
+            return
+        }
+        val e = s.entries()
+        writeInt(e.size)
+        for ((lot, n) in e) { writeInt(lot.type.ordinal); writeInt(lot.quality.ordinal); writeInt(lot.condition); writeInt(n) }
+    }
+
+    private fun DataInputStream.readStock(version: Int): Stock {
+        val s = Stock()
+        repeat(readInt()) {
+            if (version >= 22) {
+                val t = ItemType.entries[readInt()]; val q = Quality.entries[readInt()]; val c = readInt()
+                s.add(Lot(t, q, c), readInt())
+            } else s.add(ItemType.entries[readInt()], readInt())
+        }
+        return s
+    }
 
     private fun DataOutputStream.writePlan(p: BattlePlan, version: Int) {
         writeInt(p.caravanId); writeUTF(p.label); writeInt(p.kind); writeFloat(p.points); writeBoolean(p.fortified)
@@ -95,7 +120,7 @@ object SaveGame {
         o.writeInt(g.traders.size)
         for (t in g.traders) {
             o.writeInt(t.pawnId); o.writeUTF(t.name); o.writeLong(t.arrival); o.writeLong(t.leaveAt); o.writeInt(t.silver)
-            o.writeInt(t.stock.size); for ((k, v) in t.stock) { o.writeInt(k.ordinal); o.writeInt(v) }
+            o.writeStock(t.stock, version)
         }
         if (version >= 20) {
             o.writeLong(g.raidLastEnded)
@@ -159,7 +184,7 @@ object SaveGame {
         o.writeInt(g.world.settlements.size)
         for (st in g.world.settlements) {
             o.writeInt(st.silver); o.writeLong(st.stockTick); o.writeLong(st.destroyedUntil)
-            o.writeInt(st.stock.size); for ((k, v) in st.stock) { o.writeInt(k.ordinal); o.writeInt(v) }
+            o.writeStock(st.stock, version)
             val r = st.request
             o.writeBoolean(r != null)
             if (r != null) { o.writeInt(r.type.ordinal); o.writeInt(r.count); o.writeInt(r.reward); o.writeLong(r.expires) }
@@ -183,7 +208,7 @@ object SaveGame {
             o.writeInt(c.id); o.writeUTF(c.name); o.writeInt(c.tile); o.writeInt(c.destination); o.writeFloat(c.progress)
             o.writeBoolean(c.resting); o.writeBoolean(c.goingHome); o.writeUTF(c.lastEvent); o.writeBoolean(c.forageNote)
             o.writeInt(c.route.size); for (t in c.route) o.writeInt(t)
-            o.writeInt(c.inventory.size); for ((k, v) in c.inventory) { o.writeInt(k.ordinal); o.writeInt(v) }
+            o.writeStock(c.inventory, version)
             if (version >= 16) o.writeBoolean(c.inBattle)
             val ms = c.members.filter { it.alive }
             o.writeInt(ms.size); for (p in ms) writePawn(o, p, g.tick, version)
@@ -310,7 +335,7 @@ object SaveGame {
         val traderList = List(i.readInt()) {
             val t = TraderInfo(i.readInt(), i.readUTF(), i.readLong(), i.readLong())
             t.silver = i.readInt()
-            repeat(i.readInt()) { t.stock[ItemType.entries[i.readInt()]] = i.readInt() }
+            t.stock.addAll(i.readStock(version))
             t
         }
         var raidEnded = -1L
@@ -408,9 +433,9 @@ object SaveGame {
             repeat(i.readInt()) { idx ->
                 val st = g.world.settlements.getOrNull(idx)
                 val silver = i.readInt(); val stockTick = i.readLong(); val destroyed = i.readLong()
-                val stock = List(i.readInt()) { ItemType.entries[i.readInt()] to i.readInt() }
+                val stock = i.readStock(version)
                 val req = if (i.readBoolean()) SettlementRequest(ItemType.entries[i.readInt()], i.readInt(), i.readInt(), i.readLong()) else null
-                if (st != null) { st.silver = silver; st.stockTick = stockTick; st.destroyedUntil = destroyed; st.stock.putAll(stock); st.request = req }
+                if (st != null) { st.silver = silver; st.stockTick = stockTick; st.destroyedUntil = destroyed; st.stock.addAll(stock); st.request = req }
             }
             g.world.nextSiteId = i.readInt()
             repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readLong(), i.readFloat(), i.readUTF())) }
@@ -429,7 +454,7 @@ object SaveGame {
                 c.destination = i.readInt(); c.progress = i.readFloat(); c.resting = i.readBoolean(); c.goingHome = i.readBoolean()
                 c.lastEvent = i.readUTF(); c.forageNote = i.readBoolean()
                 repeat(i.readInt()) { c.route.add(i.readInt()) }
-                repeat(i.readInt()) { c.inventory[ItemType.entries[i.readInt()]] = i.readInt() }
+                c.inventory.addAll(i.readStock(version))
                 if (version >= 16) c.inBattle = i.readBoolean()
                 repeat(i.readInt()) { c.members.add(readPawn(i, tick, version)) }
                 g.caravans.add(c)

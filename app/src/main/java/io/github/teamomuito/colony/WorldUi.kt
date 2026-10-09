@@ -487,7 +487,7 @@ fun Dialogs.caravanDialog(c: Caravan) {
             }
             body.addView(ui.label("Cargo", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 10, 0, 2))
             if (c.inventory.isEmpty()) body.addView(ui.label("Empty.", 11.5f, ui.dim))
-            for ((t, n) in c.inventory) body.addView(ui.label("${t.label} ×$n  (${f1(t.mass() * n)} kg)", 11.5f))
+            for ((t, n) in c.inventory.totals()) body.addView(ui.label("${t.label} ×$n  (${f1(t.mass() * n)} kg)", 11.5f))
             val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             if (s != null && s.faction.trades && !game.hostileTo(s.faction) && s.destroyedUntil <= game.tick && c.tile == s.tile && c.route.isEmpty())
                 row.addView(ui.button("Trade at ${s.name}", 12f) { d.dismiss(); caravanTrade(c, s) }, ui.lin(-2, -2, 0f, 0, 0, 6, 0))
@@ -526,13 +526,13 @@ fun Dialogs.caravanTrade(c: Caravan, s: Settlement) {
             body.addView(ui.label("Caravan silver: ${game.caravanSilver(c)}   ·   ${s.name}'s silver: ${s.silver}   ·   load ${f1(c.load())}/${f1(c.capacity())} kg", 12f, ui.accent, true))
             val req = s.request
             if (req != null && game.tick <= req.expires) {
-                val have = c.inventory[req.type] ?: 0
+                val have = c.inventory.count(req.type)
                 val days = f1((req.expires - game.tick).toFloat() / TICKS_PER_DAY)
                 body.addView(ui.label("Request: ${req.count} × ${req.type.label} for ${req.reward} silver (+goodwill), $days days left (you carry $have)", 11.5f, ui.warn), ui.lin(-2, -2, 0f, 0, 8, 0, 0))
                 if (have >= req.count) body.addView(ui.button("Deliver", 12f) { game.fulfillRequest(c, s); render() }, ui.lin(-2, -2, 0f, 0, 3, 0, 0))
             }
             body.addView(ui.label("Sell", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 10, 0, 2))
-            val mine = c.inventory.entries.filter { it.key != ItemType.SILVER }
+            val mine = c.inventory.totals().entries.filter { it.key != ItemType.SILVER }
             if (mine.isEmpty()) body.addView(ui.label("Nothing to sell.", 11.5f, ui.dim))
             for ((type, n) in mine) {
                 val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -545,7 +545,7 @@ fun Dialogs.caravanTrade(c: Caravan, s: Settlement) {
             }
             body.addView(ui.label("Buy", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 12, 0, 2))
             if (s.stock.isEmpty()) body.addView(ui.label("Nothing left.", 11.5f, ui.dim))
-            for ((type, n) in s.stock.entries.sortedBy { it.key.cat.ordinal }) {
+            for ((type, n) in s.stock.totals().entries.sortedBy { it.key.cat.ordinal }) {
                 val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                 row.addView(ui.label("${type.label} ×$n  (${f1(game.caravanBuyPrice(c, type))} each, ${f1(type.mass())} kg)", 11.5f), ui.lin(0, -2, 1f))
                 for ((t, k) in listOf("1" to 1, "10" to 10, "All" to n)) row.addView(ui.button(t, 11f) {

@@ -297,7 +297,7 @@ fun Game.onPawnDied(p: Pawn, cause: String, source: Pawn?) {
     }
     // Gear drops.
     p.weaponItem?.let { if (p.faction != Faction.WILD) map.drop(it, 1, cx, cy, p.weaponQuality) }
-    for (w in p.apparel) if (w.hp > 20f) map.drop(w.type, 1, cx, cy, w.quality)
+    for (w in p.apparel) if (w.hp > 20f) map.drop(w.lot(), 1, cx, cy)
     p.apparel.clear()
     for (b in map.buildings()) if (b != null && b.ownerId == p.id) b.ownerId = -1
     when {

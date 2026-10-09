@@ -389,7 +389,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     }
 
     /** Found a new colony from a caravan's people and cargo, continuing the old game's calendar and research. */
-    fun startSettlement(from: Game, members: List<Pawn>, cargo: Map<ItemType, Int>, name: String) {
+    fun startSettlement(from: Game, members: List<Pawn>, cargo: Stock, name: String) {
         scenario = from.scenario; storyteller = from.storyteller; difficulty = from.difficulty
         colonyName = name
         tick = from.tick
@@ -413,7 +413,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         z.allowed[ItemType.CORPSE_HUMAN.ordinal] = false
         for (yy in sy - 2..sy) for (xx in sx - 2..sx + 1) { map.zoneId[map.idx(xx, yy)] = z.id; z.cells++ }
         var k = 0
-        for ((t, n) in cargo) { if (n > 0) { val cell = k % 8; map.drop(t, n, sx - 2 + cell % 4, sy - 2 + cell / 4); k++ } }
+        for ((lot, n) in cargo.entries()) { val cell = k % 8; map.drop(lot, n, sx - 2 + cell % 4, sy - 2 + cell / 4); k++ }
         map.rebuildRooms(outdoorTemp())
         populateWildlife()
         nextRaid = tick + 6L * TICKS_PER_DAY

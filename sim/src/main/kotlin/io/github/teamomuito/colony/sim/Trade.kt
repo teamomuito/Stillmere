@@ -4,7 +4,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 class TraderInfo(val pawnId: Int, val name: String, val arrival: Long, val leaveAt: Long) {
-    val stock = LinkedHashMap<ItemType, Int>()
+    val stock = Stock()
     var silver = 0
     var wantsKind = ItemCat.RESOURCE
 }
@@ -28,10 +28,10 @@ fun Game.spawnTrader(from: WorldFaction? = null, orbitalAt: Pair<Int, Int>? = nu
         ItemType.MEDS_HERBAL to 20, ItemType.MEDS_INDUSTRIAL to 10, ItemType.BEER to 20, ItemType.JOINT to 15, ItemType.PSYCHITE_TEA to 10,
         ItemType.PLASTEEL to 60, ItemType.GOLD to 30, ItemType.KIBBLE to 100, ItemType.HAY to 100,
     )
-    for ((t, n) in goods) if (rng.chance(if (orbitalAt != null) 0.8f else 0.55f)) info.stock[t] = rng.range(n / 4, n) * (if (orbitalAt != null && (t == ItemType.COMPONENT || t == ItemType.PLASTEEL || t == ItemType.GOLD)) 2 else 1)
-    if (fac != null && fac.kind == 0) info.stock.keys.removeAll { it in setOf(ItemType.COMPONENT, ItemType.PLASTEEL, ItemType.MEAL_PACKAGED, ItemType.MEDS_INDUSTRIAL) }
+    for ((t, n) in goods) if (rng.chance(if (orbitalAt != null) 0.8f else 0.55f)) info.stock.add(t, rng.range(n / 4, n) * (if (orbitalAt != null && (t == ItemType.COMPONENT || t == ItemType.PLASTEEL || t == ItemType.GOLD)) 2 else 1))
+    if (fac != null && fac.kind == 0) info.stock.removeKinds { it in setOf(ItemType.COMPONENT, ItemType.PLASTEEL, ItemType.MEAL_PACKAGED, ItemType.MEDS_INDUSTRIAL) }
     val gear = ItemType.entries.filter { it.isGear && (fac == null || fac.kind != 0 || it.weapon?.ranged != true || it.weapon == Weapon.BOW || it.weapon == Weapon.GREATBOW) && (fac == null || fac.kind != 0 || (it.apparel != null && it.value < 80f) || it.weapon != null) }
-    repeat(rng.range(2, 6)) { info.stock[rng.pick(gear)] = (info.stock[rng.pick(gear)] ?: 0) + 1 }
+    repeat(rng.range(2, 6)) { info.stock.add(rng.pick(gear), 1) }
     traders.add(info)
     say(if (orbitalAt != null) "An orbital trade ship lands at your beacon! ${trader.name} is waiting." else "A trade caravan ${if (fac != null) "from ${fac.name} " else ""}arrives! ${trader.name} is waiting in your colony.", 1)
     if (rng.chance(0.4f)) {
@@ -68,7 +68,10 @@ fun Game.buyPrice(t: ItemType): Float {
 
 fun Game.trader(): TraderInfo? = traders.firstOrNull { pawnById(it.pawnId)?.alive == true }
 
-/** Sell stacks lying in stockpiles within the colony (not forbidden); returns silver earned. */
+/**
+ * Sell stacks lying in stockpiles within the colony (not forbidden); returns silver earned. Each stack keeps its quality
+ * and condition in the trader's stock, and its price depends on the quality.
+ */
 fun Game.sellItem(t: TraderInfo, type: ItemType, count: Int): Int {
     if (count <= 0 || type == ItemType.SILVER) return 0
     var left = count
@@ -81,10 +84,11 @@ fun Game.sellItem(t: TraderInfo, type: ItemType, count: Int): Int {
         if (t.silver < price * n) { /* trader cannot afford the rest */ }
         val maxN = min(n, (t.silver / max(0.01f, price)).toInt())
         if (maxN <= 0) break
+        val lot = s.lot()
         map.take(i, maxN)
         earned += price * maxN
         t.silver -= (price * maxN).toInt()
-        t.stock[type] = (t.stock[type] ?: 0) + maxN
+        t.stock.add(lot, maxN)
         left -= maxN
     }
     val e = earned.toInt()
@@ -96,11 +100,12 @@ fun Game.sellItem(t: TraderInfo, type: ItemType, count: Int): Int {
     return e
 }
 
+/** Buys up to [count] of [type] from the trader. The goods arrive with the quality and condition they were stocked with. */
 fun Game.buyItem(t: TraderInfo, type: ItemType, count: Int): Boolean {
-    val have = t.stock[type] ?: 0
-    val n = min(count, have)
+    val picks = t.stock.peek(type, count)
+    val n = picks.sumOf { it.second }
     if (n <= 0) return false
-    val cost = (buyPrice(type) * n).toInt() + 1
+    val cost = picks.sumOf { (buyPrice(type) * it.first.valueFactor() * it.second).toDouble() }.toInt() + 1
     // Pay silver from stockpiles.
     var silver = 0
     for ((_, s) in map.items) if (s.type == ItemType.SILVER) silver += s.count
@@ -110,10 +115,11 @@ fun Game.buyItem(t: TraderInfo, type: ItemType, count: Int): Boolean {
         if (left <= 0) break
         left -= map.take(e.key, left)
     }
-    t.stock[type] = have - n
-    if (t.stock[type] == 0) t.stock.remove(type)
-    t.silver += cost
     val p = pawnById(t.pawnId)
-    map.drop(type, n, p?.x ?: homeX, p?.y ?: homeY, if (type.isGear) Quality.NORMAL else Quality.NORMAL)
+    for ((lot, m) in picks) {
+        t.stock.remove(lot, m)
+        map.drop(lot, m, p?.x ?: homeX, p?.y ?: homeY)
+    }
+    t.silver += cost
     return true
 }

@@ -7,7 +7,8 @@ import kotlin.math.min
 
 class Caravan(val id: Int, var name: String, var tile: Int) {
     val members = ArrayList<Pawn>()
-    val inventory = LinkedHashMap<ItemType, Int>()
+    /** Cargo, by lot, so quality and condition travel with the goods. */
+    val inventory = Stock()
     val route = ArrayList<Int>()
     var destination = tile
     var progress = 0f
@@ -53,7 +54,7 @@ fun Pawn.carryCapacity(): Float = when {
 }
 
 fun Caravan.capacity(): Float = members.filter { it.alive && !it.downed }.sumOf { it.carryCapacity().toDouble() }.toFloat()
-fun Caravan.load(): Float = inventory.entries.sumOf { (it.key.mass() * it.value).toDouble() }.toFloat()
+fun Caravan.load(): Float = inventory.entries().sumOf { (it.first.type.mass() * it.second).toDouble() }.toFloat()
 fun Caravan.speedFactor(): Float {
     val cap = capacity()
     if (cap <= 0f) return 0.6f
@@ -80,7 +81,7 @@ fun Game.routeDays(from: Int, to: Int, speed: Float = 0.85f): Float? {
 
 fun Caravan.foodDays(): Float {
     var nut = 0f
-    for ((t, n) in inventory) if (t.isFood && t.humanFood) nut += t.nutrition * n
+    for ((lot, n) in inventory.entries()) if (lot.type.isFood && lot.type.humanFood) nut += lot.type.nutrition * n
     val humans = max(1, humans.size)
     return nut / (0.7f * humans)
 }
@@ -117,9 +118,11 @@ fun Game.formCaravan(members: List<Pawn>, items: Map<ItemType, Int>, dest: Int, 
         var left = n
         for (e in map.items.entries.filter { it.value.type == t && it.value.corpseOf == null && !it.value.forbidden && map.zoneKind(it.key) != ZoneKind.NONE }) {
             if (left <= 0) break
-            left -= map.take(e.key, left)
+            val lot = e.value.lot()
+            val took = map.take(e.key, left)
+            c.inventory.add(lot, took)
+            left -= took
         }
-        c.inventory[t] = n - left
     }
     for (p in members) {
         if (p.carrying >= 0) { pawnById(p.carrying)?.carriedBy = -1; p.carrying = -1 }
@@ -163,7 +166,7 @@ fun Game.unloadCaravan(c: Caravan) {
         p.clearPath(); p.job = null; p.carriedBy = -1; p.carrying = -1
         pawns.add(p)
     }
-    for ((t, n) in c.inventory) if (n > 0) map.drop(t, n, e.first, e.second)
+    for ((lot, n) in c.inventory.entries()) map.drop(lot, n, e.first, e.second)
     caravans.remove(c)
     say("${c.name} arrived home with ${c.alive.size} travellers.", 1)
 }
@@ -206,15 +209,14 @@ private fun Game.caravanStep(c: Caravan, dt: Int) {
     }
     // Perishables.
     val coldMult = if (world.biome[here] == Biome.TUNDRA || world.biome[here] == Biome.BOREAL) 0.4f else 1f
-    for (t in c.inventory.keys.toList()) {
+    for ((lot, n) in c.inventory.entries()) {
+        val t = lot.type
         if (t.spoilDays <= 0f || t.cat == ItemCat.FOOD_ANIMAL && t.spoilDays < 0f) continue
-        val n = c.inventory[t] ?: 0
         val loss = n * days / t.spoilDays * coldMult
         var lost = loss.toInt()
         if (rng.float() < loss - lost) lost++
-        if (lost > 0) c.inventory[t] = max(0, n - lost)
+        if (lost > 0) c.inventory.remove(lot, lost)
     }
-    c.inventory.entries.removeAll { it.value <= 0 }
 
     // Rest when tired.
     val hum = c.humans
@@ -233,22 +235,22 @@ private fun Game.caravanStep(c: Caravan, dt: Int) {
 
 private fun Game.caravanEat(c: Caravan, p: Pawn) {
     if (p.isAnimal) {
-        val feed = listOf(ItemType.HAY, ItemType.KIBBLE).firstOrNull { (c.inventory[it] ?: 0) > 0 && (p.race.diet != Diet.CARNIVORE || it == ItemType.KIBBLE) }
+        val feed = listOf(ItemType.HAY, ItemType.KIBBLE).firstOrNull { c.inventory.count(it) > 0 && (p.race.diet != Diet.CARNIVORE || it == ItemType.KIBBLE) }
         if (feed != null) {
-            c.inventory[feed] = c.inventory[feed]!! - 1; p.food = min(1f, p.food + feed.nutrition * 10f + 0.2f)
+            c.inventory.take(feed, 1); p.food = min(1f, p.food + feed.nutrition * 10f + 0.2f)
         } else if (p.race.diet != Diet.CARNIVORE && world.forageChance(c.tile) > 0.25f) p.food = min(1f, p.food + 0.35f)
         else if (p.race.diet == Diet.CARNIVORE) {
-            val meat = c.inventory.entries.firstOrNull { it.key.cat == ItemCat.FOOD_MEAT && it.value > 0 }
-            if (meat != null) { c.inventory[meat.key] = meat.value - 1; p.food = min(1f, p.food + 0.4f) }
+            val meat = c.inventory.entries().firstOrNull { it.first.type.cat == ItemCat.FOOD_MEAT && it.second > 0 }
+            if (meat != null) { c.inventory.take(meat.first.type, 1); p.food = min(1f, p.food + 0.4f) }
         }
         return
     }
     // Packaged and cooked food first, raw last.
     val order = listOf(ItemType.MEAL_PACKAGED, ItemType.PEMMICAN, ItemType.MEAL_FINE, ItemType.MEAL_SIMPLE)
-    var pick: ItemType? = order.firstOrNull { (c.inventory[it] ?: 0) > 0 }
-    if (pick == null) pick = c.inventory.entries.firstOrNull { it.value > 0 && it.key.isFood && it.key.humanFood && it.key != ItemType.HUMAN_MEAT && it.key != ItemType.MILK }?.key
+    var pick: ItemType? = order.firstOrNull { c.inventory.count(it) > 0 }
+    if (pick == null) pick = c.inventory.entries().firstOrNull { it.second > 0 && it.first.type.isFood && it.first.type.humanFood && it.first.type != ItemType.HUMAN_MEAT && it.first.type != ItemType.MILK }?.first?.type
     if (pick != null) {
-        c.inventory[pick] = c.inventory[pick]!! - 1
+        c.inventory.take(pick, 1)
         p.food = min(1f, p.food + pick.nutrition * (if (pick.cat == ItemCat.FOOD_MEAL || pick == ItemType.PEMMICAN) 1f else 0.9f))
         return
     }
@@ -265,8 +267,8 @@ private fun Game.caravanTend(c: Caravan, patient: Pawn) {
     val needs = patient.injuries.any { !it.tended && !it.scar && !(it.missing && it.bleed <= 0f) } || patient.hediffs.any { it.kind.needsTend && !it.tended }
     if (!needs) return
     val doctor = c.humans.filter { !it.downed }.maxByOrNull { it.level(SkillType.MEDICINE) } ?: return
-    val med = listOf(ItemType.MEDS_INDUSTRIAL, ItemType.MEDS_HERBAL, ItemType.HEALROOT).firstOrNull { (c.inventory[it] ?: 0) > 0 }
-    if (med != null) c.inventory[med] = c.inventory[med]!! - 1
+    val med = listOf(ItemType.MEDS_INDUSTRIAL, ItemType.MEDS_HERBAL, ItemType.HEALROOT).firstOrNull { c.inventory.count(it) > 0 }
+    if (med != null) c.inventory.take(med, 1)
     tendPawn(doctor, patient, med)
 }
 
@@ -291,7 +293,7 @@ private fun Game.enterTile(c: Caravan): Boolean {
 
 /** Threat points for a random ambush, scaled by how rich and well-defended the caravan is. */
 private fun Game.ambushPoints(c: Caravan, base: Float): Float {
-    val cargo = c.inventory.entries.sumOf { (it.key.value * it.value).toDouble() }.toFloat()
+    val cargo = c.inventory.entries().sumOf { (it.first.type.value * it.second).toDouble() }.toFloat()
     var pts = base + c.humans.size * 13f + cargo / 80f + c.alive.count { it.isAnimal } * 3f
     pts *= difficulty.threat.coerceAtLeast(0.5f) * min(1f, 0.45f + day / 30f)
     return pts * (0.8f + rng.float() * 0.45f)
@@ -309,9 +311,9 @@ private fun Game.banditAmbush(c: Caravan) {
 private fun Game.findCache(c: Caravan) {
     val roll = rng.int(3)
     when (roll) {
-        0 -> { val n = rng.range(30, 90); c.inventory[ItemType.STEEL] = (c.inventory[ItemType.STEEL] ?: 0) + n; say("${c.name} found a ruined cache: $n steel.", 1) }
-        1 -> { val n = rng.range(1, 3); c.inventory[ItemType.COMPONENT] = (c.inventory[ItemType.COMPONENT] ?: 0) + n; say("${c.name} salvaged $n components from a wreck.", 1) }
-        else -> { val n = rng.range(60, 200); c.inventory[ItemType.SILVER] = (c.inventory[ItemType.SILVER] ?: 0) + n; say("${c.name} found $n silver in an abandoned camp.", 1) }
+        0 -> { val n = rng.range(30, 90); c.inventory.add(ItemType.STEEL, n); say("${c.name} found a ruined cache: $n steel.", 1) }
+        1 -> { val n = rng.range(1, 3); c.inventory.add(ItemType.COMPONENT, n); say("${c.name} salvaged $n components from a wreck.", 1) }
+        else -> { val n = rng.range(60, 200); c.inventory.add(ItemType.SILVER, n); say("${c.name} found $n silver in an abandoned camp.", 1) }
     }
 }
 
@@ -383,7 +385,7 @@ fun Game.refreshSettlement(s: Settlement) {
             ItemType.W_REVOLVER to 2, ItemType.W_AUTOPISTOL to 2, ItemType.W_BOLT to 2, ItemType.W_RIFLE to 1, ItemType.W_SHOTGUN to 1, ItemType.A_FLAK_VEST to 2,
             ItemType.A_PARKA to 2, ItemType.A_DUSTER to 2, ItemType.A_HELMET to 2, ItemType.A_FLAK_PANTS to 2)
     }
-    for ((t, n) in goods) if (r.chance(0.6f)) s.stock[t] = max(1, r.range(n / 4, n))
+    for ((t, n) in goods) if (r.chance(0.6f)) s.stock.add(t, max(1, r.range(n / 4, n)))
     // A request for a staple, with a juicy reward.
     val want = listOf(ItemType.STEEL to 80, ItemType.WOOD to 120, ItemType.MEAL_SIMPLE to 12, ItemType.MEDS_HERBAL to 6, ItemType.LEATHER to 60, ItemType.COMPONENT to 4, ItemType.CLOTH to 80)
     val (rt, rn) = want[r.int(want.size)]
@@ -391,36 +393,34 @@ fun Game.refreshSettlement(s: Settlement) {
     s.request = SettlementRequest(rt, n, (rt.value * n * 1.6f + 40f).toInt(), tick + 8L * TICKS_PER_DAY)
 }
 
-fun Game.caravanSilver(c: Caravan) = c.inventory[ItemType.SILVER] ?: 0
+fun Game.caravanSilver(c: Caravan) = c.inventory.count(ItemType.SILVER)
 
 fun Game.caravanSell(c: Caravan, s: Settlement, t: ItemType, n: Int): Int {
     if (t == ItemType.SILVER || !s.faction.trades) return 0
-    val have = c.inventory[t] ?: 0
     val price = caravanSellPrice(c, t)
-    val k = min(min(n, have), (s.silver / max(0.01f, price)).toInt())
+    val k = min(min(n, c.inventory.count(t)), (s.silver / max(0.01f, price * t.maxValueFactor())).toInt())
     if (k <= 0) return 0
-    val gain = (price * k).toInt()
-    c.inventory[t] = have - k
-    if (c.inventory[t] == 0) c.inventory.remove(t)
-    c.inventory[ItemType.SILVER] = caravanSilver(c) + gain
+    var gain = 0
+    for ((lot, m) in c.inventory.take(t, k)) {
+        gain += (price * lot.valueFactor() * m).toInt()
+        s.stock.add(lot, m)
+    }
+    c.inventory.add(ItemType.SILVER, gain)
     s.silver -= gain
-    s.stock[t] = (s.stock[t] ?: 0) + k
     silverEarned += gain
     return gain
 }
 
 fun Game.caravanBuy(c: Caravan, s: Settlement, t: ItemType, n: Int): Boolean {
     if (!s.faction.trades) return false
-    val k = min(n, s.stock[t] ?: 0)
+    val picks = s.stock.peek(t, n)
+    val k = picks.sumOf { it.second }
     if (k <= 0) return false
-    val cost = (caravanBuyPrice(c, t) * k).toInt() + 1
+    val cost = picks.sumOf { (caravanBuyPrice(c, t) * it.first.valueFactor() * it.second).toDouble() }.toInt() + 1
     if (caravanSilver(c) < cost) return false
     if (c.load() + t.mass() * k > c.capacity() + 0.01f) return false
-    c.inventory[ItemType.SILVER] = caravanSilver(c) - cost
-    if (c.inventory[ItemType.SILVER] == 0) c.inventory.remove(ItemType.SILVER)
-    c.inventory[t] = (c.inventory[t] ?: 0) + k
-    s.stock[t] = (s.stock[t] ?: 0) - k
-    if (s.stock[t] == 0) s.stock.remove(t)
+    c.inventory.remove(Lot(ItemType.SILVER), cost)
+    for ((lot, m) in picks) { s.stock.remove(lot, m); c.inventory.add(lot, m) }
     s.silver += cost
     return true
 }
@@ -429,10 +429,9 @@ fun Game.caravanBuyOk(c: Caravan, t: ItemType, n: Int): Boolean = c.load() + t.m
 
 fun Game.fulfillRequest(c: Caravan, s: Settlement): Boolean {
     val r = s.request ?: return false
-    if (tick > r.expires || (c.inventory[r.type] ?: 0) < r.count) return false
-    c.inventory[r.type] = c.inventory[r.type]!! - r.count
-    if (c.inventory[r.type] == 0) c.inventory.remove(r.type)
-    c.inventory[ItemType.SILVER] = caravanSilver(c) + r.reward
+    if (tick > r.expires || c.inventory.count(r.type) < r.count) return false
+    c.inventory.take(r.type, r.count)
+    c.inventory.add(ItemType.SILVER, r.reward)
     adjustGoodwill(s.faction, 8)
     s.request = null
     say("${s.name} thanks you for the ${r.type.label.lowercase()}.", 1)
@@ -441,10 +440,9 @@ fun Game.fulfillRequest(c: Caravan, s: Settlement): Boolean {
 
 fun Game.giftGoods(c: Caravan, s: Settlement, t: ItemType, n: Int): Int {
     if (s.faction.permanentEnemy) return 0
-    val k = min(n, c.inventory[t] ?: 0)
+    val k = min(n, c.inventory.count(t))
     if (k <= 0) return 0
-    c.inventory[t] = (c.inventory[t] ?: 0) - k
-    if (c.inventory[t] == 0) c.inventory.remove(t)
+    c.inventory.take(t, k)
     val gain = max(0, (t.value * k / 30f).toInt())
     adjustGoodwill(s.faction, gain)
     return gain
@@ -461,9 +459,10 @@ internal fun Game.caravanDeath(p: Pawn, cause: String): Boolean {
         if (p.lover >= 0) pawnById(p.lover)?.lover = -1
         for (o in colonists) if (Trait.PSYCHOPATH !in o.traits) o.addThought("Colonist died: ${p.name.substringBefore(' ')}", -0.1f, tick, 4 * TICKS_PER_DAY)
     } else say("${p.name} died on the road.", 1)
-    p.weaponItem?.let { c.inventory[it] = (c.inventory[it] ?: 0) + 1 }
+    // The dead keep their gear's quality and condition: it goes into the cargo as it was.
+    p.weaponItem?.let { c.inventory.add(Lot(it, p.weaponQuality), 1) }
     p.weaponItem = null
-    for (w in p.apparel) c.inventory[w.type] = (c.inventory[w.type] ?: 0) + 1
+    for (w in p.apparel) c.inventory.add(w.lot(), 1)
     p.apparel.clear()
     return true
 }
@@ -486,6 +485,6 @@ fun Game.settle(c: Caravan, name: String): Settled? {
     g.worldBiome = worldBiome
     g.world = world
     world.homeTile = tile
-    g.startSettlement(this, c.members.filter { it.alive }, c.inventory.toMap(), name)
+    g.startSettlement(this, c.members.filter { it.alive }, c.inventory.copy(), name)
     return Settled(g, archive)
 }

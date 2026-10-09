@@ -374,7 +374,7 @@ class TradeTest {
         assertTrue(earned > 0)
         assertEquals(steelBefore - 40, g.map.countItems(ItemType.STEEL))
         val silverBefore = g.map.countItems(ItemType.SILVER)
-        val stockItem = t.stock.keys.first { it != ItemType.SILVER && !it.isGear }
+        val stockItem = t.stock.totals().keys.first { it != ItemType.SILVER && !it.isGear }
         assertTrue(g.buyItem(t, stockItem, 1))
         assertTrue(g.map.countItems(ItemType.SILVER) < silverBefore)
     }
@@ -1155,8 +1155,8 @@ class CaravanBattleTest {
             val a = newAnimal(Race.MUFFALO, homeX, homeY, Faction.PLAYER)
             pawns.remove(a); c.members.add(a)
         }
-        c.inventory[ItemType.STEEL] = 40
-        c.inventory[ItemType.MEAL_PACKAGED] = 12
+        c.inventory.add(ItemType.STEEL, 40)
+        c.inventory.add(ItemType.MEAL_PACKAGED, 12)
         caravans.add(c)
         return c
     }
@@ -1194,7 +1194,7 @@ class CaravanBattleTest {
     @Test fun playerWinsAgainstWeakRaidersAndKeepsTheCargo() {
         val g = newGame(82, Scenario.LOST_TRIBE); g.quiet()
         val c = g.caravanWith(4, ItemType.W_RIFLE)
-        val steelBefore = c.inventory[ItemType.STEEL]
+        val steelBefore = c.inventory.count(ItemType.STEEL)
         g.startFight(c, "test raiders", 0, 15f, false, BattleAftermath.AMBUSH)
         val bg = g.beginBattle()
         bg.fightToEnd()
@@ -1202,7 +1202,7 @@ class CaravanBattleTest {
         g.resolveBattle(bg)
         assertFalse(c.inBattle)
         assertEquals(4, c.members.count { it.alive && !it.prisoner })
-        assertTrue(c.inventory[ItemType.STEEL]!! >= steelBefore!!)
+        assertTrue(c.inventory.count(ItemType.STEEL) >= steelBefore)
         assertTrue(c.members.all { !it.drafted && it.job == null && it.reserved.isEmpty() })
         assertTrue(g.caravans.contains(c))
     }
@@ -1225,7 +1225,7 @@ class CaravanBattleTest {
         val c = g.caravanWith(3, ItemType.W_RIFLE)
         val home = g.world.homeTile
         c.route.add(home)
-        val cargo = c.inventory.toMap()
+        val cargo = c.inventory.copy()
         g.startFight(c, "a big raid", 0, 400f, false, BattleAftermath.AMBUSH)
         val bg = g.beginBattle()
         bg.requestRetreat()                                  // before the enemy closes in

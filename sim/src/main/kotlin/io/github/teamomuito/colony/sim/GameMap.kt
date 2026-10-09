@@ -354,7 +354,8 @@ class GameMap(val w: Int, val h: Int) {
     }
 
     /** Drops items on or near (x, y), merging with matching stacks. Returns what could not be placed. */
-    fun drop(type: ItemType, count: Int, x: Int, y: Int, quality: Quality = Quality.NORMAL, rot: Float = 0f, forbid: Boolean = false): Int {
+    /** Drops goods on the nearest free cells. [condition] is the percentage of full hit points the goods keep. */
+    fun drop(type: ItemType, count: Int, x: Int, y: Int, quality: Quality = Quality.NORMAL, rot: Float = 0f, forbid: Boolean = false, condition: Int = 100): Int {
         var left = count
         var radius = 0
         while (left > 0 && radius < 14) {
@@ -366,10 +367,10 @@ class GameMap(val w: Int, val h: Int) {
                 if (s == null) {
                     val n = min(left, type.stack)
                     val ns = ItemStack(nextId(), type, n, xx, yy)
-                    ns.quality = quality; ns.rot = rot; ns.forbidden = forbid
+                    ns.quality = quality; ns.rot = rot; ns.forbidden = forbid; ns.hp = condition / 100f
                     items[i] = ns
                     left -= n
-                } else if (s.type == type && s.count < type.stack && s.quality == quality) {
+                } else if (s.type == type && s.count < type.stack && s.quality == quality && conditionPercent(s.hp) == condition) {
                     val n = min(left, type.stack - s.count)
                     // Mixing fresh with old food ages the whole pile a bit.
                     s.rot = (s.rot * s.count + rot * n) / (s.count + n)
@@ -382,6 +383,10 @@ class GameMap(val w: Int, val h: Int) {
         }
         return left
     }
+
+    /** Drops the goods of [lot] with their quality and condition. */
+    fun drop(lot: Lot, count: Int, x: Int, y: Int, forbid: Boolean = false): Int =
+        drop(lot.type, count, x, y, lot.quality, 0f, forbid, lot.condition)
 
     fun take(i: Int, n: Int): Int {
         val s = items[i] ?: return 0
