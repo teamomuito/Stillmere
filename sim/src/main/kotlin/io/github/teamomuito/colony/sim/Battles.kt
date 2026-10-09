@@ -26,6 +26,8 @@ class BattlePlan(
     val site: Int,
     val wasHostile: Boolean,
     val startTick: Long,
+    /** The faction the enemy belongs to, so a captured enemy can be ransomed to them. -1 if none. */
+    var enemyFaction: Int = -1,
 ) {
     var retreating = false
     var outcome: BattleOutcome? = null
@@ -40,10 +42,10 @@ const val BATTLE_LIMIT = 15_000L
 /** The world asks for a fight; nothing happens until the app begins it, so the world freezes meanwhile. */
 fun Game.startFight(
     c: Caravan, label: String, kind: Int, points: Float, fortified: Boolean, aftermath: BattleAftermath,
-    settlement: Int = -1, site: Int = -1, wasHostile: Boolean = false,
+    settlement: Int = -1, site: Int = -1, wasHostile: Boolean = false, enemyFaction: Int = -1,
 ) {
     c.inBattle = true
-    pendingBattle = BattlePlan(c.id, label, kind, points, fortified, aftermath, settlement, site, wasHostile, tick)
+    pendingBattle = BattlePlan(c.id, label, kind, points, fortified, aftermath, settlement, site, wasHostile, tick, enemyFaction)
     say("${c.name} is attacked by $label!", 3)
 }
 

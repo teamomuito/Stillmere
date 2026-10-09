@@ -8,22 +8,24 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 16
+    private const val VERSION = 17
     private const val OLDEST_READABLE = 14
 
-    private fun DataOutputStream.writePlan(p: BattlePlan) {
+    private fun DataOutputStream.writePlan(p: BattlePlan, version: Int) {
         writeInt(p.caravanId); writeUTF(p.label); writeInt(p.kind); writeFloat(p.points); writeBoolean(p.fortified)
         writeInt(p.aftermath.ordinal); writeInt(p.settlement); writeInt(p.site); writeBoolean(p.wasHostile); writeLong(p.startTick)
         writeBoolean(p.retreating); writeInt(p.outcome?.ordinal ?: -1); writeInt(p.lostOnRetreat)
         writeInt(p.carrierOf.size); for ((d, c) in p.carrierOf) { writeInt(d); writeInt(c) }
+        if (version >= 17) writeInt(p.enemyFaction)
     }
 
-    private fun DataInputStream.readPlan(): BattlePlan {
+    private fun DataInputStream.readPlan(version: Int): BattlePlan {
         val p = BattlePlan(readInt(), readUTF(), readInt(), readFloat(), readBoolean(), BattleAftermath.entries[readInt()], readInt(), readInt(), readBoolean(), readLong())
         p.retreating = readBoolean()
         val oc = readInt(); p.outcome = if (oc >= 0) BattleOutcome.entries[oc] else null
         p.lostOnRetreat = readInt()
         repeat(readInt()) { p.carrierOf[readInt()] = readInt() }
+        if (version >= 17) p.enemyFaction = readInt()
         return p
     }
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
@@ -135,16 +137,24 @@ object SaveGame {
         // Fights: one that is pending, and the battle map this game is, with the world it came from nested inside.
         if (version >= 16) {
             o.writeBoolean(g.pendingBattle != null)
-            g.pendingBattle?.let { o.writePlan(it) }
+            g.pendingBattle?.let { o.writePlan(it, version) }
             val bp = g.battle
             o.writeBoolean(bp != null)
             if (bp != null) {
-                o.writePlan(bp)
+                o.writePlan(bp, version)
                 o.writeInt(g.battleMembers.size)
                 for (p in g.battleMembers) { o.writeBoolean(p in g.pawns); writePawn(o, p, g.tick) }
                 val world = write(g.parent!!, version)
                 o.writeInt(world.size); o.write(world)
             }
+        }
+        // Ransom offers and the prisoners they are cooling down for.
+        if (version >= 17) {
+            o.writeInt(g.nextRansomId)
+            o.writeInt(g.ransomOffers.size)
+            for (r in g.ransomOffers) { o.writeInt(r.id); o.writeInt(r.prisonerId); o.writeUTF(r.prisonerName); o.writeInt(r.factionId); o.writeInt(r.price); o.writeLong(r.expires) }
+            o.writeInt(g.ransomCooldown.size)
+            for ((k, v) in g.ransomCooldown) { o.writeInt(k); o.writeLong(v) }
         }
         o.flush()
         return bytes.toByteArray()
@@ -323,9 +333,9 @@ object SaveGame {
         g.log.clear()
         repeat(i.readInt()) { g.log.add(LogEntry(i.readLong(), i.readUTF(), i.readInt())) }
         if (version >= 16) {
-            if (i.readBoolean()) g.pendingBattle = i.readPlan()
+            if (i.readBoolean()) g.pendingBattle = i.readPlan(version)
             if (i.readBoolean()) {
-                val plan = i.readPlan()
+                val plan = i.readPlan(version)
                 val members = ArrayList<Pair<Pawn, Boolean>>()
                 repeat(i.readInt()) { val onMap = i.readBoolean(); members.add(readPawn(i, tick) to onMap) }
                 val worldBytes = ByteArray(i.readInt()); i.readFully(worldBytes)
@@ -341,6 +351,11 @@ object SaveGame {
                 }
                 for ((p, _) in members) g.recomputeHealth(p)
             }
+        }
+        if (version >= 17) {
+            g.nextRansomId = i.readInt()
+            repeat(i.readInt()) { g.ransomOffers.add(RansomOffer(i.readInt(), i.readInt(), i.readUTF(), i.readInt(), i.readInt(), i.readLong())) }
+            repeat(i.readInt()) { g.ransomCooldown[i.readInt()] = i.readLong() }
         }
         map.rebuildRooms(g.outdoorTemp())
         for (p in g.pawns) g.recomputeHealth(p)

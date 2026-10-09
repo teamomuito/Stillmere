@@ -26,14 +26,24 @@ fun Game.stripApparel(p: Pawn, w: Worn) {
 
 fun Game.releasePrisoner(p: Pawn) {
     if (!p.prisoner) return
+    dismissPrisoner(p, goodwill = 12)
+    say("${p.name} was released.", 0)
+}
+
+/**
+ * A prisoner stops being one and walks off the map as a visitor (the same exit as released prisoners). Their bed is
+ * freed and their faction's goodwill changes by [goodwill]. Shared by releasing and ransoming.
+ */
+internal fun Game.dismissPrisoner(p: Pawn, goodwill: Int) {
     p.prisoner = false
     p.faction = Faction.VISITOR
     p.retreating = true
     p.escapeTick = tick
     p.homeTile = -1
-    if (p.wfaction >= 0) world.factions.getOrNull(p.wfaction)?.let { adjustGoodwill(it, 12) }
+    p.bedId = -1
+    for (b in map.buildings()) if (b.ownerId == p.id) b.ownerId = -1
+    if (p.wfaction >= 0) world.factions.getOrNull(p.wfaction)?.let { adjustGoodwill(it, goodwill) }
     endJob(p)
-    say("${p.name} was released.", 0)
 }
 
 fun Game.setPrisonerBed(bed: Building, v: Boolean) {

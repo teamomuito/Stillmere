@@ -106,6 +106,7 @@ fun Game.hourlyEvents() {
     }
     // Visitors leaving and arriving.
     tradersHourly()
+    ransomTick()
     // Prisoners with a bad mood try to break out.
     for (p in prisoners) if (!p.escaping && p.mood < 0.28f && rng.chance(0.05f)) {
         p.escaping = true; endJob(p)

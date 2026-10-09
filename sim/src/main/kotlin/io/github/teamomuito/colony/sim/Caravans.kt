@@ -303,7 +303,7 @@ private fun Game.animalAmbush(c: Caravan) {
 
 private fun Game.banditAmbush(c: Caravan) {
     val f = world.factions.filter { it.kind == 2 }.let { it[rng.int(it.size)] }
-    startFight(c, "${f.name} bandits", 0, ambushPoints(c, 38f), false, BattleAftermath.AMBUSH)
+    startFight(c, "${f.name} bandits", 0, ambushPoints(c, 38f), false, BattleAftermath.AMBUSH, enemyFaction = f.id)
 }
 
 private fun Game.findCache(c: Caravan) {
@@ -331,7 +331,7 @@ private fun Game.arrive(c: Caravan) {
     refreshSettlement(s)
     val f = s.faction
     if (hostileTo(f)) {
-        startFight(c, "${s.name} guards", 0, defenderPoints(s) * 0.5f, false, BattleAftermath.SETTLEMENT_GUARDS, settlement = world.settlements.indexOf(s))
+        startFight(c, "${s.name} guards", 0, defenderPoints(s) * 0.5f, false, BattleAftermath.SETTLEMENT_GUARDS, settlement = world.settlements.indexOf(s), enemyFaction = s.faction.id)
         return
     }
     say("${c.name} arrived at ${s.name} (${f.label}).", 1)
@@ -344,7 +344,7 @@ private fun Game.defenderPoints(s: Settlement): Float {
 
 private fun Game.clearSite(c: Caravan, site: Site) {
     say("${c.name} reached the ${site.name}.", 1)
-    startFight(c, "the ${site.name}", 0, site.strength, true, BattleAftermath.SITE, site = site.id)
+    startFight(c, "the ${site.name}", 0, site.strength, true, BattleAftermath.SITE, site = site.id, enemyFaction = site.factionId)
 }
 
 /** Attack a settlement: its defenders fight behind sandbags on a battle map the player commands. */
@@ -356,7 +356,7 @@ fun Game.attackSettlement(c: Caravan, s: Settlement): String? {
     val wasHostile = hostileTo(s.faction)
     if (!s.faction.permanentEnemy) adjustGoodwill(s.faction, -100)
     startFight(c, "${s.name}'s defenders", 0, defenderPoints(s), true, BattleAftermath.SETTLEMENT_ASSAULT,
-        settlement = world.settlements.indexOf(s), wasHostile = wasHostile)
+        settlement = world.settlements.indexOf(s), wasHostile = wasHostile, enemyFaction = s.faction.id)
     return null
 }
 

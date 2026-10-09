@@ -23,7 +23,9 @@ import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.Research
 import io.github.teamomuito.colony.sim.SaveGame
 import io.github.teamomuito.colony.sim.TutorialState
+import io.github.teamomuito.colony.sim.acceptRansom
 import io.github.teamomuito.colony.sim.beginBattle
+import io.github.teamomuito.colony.sim.declineRansom
 import io.github.teamomuito.colony.sim.requestRetreat
 import io.github.teamomuito.colony.sim.resolveBattle
 import io.github.teamomuito.colony.sim.settle
@@ -397,7 +399,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private class Alert(val text: String, val level: Int, val x: Int = -1, val y: Int = -1)
+    /** An alert on the colony bar. [offerId] is set for a ransom offer, which opens its dialog instead of centring the view. */
+    private class Alert(val text: String, val level: Int, val x: Int = -1, val y: Int = -1, val offerId: Int = -1)
 
     private fun computeAlerts(): List<Alert> {
         val g = game
@@ -431,9 +434,25 @@ class MainActivity : Activity() {
         if (g.trader() != null) { val t = g.pawnById(g.trader()!!.pawnId); out += Alert("Trader here", 1, t?.x ?: -1, t?.y ?: -1) }
         val esc = g.prisoners.firstOrNull { it.escaping }
         if (esc != null) out += Alert("Prisoner escaping!", 3, esc.x, esc.y)
+        for (o in g.ransomOffers) out += Alert("Ransom ${o.prisonerName}: ${o.price} silver", 2, offerId = o.id)
         val crops = g.map.plant.count { it?.type?.crop == true }
         if (crops > 0 && g.outdoorTemp() < 2f) out += Alert("Crops may freeze", 2)
         return out.sortedByDescending { it.level }.take(7)
+    }
+
+    private fun showRansomOffer(offerId: Int) {
+        val o = game.ransomOffers.firstOrNull { it.id == offerId } ?: return refreshAlerts()
+        val faction = game.world.factions.getOrNull(o.factionId)?.name ?: "A faction"
+        val days = ((o.expires - game.tick).coerceAtLeast(0L) / TICKS_PER_DAY.toLong()).toInt()
+        AlertDialog.Builder(this)
+            .setTitle("Ransom offer")
+            .setMessage("$faction will pay ${o.price} silver for ${o.prisonerName}, a prisoner in your colony. " +
+                "The offer ends in ${if (days <= 0) "less than a day" else "$days day(s)"}. Declining annoys them a little.")
+            .setPositiveButton("Accept") { _, _ -> toast(game.acceptRansom(offerId) ?: "${o.prisonerName} was ransomed for ${o.price} silver.") }
+            .setNegativeButton("Decline") { _, _ -> game.declineRansom(offerId); toast("You declined the ransom for ${o.prisonerName}.") }
+            .setNeutralButton("Later", null)
+            .setOnDismissListener { refreshAlerts() }
+            .show()
     }
 
     private fun refreshAlerts() {
@@ -443,7 +462,10 @@ class MainActivity : Activity() {
         for (a in computeAlerts()) {
             val color = when (a.level) { 3 -> 0xDD8A2828.toInt(); 2 -> 0xDD8A6420.toInt(); 1 -> 0xDD4A5A2A.toInt(); else -> 0xDD3A3A3A.toInt() }
             val tv = ui.chip(a.text, color)
-            tv.setOnClickListener { if (a.x >= 0) view.centerOn(a.x.toFloat(), a.y.toFloat()) }
+            tv.setOnClickListener {
+                if (a.offerId >= 0) showRansomOffer(a.offerId)
+                else if (a.x >= 0) view.centerOn(a.x.toFloat(), a.y.toFloat())
+            }
             alertBar.addView(tv, ui.lin(-2, -2, 0f, 0, 2, 0, 0))
         }
     }

@@ -105,6 +105,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     /** On a battle map: its plan, and the world it returns to. */
     var battle: BattlePlan? = null
     var parent: Game? = null
+    /** Open ransom offers for prisoners, and when each prisoner may be offered again. */
+    val ransomOffers = ArrayList<RansomOffer>()
+    val ransomCooldown = HashMap<Int, Long>()
+    var nextRansomId = 1
     /** On a battle map: the caravan's people, alive, whether or not they are still on the map. */
     val battleMembers = ArrayList<Pawn>()
     var hintBits = 0

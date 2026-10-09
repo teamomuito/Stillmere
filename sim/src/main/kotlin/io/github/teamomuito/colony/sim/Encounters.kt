@@ -85,6 +85,7 @@ internal fun Game.createBattleGame(c: Caravan, plan: BattlePlan): Game {
             if (day >= 24 && rng.chance(0.3f)) armor += ItemType.A_HELMET
             val r = bg.newRaider(fx, 22, w, 1, armor)
             r.raidMode = 0
+            r.wfaction = plan.enemyFaction
             bg.placeNear(r, fx + rng.range(0, 3), 22 + rng.range(-7, 7))
             left -= cost + armor.size * 10f
             count++

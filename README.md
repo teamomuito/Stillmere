@@ -68,7 +68,7 @@ player control.
 - Manhunter packs, insect infestations, disease outbreaks, solar flares, eclipses, toxic fallout, short circuits,
   blight, thrumbos, meteorites, aurora, psychic drone and soothe, volcanic winter, crashed mechanoid ships (dormant
   until approached), tame animals wandering in, wanderers joining, supply pods, trade caravans.
-- Prisoners: capture, feed, recruit or release. Escape attempts.
+- Prisoners: capture, feed, recruit or release. Escape attempts. A prisoner's faction may offer silver to ransom them back (accept or decline in the alerts; needs a powered comms console).
 
 **Progress**
 - A 53-item tech tree (plus 64 recipes and 91 items, including heavy weapons, powered armor, flake, yayo and go-juice) from basic crafts to the ship parts. Build the ship and launch to win.

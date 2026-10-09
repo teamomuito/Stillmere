@@ -1430,3 +1430,242 @@ class TutorialTest {
         assertEquals(Tutorial.lessons.size, t.index)
     }
 }
+
+class RansomTest {
+    /** Makes one of the colony's people a prisoner of [factionId] (-1 for nobody). */
+    private fun Game.prisonerOf(factionId: Int, index: Int = colonists.size - 1): Pawn {
+        val p = colonists[index]
+        makePrisoner(p, -1)
+        p.wfaction = factionId
+        return p
+    }
+
+    private fun Game.neutralFaction(): WorldFaction = world.factions.first { !it.permanentEnemy }.also { world.goodwill[it.id] = 10 }
+
+    /** Runs hours until an offer for [p] appears (or gives up). */
+    private fun Game.untilOffer(p: Pawn, hours: Int = 300): RansomOffer? {
+        repeat(hours) { if (ransomOfferFor(p.id) != null) return ransomOfferFor(p.id); run(TICKS_PER_HOUR) }
+        return ransomOfferFor(p.id)
+    }
+
+    private fun Game.fightToEnd(limit: Int = 60_000) {
+        var n = 0
+        while (battle!!.outcome == null && n++ < limit) step()
+    }
+
+    /** A colony with a comms console on a real, charged battery network, so the power recomputes every tick. */
+    private fun setup(seed: Long): Game {
+        val g = newGame(seed, Scenario.LOST_TRIBE); g.quiet()
+        // Solar panel above, a conduit run linking it to the console and the battery beside it.
+        g.map.setBuilding(Building(BuildDef.SOLAR_PANEL, g.homeX + 8, g.homeY + 4, true))
+        // Conduit run from the panel's corner to the console and the battery.
+        val run = listOf(7 to 4, 7 to 5, 7 to 6, 7 to 7, 8 to 7, 9 to 7, 10 to 7)
+        for ((dx, dy) in run) g.map.conduit[g.map.idx(g.homeX + dx, g.homeY + dy)] = true
+        g.map.setBuilding(Building(BuildDef.COMMS_CONSOLE, g.homeX + 8, g.homeY + 8, true))
+        g.map.setBuilding(Building(BuildDef.BATTERY, g.homeX + 10, g.homeY + 8, true).also { it.charge = 600f })
+        g.run(1)
+        return g
+    }
+
+    @Test fun aPowerfulFactionOffersSilverForItsPrisonerWhenTheCommsWork() {
+        val g = setup(111)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        val offer = g.untilOffer(p)
+        assertNotNull(offer)
+        assertEquals(p.id, offer!!.prisonerId)
+        assertEquals(f.id, offer.factionId)
+        assertEquals(g.ransomPrice(f), offer.price)
+        assertTrue(offer.expires > g.tick)
+    }
+
+    @Test fun withoutACommsConsoleNobodyOffers() {
+        val g = newGame(112, Scenario.LOST_TRIBE); g.quiet()
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        assertNull(g.untilOffer(p, hours = 120))
+    }
+
+    @Test fun piratesAndHostileFactionsNeverOffer() {
+        val g = setup(113)
+        val pirate = g.world.factions.first { it.permanentEnemy }
+        val pp = g.prisonerOf(pirate.id)
+        assertNotNull(g.ransomBlocker(pp, pp.name, pirate.id))
+        assertNull(g.untilOffer(pp, hours = 120))
+        val hostile = g.world.factions.first { !it.permanentEnemy }
+        g.world.goodwill[hostile.id] = -90
+        val hp = g.prisonerOf(hostile.id, index = g.colonists.size - 2)
+        assertNull(g.untilOffer(hp, hours = 120))
+    }
+
+    @Test fun acceptingPaysSilverAndTheProsonerWalksOut() {
+        val g = setup(114)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        val offer = g.untilOffer(p)!!
+        val silverBefore = g.map.countItems(ItemType.SILVER)
+        val goodwillBefore = g.world.goodwill[f.id]
+        assertNull(g.acceptRansom(offer.id))
+        assertEquals(silverBefore + offer.price, g.map.countItems(ItemType.SILVER))
+        assertTrue(g.world.goodwill[f.id] > goodwillBefore)
+        assertFalse(p.prisoner)
+        assertEquals(Faction.VISITOR, p.faction)
+        assertNull(g.ransomOfferFor(p.id))
+        g.run(TICKS_PER_DAY)
+        assertFalse("the ransomed prisoner left the colony", p in g.pawns)
+    }
+
+    @Test fun decliningAnnoysTheFactionAndDelaysANewOffer() {
+        val g = setup(115)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        val offer = g.untilOffer(p)!!
+        val goodwill = g.world.goodwill[f.id]
+        assertNull(g.declineRansom(offer.id))
+        assertEquals(goodwill + RANSOM_DECLINE_GOODWILL, g.world.goodwill[f.id])
+        assertTrue(p.prisoner)                              // still in the colony
+        assertNull(g.ransomOfferFor(p.id))
+        // Not offered again during the cooldown...
+        g.run(TICKS_PER_HOUR * 2)
+        assertNull(g.ransomOfferFor(p.id))
+        // ...but offered again once it is over.
+        g.ransomCooldown[p.id] = g.tick
+        assertNotNull(g.untilOffer(p, hours = 120))
+    }
+
+    @Test fun unansweredOffersExpireWithACooldown() {
+        val g = setup(116)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        assertNotNull(g.untilOffer(p))
+        g.run(TICKS_PER_DAY * (RANSOM_OFFER_DAYS + 1))
+        assertNull(g.ransomOfferFor(p.id))
+        assertNotNull(g.ransomCooldown[p.id])              // the prisoner is held back from new offers for a while
+        assertTrue(p.prisoner)
+    }
+
+    @Test fun aPrisonerWhoDiesBeforeTheRansomIsWithdrawn() {
+        val g = setup(117)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        val offer = g.untilOffer(p)!!
+        g.die(p, "test")
+        g.run(TICKS_PER_HOUR * 2)
+        assertNull(g.ransomOfferFor(p.id))
+        assertTrue(g.log.any { it.text.contains("withdrawn") && it.text.contains(p.name) })
+        val silver = g.map.countItems(ItemType.SILVER)
+        assertNotNull(g.acceptRansom(offer.id))
+        assertEquals(silver, g.map.countItems(ItemType.SILVER))
+    }
+
+    @Test fun aPrisonerWhoIsRecruitedOrSpeaksForTheColonyIsWithdrawn() {
+        val g = setup(118)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        g.untilOffer(p)!!
+        g.recruit(p)
+        g.run(TICKS_PER_HOUR)
+        assertNull(g.ransomOfferFor(p.id))
+        assertTrue(p.colonist)
+    }
+
+    @Test fun aFactionTurningHostileWithdrawsItsOffers() {
+        val g = setup(119)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        g.untilOffer(p)!!
+        g.adjustGoodwill(f, -200, spill = false)
+        g.run(TICKS_PER_HOUR)
+        assertNull(g.ransomOfferFor(p.id))
+    }
+
+    @Test fun acceptingNeedsThePowerAndTheOfferToStillBeOpen() {
+        val g = setup(120)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        val offer = g.untilOffer(p)!!
+        g.map.buildings().first { it.def == BuildDef.COMMS_CONSOLE }.powered = false
+        val silver = g.map.countItems(ItemType.SILVER)
+        assertNotNull(g.acceptRansom(offer.id))
+        assertEquals(silver, g.map.countItems(ItemType.SILVER))
+        assertTrue(p.prisoner)
+        assertNotNull(g.acceptRansom(999_999))
+    }
+
+    @Test fun severalPrisonersHaveSeparateOffers() {
+        val g = setup(121)
+        val f = g.neutralFaction()
+        val a = g.prisonerOf(f.id, index = g.colonists.size - 1)
+        val b = g.prisonerOf(f.id, index = g.colonists.size - 2)
+        var n = 0
+        while ((g.ransomOfferFor(a.id) == null || g.ransomOfferFor(b.id) == null) && n++ < 400) g.run(TICKS_PER_HOUR)
+        val oa = g.ransomOfferFor(a.id)!!; val ob = g.ransomOfferFor(b.id)!!
+        assertTrue(oa.id != ob.id)
+        assertNull(g.acceptRansom(oa.id))
+        assertFalse(a.prisoner)
+        assertNotNull(g.ransomOfferFor(b.id))
+        assertTrue(b.prisoner)
+    }
+
+    @Test fun prisonersWithoutAFactionAreNeverOffered() {
+        val g = setup(122)
+        val p = g.prisonerOf(-1)
+        assertNotNull(g.ransomBlocker(p, p.name, p.wfaction))
+        assertNull(g.untilOffer(p, hours = 120))
+    }
+
+
+    @Test fun offersSurviveASaveAndCanBeAcceptedAfterLoading() {
+        val g = setup(123)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        val offer = g.untilOffer(p)!!
+        val l = SaveGame.read(SaveGame.write(g))
+        l.run(250) // powered flags are not saved; the power network is recomputed on the next slow tick (every 250 ticks)
+        val lo = l.ransomOffers.single()
+        assertEquals(offer.price, lo.price); assertEquals(offer.expires, lo.expires)
+        val lp = l.pawnById(p.id)!!
+        assertTrue(lp.prisoner)
+        val silver = l.map.countItems(ItemType.SILVER)
+        assertNull(l.acceptRansom(lo.id))
+        assertEquals(silver + offer.price, l.map.countItems(ItemType.SILVER))
+    }
+
+    @Test fun cooldownsSurviveASave() {
+        val g = setup(124)
+        val f = g.neutralFaction()
+        val p = g.prisonerOf(f.id)
+        g.untilOffer(p)!!
+        g.declineRansom(g.ransomOfferFor(p.id)!!.id)
+        val l = SaveGame.read(SaveGame.write(g))
+        assertEquals(g.ransomCooldown[p.id], l.ransomCooldown[p.id])
+    }
+
+    @Test fun olderSavesStillLoadWithoutOffers() {
+        val g = setup(125)
+        val f = g.neutralFaction()
+        g.prisonerOf(f.id)
+        val l = SaveGame.read(SaveGame.write(g, 16))
+        assertTrue(l.ransomOffers.isEmpty())
+        assertTrue(l.pawns.any { it.prisoner })
+    }
+
+    @Test fun capturedBattleEnemiesKeepTheirFactionSoTheyCanBeRansomed() {
+        val g = newGame(126, Scenario.LOST_TRIBE); g.quiet()
+        g.addComms()
+        val f = g.world.factions.first { it.kind == 1 }
+        g.world.goodwill[f.id] = 10
+        val c = Caravan(g.nextCaravanId++, "Test", g.world.homeTile)
+        for (p in g.colonists.take(4)) { g.pawns.remove(p); c.members.add(p); p.weaponItem = ItemType.W_RIFLE }
+        g.caravans.add(c)
+        g.startFight(c, "${f.name}", 0, 25f, false, BattleAftermath.AMBUSH, enemyFaction = f.id)
+        val bg = g.beginBattle()
+        bg.fightToEnd()
+        g.resolveBattle(bg)
+        val captives = g.pawns.filter { it.prisoner }
+        // Downed raiders are taken prisoner after a win; each one belongs to the faction that sent it.
+        assertTrue(captives.all { it.wfaction == f.id })
+    }
+}
+
+
