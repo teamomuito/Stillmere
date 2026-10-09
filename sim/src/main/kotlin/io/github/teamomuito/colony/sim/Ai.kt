@@ -54,7 +54,7 @@ private fun Game.targetCover(t: Pawn): Float {
     return cover
 }
 
-private fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float): Float {
+internal fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float): Float {
     val skill = p.level(if (w.ranged) SkillType.SHOOTING else SkillType.MELEE)
     var base = w.accuracy * (0.62f + 0.03f * skill) * p.weaponDamageMult().coerceIn(0.8f, 1.15f)
     if (w.ranged) {
@@ -64,6 +64,7 @@ private fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float):
         if (Trait.CAREFUL_SHOOTER in p.traits) base *= 1.12f
         if (weather == Weather.FOG) base *= 0.85f
         if (Trait.TRIGGER_HAPPY in p.traits) base *= 0.92f
+        if (p.suppressedUntil > tick) base *= 0.7f
         base *= (0.55f + 0.45f * t.race.size.coerceIn(0.5f, 1.4f)) // small animals are harder to hit
     } else {
         if (Trait.BRAWLER in p.traits) base *= 1.12f
@@ -105,6 +106,11 @@ fun Game.fire(p: Pawn, t: Pawn) {
                 val dmg = w.damage / w.pellets * (0.85f + rng.float() * 0.3f) * p.weaponDamageMult()
                 if (w.aoe > 0f) explode(target.x, target.y, w.aoe, dmg, p, w == Weapon.MOLOTOV)
                 else dealDamage(target, w.kind, dmg, w.armorPen, p)
+            }
+            // A volley that hits nothing pins down whoever it was aimed at.
+            if (!anyHit && !target.dead) {
+                target.suppressedUntil = max(target.suppressedUntil, tick + TICKS_PER_HOUR)
+                target.addThought("Under fire", -0.04f, tick, TICKS_PER_HOUR)
             }
             shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + 5 + k * 2, anyHit, if (w == Weapon.BOW || w == Weapon.GREATBOW) 3 else 0))
         }

@@ -8,7 +8,7 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 22
+    private const val VERSION = 23
     private const val OLDEST_READABLE = 14
 
     /** Goods off the map: one entry per lot. Before version 22 these were plain kind-and-count pairs. */
@@ -306,6 +306,7 @@ object SaveGame {
             // Read by the next mood update, which runs before the comfort tick that would refresh them.
             o.writeFloat(p.temp); o.writeBoolean(p.dark)
             if (version >= 21) o.writeBoolean(p.abandoned)
+            if (version >= 23) o.writeLong(p.suppressedUntil)
             o.writeInt(p.pathKey); o.writeInt(p.pathI)
             val path = p.path
             if (path == null) o.writeInt(-1) else { o.writeInt(path.size); for (c in path) o.writeInt(c) }
@@ -561,6 +562,7 @@ object SaveGame {
             p.recruitProgress = i.readFloat()
             p.temp = i.readFloat(); p.dark = i.readBoolean()
             if (version >= 21) p.abandoned = i.readBoolean()
+            if (version >= 23) p.suppressedUntil = i.readLong()
             p.pathKey = i.readInt(); p.pathI = i.readInt()
             val pathLen = i.readInt()
             p.path = if (pathLen < 0) null else IntArray(pathLen) { i.readInt() }

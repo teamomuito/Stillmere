@@ -71,6 +71,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var attackCd = 0
     var burstLeft = 0
     var warmup = 0
+    /** Under fire until this tick: the pawn's own ranged shots are less accurate. */
+    var suppressedUntil = 0L
     /** The target this pawn is currently aiming at; -1 for none. Not saved: it is re-chosen after a load. */
     var fightTarget = -1
     var carriedBy = -1
