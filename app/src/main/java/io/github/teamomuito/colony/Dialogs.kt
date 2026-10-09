@@ -160,6 +160,11 @@ class Dialogs(val a: MainActivity) {
             )
             .setCancelable(false)
             .setPositiveButton("New colony") { _, _ -> newColony(false) }
+            .setNeutralButton("Load a save") { _, _ -> SaveUi.showList(a, ui, a.savesStore(), "Load game") { info -> a.loadSlot(info) } }
+            .apply {
+                // After a launch the world is still there: the player may keep playing it.
+                if (won) setNegativeButton("Keep playing") { _, _ -> game.gameOver = false; game.won = false }
+            }
             .show()
     }
 

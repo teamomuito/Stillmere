@@ -112,7 +112,7 @@ class IncidentDef(
 internal object IncidentRegistry {
     val all: List<IncidentDef> = listOf(
         IncidentDef(Incident.RAID_ATTACK, IncidentCategory.RAID, IncidentChannel.RAID,
-            eligible = { !it.raidActive },
+            eligible = { !it.raidActive && !it.quietAfterRaid },
             run = { launchRaid() }),
         IncidentDef(Incident.WANDERER, IncidentCategory.WANDERER, IncidentChannel.WANDERER, friendly = true,
             eligible = { it.colonists < 14 },
@@ -218,8 +218,10 @@ internal fun Game.chaosInterval(minDays: Int, maxDays: Int): Int {
     val lo = minDays * TICKS_PER_DAY
     val hi = maxDays * TICKS_PER_DAY
     val chaos = storyteller.chaos
+    // Orrin builds at a slower pace: his incidents are spaced further apart.
+    val pace = if (storyteller == Storyteller.ORRIN) 1.5f else 1f
     val base = rng.range(lo, hi)
-    return (base * (1f - 0.5f * chaos + chaos * rng.float())).toInt().coerceAtLeast(TICKS_PER_DAY / 2)
+    return (base * pace * (1f - 0.5f * chaos + chaos * rng.float())).toInt().coerceAtLeast(TICKS_PER_DAY / 2)
 }
 
 internal fun Game.timerOf(ch: IncidentChannel): Long = when (ch) {

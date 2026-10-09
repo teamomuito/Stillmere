@@ -93,8 +93,8 @@ class CombatPipelineTest {
             val me = g.place(g.colonists[0], g.homeX, g.homeY)
             me.weaponItem = ItemType.W_RIFLE
             val target = g.enemy(g.homeX + 8, g.homeY)
-            // Sandbags two tiles in front of the target: on the line, but not beside the target.
-            if (cover) g.map.setBuilding(Building(BuildDef.SANDBAGS, g.homeX + 6, g.homeY, true))
+            // Sandbags beside the target: cover counts only when it stands next to the one being shot at.
+            if (cover) g.map.setBuilding(Building(BuildDef.SANDBAGS, g.homeX + 7, g.homeY, true))
             // The target dies partway through, so compare hit rates over the shots actually taken.
             repeat(200) { g.shoot(me, target) }
             return g.shots.count { it.hit } * 1000 / g.shots.size

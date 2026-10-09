@@ -49,7 +49,7 @@ fun Game.tradersHourly() {
         if (tick > t.leaveAt) {
             p.retreating = true
             if (!pawns.contains(p)) it.remove()
-            for (v in pawns) if (v.faction == Faction.VISITOR) v.retreating = true
+            for (v in pawns) if (v.faction == Faction.VISITOR && !v.refugee) v.retreating = true
             if (tick > t.leaveAt + 2000) { traders.remove(t); break }
         }
     }

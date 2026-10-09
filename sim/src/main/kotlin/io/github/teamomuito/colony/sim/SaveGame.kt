@@ -224,8 +224,10 @@ object SaveGame {
             o.writeBoolean(bp != null)
             if (bp != null) {
                 o.writePlan(bp, version)
-                o.writeInt(g.battleMembers.size)
-                for (p in g.battleMembers) { o.writeBoolean(p in g.pawns); writePawn(o, p, g.tick, version) }
+                // Only the living are kept: a member killed earlier in the same tick must not come back alive.
+                val living = g.battleMembers.filter { it.alive }
+                o.writeInt(living.size)
+                for (p in living) { o.writeBoolean(p in g.pawns); writePawn(o, p, g.tick, version) }
                 val world = write(g.parent!!, version)
                 o.writeInt(world.size); o.write(world)
             }

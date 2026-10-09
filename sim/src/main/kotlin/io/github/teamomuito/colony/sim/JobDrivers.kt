@@ -288,7 +288,12 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
         val b = map.building[map.idx(j.tx, j.ty)]
         if (b == null || !b.built || !b.def.sleeps) { if (b == null) p.bedId = -1; endJob(p); return }
         val r = goTo(p, j.tx, j.ty)
-        if (r == -1) { endJob(p); return }
+        if (r == -1) {
+            // No way to the bed: remember that, and sleep where they are rather than trying the same bed every tick.
+            markUnreachable(p, key(map.idx(j.tx, j.ty), K_BED))
+            j.stage = 1; j.amount = 0; j.tx = p.x; j.ty = p.y
+            return
+        }
         if (r == 0) { j.stage = 1; if (b.def.medical) b.occupant = p.id }
         return
     }
@@ -989,6 +994,10 @@ fun Game.recruit(o: Pawn) {
     o.faction = Faction.PLAYER
     o.homeTile = -1
     o.bedId = -1
+    // The prison bed they were held in is free again, and a visitor's leaving orders no longer apply.
+    for (b in map.buildings()) if (b.ownerId == o.id) b.ownerId = -1
+    for (b in map.buildings()) if (b.occupant == o.id) b.occupant = -1
+    o.retreating = false; o.escapeTick = 0; o.drafted = false
     o.mood = 0.45f
     // Fresh clothes and a clean slate.
     o.thoughts.clear()

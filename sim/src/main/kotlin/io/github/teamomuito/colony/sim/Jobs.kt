@@ -187,7 +187,7 @@ fun Game.think(p: Pawn) {
     if (p.ally) return
     if (p.hostile && !p.colonist) { p.job = Job(if (p.retreating) JobType.LEAVE else JobType.RAID); return }
     if (p.hostileFlag) { p.job = Job(JobType.RAID); return }
-    if (p.breakUntil > tick) { p.job = Job(JobType.BREAK); return }
+    if (p.breakUntil > tick && p.food >= 0.15f && p.rest >= 0.15f) { p.job = Job(JobType.BREAK); return }
     if (p.prisoner) { thinkPrisoner(p); return }
     if (p.faction == Faction.VISITOR) { thinkVisitor(p); return }
     if (p.drafted) return
@@ -315,11 +315,14 @@ internal fun Game.findBedFor(p: Pawn, forceMedical: Boolean = false): Int {
             val b = map.building[it]
             b != null && b.built && b.def.medical && (b.occupant == -1 || b.occupant == p.id || pawnById(b.occupant)?.alive != true) && (p.prisoner == b.prisonerBed || !b.prisonerBed)
         }
-        if (bed >= 0) { map.building[bed]!!.occupant = p.id; return bed }
+        if (bed >= 0) { map.building[bed]!!.occupant = p.id; p.bedId = bed; return bed }
     }
     if (p.bedId >= 0) {
         val b = map.building[p.bedId]
-        if (b != null && b.built && b.def.sleeps && b.ownerId == p.id) return p.bedId else p.bedId = -1
+        // A bed the pawn cannot reach right now is skipped; they will sleep on the ground instead.
+        val reachable = !isBad(p, key(p.bedId, K_BED))
+        val held = b != null && b.built && b.def.sleeps && (b.ownerId == p.id || b.def.medical && b.occupant == p.id)
+        if (held && reachable) return p.bedId else if (!held) p.bedId = -1
     }
     bed = nearestCell(p, K_BED) {
         val b = map.building[it]
@@ -329,7 +332,7 @@ internal fun Game.findBedFor(p: Pawn, forceMedical: Boolean = false): Int {
     if (bed >= 0) { map.building[bed]!!.ownerId = p.id; p.bedId = bed; return bed }
     if (!p.prisoner) {
         bed = nearestCell(p, K_BED) { val b = map.building[it]; b != null && b.built && b.def.medical && !b.prisonerBed && (b.occupant == -1 || b.occupant == p.id) && b.ownerId == -1 }
-        if (bed >= 0) { map.building[bed]!!.occupant = p.id; return bed }
+        if (bed >= 0) { map.building[bed]!!.occupant = p.id; p.bedId = bed; return bed }
     }
     return -1
 }

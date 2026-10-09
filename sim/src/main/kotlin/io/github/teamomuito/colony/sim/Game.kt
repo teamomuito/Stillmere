@@ -473,8 +473,12 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (!t.passable || t == Terrain.WATER_SHALLOW) return false
         if (def.research != null && def.research !in researchDone) return false
         if (def == BuildDef.CONDUIT) return map.building[i] == null && !map.conduitAt(i)
+        if (def.isFloor) {
+            // A floor can be laid under furniture, but not under a wall or door, and not twice.
+            val under = map.building[i]
+            return map.floor[i] != def && (under == null || !under.def.isWall && !under.def.isDoor)
+        }
         if (map.building[i] != null) return false
-        if (def.isFloor) return map.floor[i] != def
         if (def == BuildDef.HYDROPONICS && map.plant[i] != null) return false
         if (def.isShip && def == BuildDef.SHIP_COMPUTER && map.buildings().any { it != null && it.def == BuildDef.SHIP_COMPUTER }) return false
         if (def.workbench && def != BuildDef.CAMPFIRE && def != BuildDef.CRAFTING_SPOT && map.plant[i]?.type?.isTree == true) return false
@@ -705,7 +709,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     private fun hourlyTick() {
         hourlyEvents()
         alliesHourly()
-        if (hour == 0) { factionsDaily(); lifeDaily() }
+        // A fight on a temporary map does not run the colony's or the world's daily upkeep.
+        if (hour == 0 && !encounter) { factionsDaily(); lifeDaily() }
         autosaveHook?.invoke()
     }
 

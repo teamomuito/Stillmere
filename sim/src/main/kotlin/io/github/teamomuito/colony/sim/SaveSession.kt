@@ -80,6 +80,20 @@ class SaveSession(private val store: SaveStore, private val settings: SessionSet
         settings.currentSlot = slot
     }
 
+    /**
+     * Moves play to another game in the same session (a battle map, a colony switch, a settled colony). Play time carries
+     * on from this session, the named save stays linked, and the change counts as unsaved until the player saves.
+     */
+    fun swapInPlay(g: Game, nowMs: Long) {
+        val total = clock.totalMs(nowMs)
+        clock.pause(nowMs)
+        game = g
+        g.playMs = total
+        clock = PlayClock(total)
+        clock.resume(nowMs)
+        savedTick = -1L
+    }
+
     /** The game is leaving the screen: stop counting and record the time in the game. */
     fun pause(nowMs: Long) {
         clock.pause(nowMs)

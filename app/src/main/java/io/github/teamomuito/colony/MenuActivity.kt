@@ -31,6 +31,7 @@ class MenuActivity : Activity() {
         super.onCreate(savedInstanceState)
         ui = UiKit(this)
         prefs = Prefs(this)
+        I18n.lang = prefs.language
         build()
         if (!prefs.tutorialAsked) root.post { askAboutTutorial() }
         intent.getStringExtra(MainActivity.EXTRA_ERROR)?.let { msg ->
@@ -48,11 +49,11 @@ class MenuActivity : Activity() {
             setPadding(ui.dp(24), ui.dp(24), ui.dp(24), ui.dp(24))
         }
         root.addView(ui.label("STILLMERE", 34f, ui.accent, true).apply { gravity = Gravity.CENTER; letterSpacing = 0.12f }, ui.lin(-2, -2, 0f, 0, 24, 0, 2))
-        root.addView(ui.label("A colony survival sim. Survive the frontier, build a settlement, and leave.", 12f, ui.dim).apply { gravity = Gravity.CENTER }, ui.lin(-2, -2, 0f, 0, 0, 0, 24))
+        root.addView(ui.label(I18n.t("A colony survival sim. Survive the frontier, build a settlement, and leave."), 12f, ui.dim).apply { gravity = Gravity.CENTER }, ui.lin(-2, -2, 0f, 0, 0, 0, 24))
 
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun item(label: String, enabled: Boolean = true, onClick: () -> Unit) {
-            column.addView(ui.button(label, 15f) { if (enabled) ui.guard(onClick) }.apply { alpha = if (enabled) 1f else 0.4f },
+            column.addView(ui.button(I18n.t(label), 15f) { if (enabled) ui.guard(onClick) }.apply { alpha = if (enabled) 1f else 0.4f },
                 ui.lin(-1, -2, 0f, 0, 0, 0, 8))
         }
         item("Continue", continueAvailable()) { start(MainActivity.ACTION_CONTINUE) }
@@ -135,14 +136,14 @@ class MenuActivity : Activity() {
     /** A new colony or the tutorial colony replaces the Continue game; saved games are kept. Ask first if there is one. */
     private fun confirmReplace(go: () -> Unit) {
         if (!continueAvailable()) { go(); return }
-        AlertDialog.Builder(this).setTitle("Replace your Continue game?")
+        AlertDialog.Builder(this).setTitle(I18n.t("Replace your Continue game?"))
             .setMessage("Starting a new colony replaces the game Continue resumes. Your saved games are kept.")
             .setPositiveButton("Replace") { _, _ -> go() }
             .setNegativeButton("Cancel", null).show()
     }
 
     private fun askAboutTutorial() {
-        AlertDialog.Builder(this).setTitle("Start with the tutorial?")
+        AlertDialog.Builder(this).setTitle(I18n.t("Start with the tutorial?"))
             .setMessage("A short, optional walkthrough of the basics. It can be skipped at any step, turned off in Settings, or replayed from the menu.")
             .setPositiveButton("Yes, teach me") { _, _ -> prefs.tutorialOn = true; prefs.tutorialAsked = true }
             .setNegativeButton("No thanks") { _, _ -> prefs.tutorialOn = false; prefs.tutorialAsked = true }
@@ -151,18 +152,28 @@ class MenuActivity : Activity() {
 
     private fun settings() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(ui.dp(16), ui.dp(8), ui.dp(16), 0) }
+        box.addView(ui.label(I18n.t("Language"), 13f, ui.accent, true))
+        for ((code, name) in listOf(I18n.EN to "English", I18n.PT_BR to "Português (Brasil)")) {
+            box.addView(ui.button(name + if (prefs.language == code) "  ✓" else "", 13f) {
+                if (prefs.language != code) {
+                    prefs.language = code
+                    I18n.lang = code
+                    recreate()
+                }
+            }, ui.lin(-1, -2, 0f, 0, 6, 0, 0))
+        }
         val check = CheckBox(this).apply {
-            text = "Show the tutorial in new colonies"
+            text = I18n.t("Show the tutorial in new colonies")
             setTextColor(ui.text)
             isChecked = prefs.tutorialOn
             setOnCheckedChangeListener { _, on -> prefs.tutorialOn = on }
         }
         box.addView(check)
-        box.addView(ui.button("Start the tutorial over", 12f) {
+        box.addView(ui.button(I18n.t("Start the tutorial over"), 12f) {
             prefs.saveTutorial(io.github.teamomuito.colony.sim.TutorialState())
             toastDone()
         }, ui.lin(-1, -2, 0f, 0, 10, 0, 0))
-        AlertDialog.Builder(this).setTitle("Settings").setView(box).setPositiveButton("Done", null).show()
+        AlertDialog.Builder(this).setTitle(I18n.t("Settings")).setView(box).setPositiveButton(I18n.t("Done"), null).show()
     }
 
     private fun toastDone() = android.widget.Toast.makeText(this, "The tutorial will start from the beginning.", android.widget.Toast.LENGTH_SHORT).show()
@@ -170,6 +181,6 @@ class MenuActivity : Activity() {
     private fun howToPlay() {
         val text = ui.label(HelpText.text, 12f).apply { setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(12)) }
         val scroll = ScrollView(this).apply { addView(text) }
-        AlertDialog.Builder(this).setTitle("How to play").setView(scroll).setPositiveButton("Close", null).show()
+        AlertDialog.Builder(this).setTitle(I18n.t("How to play")).setView(scroll).setPositiveButton(I18n.t("Close"), null).show()
     }
 }

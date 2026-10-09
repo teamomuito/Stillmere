@@ -96,7 +96,7 @@ private fun Game.pickRaidKind(): Int {
     if (day >= 14 && hasWalls) { opts += 1; opts += 1 }
     if (day >= 16) opts += 2
     if (day >= 12) opts += 3
-    if (day >= 26) { opts += 4; opts += 4 }
+    // Mechanoids come from crashed ships and dormant clusters, not from raiders.
     return opts[rng.int(opts.size)]
 }
 
@@ -287,6 +287,8 @@ internal fun Game.refugees() {
     val ref = newHuman(e.first, e.second, Faction.VISITOR)
     ref.refugee = true
     ref.homeTile = -1
+    // They wait to be rescued for two days; after that they leave, as the message promised.
+    ref.escapeTick = tick + 2 * TICKS_PER_DAY
     // Wounded and exhausted.
     val torso = ref.race.body.indexOfFirst { it.tag == PartTag.TORSO }
     woundPart(ref, torso, DamageKind.CUT, 14f)

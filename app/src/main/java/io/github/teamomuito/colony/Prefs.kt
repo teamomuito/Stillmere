@@ -12,6 +12,11 @@ class Prefs(c: Context) {
         get() = p.getBoolean("tutorial_on", true)
         set(v) { p.edit().putBoolean("tutorial_on", v).apply() }
 
+    /** The language of the menus: [I18n.EN] or [I18n.PT_BR]. */
+    var language: String
+        get() = p.getString("language", I18n.EN) ?: I18n.EN
+        set(v) { p.edit().putString("language", v).apply() }
+
     /** Whether the first-run question about the tutorial has been answered. */
     var tutorialAsked: Boolean
         get() = p.getBoolean("tutorial_asked", false)

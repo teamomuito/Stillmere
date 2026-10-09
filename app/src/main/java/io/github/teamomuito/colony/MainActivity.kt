@@ -109,6 +109,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         ui = UiKit(this)
         prefs = Prefs(this)
+        I18n.lang = prefs.language
         migrateLegacySave()
         // Android restarts a killed activity with the intent it was first given. The game it was playing is in the
         // autosave, so a restored activity continues from there instead of starting what that intent asked for.
@@ -895,7 +896,8 @@ class MainActivity : Activity() {
 
     /** A settled colony becomes the game in play. It has no named save of its own. */
     private fun swapTo(g: Game) {
-        session.startNew(g, clockNow(), archivesNow())
+        session.swapInPlay(g, clockNow())
+        session.autosave(clockNow(), archivesNow())
         showGame()
     }
 

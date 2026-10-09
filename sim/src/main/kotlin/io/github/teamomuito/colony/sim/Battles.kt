@@ -76,7 +76,8 @@ internal fun Game.battleTick() {
         return
     }
     if (pawns.none { it.hostile && it.alive && !it.downed && !it.retreating }) { b.outcome = BattleOutcome.VICTORY; return }
-    if (tick - b.startTick > BATTLE_LIMIT) b.outcome = BattleOutcome.RETREAT
+    // Out of time: the colony withdraws the way a manual retreat would, carrying and leaving people as usual.
+    if (tick - b.startTick > BATTLE_LIMIT) { requestRetreat(); return }
 }
 
 /**
@@ -137,7 +138,11 @@ fun Game.resolveBattle(bg: Game) {
             val captor = world.factions.firstOrNull { it.id == plan.enemyFaction }
             val taken = left.filter { !it.isAnimal }
             if (captor != null) takeCaptive(c.tile, captor, taken, plan.points)
-            else if (taken.isNotEmpty()) say("${taken.size} people were lost on the way.", 3)
+            else for (lost in taken) {
+                // No one took them: left in the wild, they are lost, and the colony records it as a death.
+                recordBattleDeath(lost, "lost in the wilds after ${plan.label}")
+                say("${lost.name} was lost in the wilds.", 3)
+            }
         }
         BattleOutcome.VICTORY -> {
             // Battlefield loot: what the dead and the enemy left behind. Corpses are not taken.

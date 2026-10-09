@@ -143,6 +143,8 @@ fun Game.dealDamage(
         for (w in target.apparel) if ((w.type.apparel?.cover ?: 0) and cover != 0) w.hp -= dmg * 0.1f
         target.apparel.removeAll { it.hp <= 0f }
     }
+    // Harder or softer colonists on the difficulty setting: applies to the people the player commands.
+    if (target.faction == Faction.PLAYER && !target.isAnimal) dmg *= difficulty.colonistDamage
     if (dmg < 0.3f) return
     if (Trait.TOUGH in target.traits) dmg *= 0.75f
     applyWound(target, part, kind, dmg, source)
@@ -363,6 +365,7 @@ fun Game.downPawn(p: Pawn) {
 
 fun Game.maybeStandUp(p: Pawn) {
     if (!p.downed || p.dead) return
+    if (p.breakKind == Break.CATATONIC && p.breakUntil > tick) return
     if (p.cap[Cap.CONSCIOUSNESS.ordinal] >= 0.4f && (p.cap[Cap.MOVING.ordinal] >= 0.16f) && p.pain < 0.75f && p.carriedBy < 0) {
         p.downed = false
         if (p.colonist) say("${p.name} got back up.", 0)

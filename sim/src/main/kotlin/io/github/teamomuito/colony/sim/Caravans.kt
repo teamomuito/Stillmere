@@ -203,6 +203,10 @@ private fun Game.caravanStep(c: Caravan, dt: Int) {
     }
     c.members.removeAll { it.dead }
     if (c.members.none { it.alive }) { caravans.remove(c); say("${c.name} was lost.", 3); return }
+    // Animals cannot lead a caravan. With no person left, the caravan breaks up rather than waiting forever.
+    if (c.humans.isEmpty()) { caravans.remove(c); say("${c.name} has no one left to lead it. The animals scatter and the cargo is lost.", 3); return }
+    // People who were downed in a fight get back up as they heal, here as they do on the colony map.
+    for (h in c.humans) if (h.downed) maybeStandUp(h)
     if (c.humans.none { !it.downed }) {
         // Nobody can walk; wait for wounds to heal.
         c.resting = true

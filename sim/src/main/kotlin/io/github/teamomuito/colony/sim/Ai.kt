@@ -33,16 +33,25 @@ internal class ShotPath(val blocked: Boolean, val interceptor: Pawn?, val cover:
  * takes it, friend or foe, as in the game it imitates. Cover is the best cover anywhere on the line.
  */
 internal fun Game.shotPath(p: Pawn, t: Pawn): ShotPath {
-    var cover = 0f
     for (c in map.cellsBetween(p.x, p.y, t.x, t.y)) {
         val b = map.building[c]
         if (b != null && b.built && b.def.blocksSight) return ShotPath(blocked = true, interceptor = null, cover = 0f)
-        if (b != null && b.built) cover = max(cover, b.def.cover)
         val x = map.xOf(c); val y = map.yOf(c)
         val occupant = pawnAt(x, y)
-        if (occupant != null && occupant !== p) return ShotPath(blocked = false, interceptor = occupant, cover = cover)
+        if (occupant != null && occupant !== p) return ShotPath(blocked = false, interceptor = occupant, cover = targetCover(t))
     }
-    return ShotPath(blocked = false, interceptor = null, cover = cover)
+    return ShotPath(blocked = false, interceptor = null, cover = targetCover(t))
+}
+
+/** Cover a target stands behind: the best cover beside it. Cover that is only somewhere along the line does not count. */
+private fun Game.targetCover(t: Pawn): Float {
+    var cover = 0f
+    for (dy in -1..1) for (dx in -1..1) {
+        if (dx == 0 && dy == 0 || !map.inB(t.x + dx, t.y + dy)) continue
+        val b = map.building[map.idx(t.x + dx, t.y + dy)]
+        if (b != null && b.built) cover = max(cover, b.def.cover)
+    }
+    return cover
 }
 
 private fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float): Float {
@@ -219,7 +228,8 @@ internal fun Game.hostileAI(p: Pawn) {
         return
     }
     // Wounded raiders run away.
-    if (!p.colonist && !p.retreating && p.healthFraction() < 0.45f && rng.chance(0.002f)) { p.retreating = true; endJob(p); return }
+    // A badly hurt raider may break and run, but not within the first hour of their wounds.
+    if (!p.colonist && !p.retreating && p.healthFraction() < 0.45f && rng.chance(0.00005f)) { p.retreating = true; endJob(p); return }
     j.timer++
     // Siege: wait at the camp and lob mortar shells until the clock runs out.
     if (p.raidMode == 2 && p.campX >= 0 && day * TICKS_PER_DAY + 0 < tick) {
@@ -328,7 +338,7 @@ internal fun Game.thinkPrisoner(p: Pawn) {
 }
 
 internal fun Game.thinkVisitor(p: Pawn) {
-    if (p.retreating || tick > p.escapeTick) { p.job = Job(JobType.LEAVE); return }
+    if (p.retreating || p.escapeTick > 0 && tick > p.escapeTick) { p.job = Job(JobType.LEAVE); return }
     val j = Job(if (rng.chance(0.5f)) JobType.WANDER else JobType.IDLE)
     j.timer = rng.range(80, 200)
     p.job = j

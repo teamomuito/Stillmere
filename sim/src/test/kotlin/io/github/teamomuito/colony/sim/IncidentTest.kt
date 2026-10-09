@@ -162,7 +162,8 @@ class IncidentTest {
             val c = story.chaos
             for (ch in IncidentChannel.entries) {
                 val lo = ch.minDays * TICKS_PER_DAY * (1f - 0.5f * c) - 1
-                val hi = ch.maxDays * TICKS_PER_DAY * (1f + 0.5f * c) + 1
+                val pace = if (story == Storyteller.ORRIN) 1.5f else 1f
+                val hi = ch.maxDays * TICKS_PER_DAY * pace * (1f + 0.5f * c) + 1
                 repeat(100) {
                     val d = g.chaosInterval(ch)
                     assertTrue("$story $ch spacing $d outside [$lo, $hi]", d >= lo && d <= hi)
