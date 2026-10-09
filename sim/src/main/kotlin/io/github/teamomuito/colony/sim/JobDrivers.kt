@@ -479,7 +479,10 @@ private fun Game.driveHaul(p: Pawn, j: Job) {
             else if (r == 0) {
                 if (s.corpseOf != null) {
                     map.items.remove(i); j.stack = s
-                } else pickUp(p, i, s.type, s.type.stack)
+                } else if (pickUp(p, i, s.type, s.type.stack) == 0) {
+                    // The stack changed while we walked over: nothing to haul after all.
+                    endJob(p); return
+                }
                 unreserve(p, j.key)
                 j.stage = 1
             }

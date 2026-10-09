@@ -18,6 +18,7 @@ internal fun pawnKey(id: Int, kind: Int) = 2_000_000 + id * 8 + kind
 
 fun Game.endJob(p: Pawn) {
     releaseAll(p)
+    releaseMedicalBeds(p)
     val j = p.job
     if (j != null) for ((t, n, q) in j.held) map.drop(t, n, p.x, p.y, q)
     j?.stack?.let { placeStack(it, p.x, p.y); j.stack = null }
@@ -27,6 +28,11 @@ fun Game.endJob(p: Pawn) {
     p.job = null
     p.clearPath()
     p.warmup = 0
+}
+
+/** A hospital bed is held by its patient, and stays held until that patient's job ends. */
+internal fun Game.releaseMedicalBeds(p: Pawn) {
+    for (b in map.buildings()) if (b.def.medical && b.occupant == p.id) b.occupant = -1
 }
 
 internal fun Game.unreserve(p: Pawn, k: Int) {
@@ -144,6 +150,30 @@ fun Game.threatNear(p: Pawn): Boolean {
     return false
 }
 
+/** Below these a pawn drops whatever it is doing to eat or sleep, if it can. */
+internal const val URGENT_FOOD = 0.15f
+internal const val URGENT_REST = 0.1f
+
+/** Jobs that are never dropped for a need: the need itself, threats, breaks, and work that must finish. */
+private val needProofJobs = setOf(
+    JobType.EAT, JobType.SLEEP, JobType.REST, JobType.FLEE, JobType.ATTACK, JobType.BREAK,
+    JobType.RAID, JobType.LEAVE, JobType.MOVE, JobType.SURGERY, JobType.FIREFIGHT,
+)
+
+/**
+ * Urgent hunger or exhaustion interrupts whatever a colonist is doing, the same way a threat does. Food is only
+ * taken when some is actually available, so a starving pawn with no food keeps working instead of thrashing.
+ */
+internal fun Game.interruptForNeeds(p: Pawn) {
+    val t = p.job?.type ?: return
+    if (t in needProofJobs) return
+    val eatNow = p.food < URGENT_FOOD && findFood(p) != null
+    val sleepNow = p.rest < URGENT_REST
+    if (!eatNow && !sleepNow) return
+    endJob(p)
+    if (eatNow) startEat(p) else startSleep(p)
+}
+
 fun Game.think(p: Pawn) {
     if (p.ally) return
     if (p.hostile && !p.colonist) { p.job = Job(if (p.retreating) JobType.LEAVE else JobType.RAID); return }
@@ -231,7 +261,8 @@ private fun Game.foodScore(p: Pawn, t: ItemType, rot: Float): Int {
     }
 }
 
-internal fun Game.startEat(p: Pawn): Boolean {
+/** The food this pawn would eat next, or null when there is none it may eat. */
+internal fun Game.findFood(p: Pawn): ItemStack? {
     var best: ItemStack? = null
     var bs = Int.MAX_VALUE
     for (s in map.items.values) {
@@ -244,7 +275,11 @@ internal fun Game.startEat(p: Pawn): Boolean {
         val score = sc * 25 + d
         if (score < bs) { bs = score; best = s }
     }
-    val s = best ?: return false
+    return best
+}
+
+internal fun Game.startEat(p: Pawn): Boolean {
+    val s = findFood(p) ?: return false
     val j = Job(JobType.EAT, s.x, s.y)
     j.key = key(map.idx(s.x, s.y), K_ITEM)
     j.item = s.type

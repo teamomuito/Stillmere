@@ -677,7 +677,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             setDrafted(p, false)
             say("${p.name} stood down to rest and eat.", 0)
         }
-        if (p.colonist && !p.drafted && p.job != null && tick % 10 == (p.id % 10).toLong() && shouldReact(p)) endJob(p)
+        if (p.colonist && !p.drafted && p.job != null && tick % 10 == (p.id % 10).toLong()) {
+            if (shouldReact(p)) endJob(p) else interruptForNeeds(p)
+        }
         if (p.job == null) think(p)
         driveJob(p)
     }
