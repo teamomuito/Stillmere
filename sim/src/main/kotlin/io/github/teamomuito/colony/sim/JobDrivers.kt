@@ -69,6 +69,7 @@ fun Game.driveJob(p: Pawn) {
         JobType.SHEAR -> driveGather(p, j)
         JobType.HUNT -> driveHunt(p, j)
         JobType.TAME -> driveTame(p, j)
+        JobType.TRAIN -> driveTrain(p, j)
         JobType.SLAUGHTER -> driveSlaughter(p, j)
         JobType.BUTCHER -> driveButcher(p, j)
         JobType.CLEAN -> driveClean(p, j)
@@ -1101,6 +1102,27 @@ private fun Game.driveHunt(p: Pawn, j: Job) {
         if (goTo(p, a.x, a.y, adjacent = true) == -1) abort(p)
     }
     if (++j.timer > 2600) abort(p)
+}
+
+/** Teaches a tame animal one trick at a time. Each attempt takes a while and succeeds more often with a skilled handler. */
+private fun Game.driveTrain(p: Pawn, j: Job) {
+    val a = pawnById(j.targetPawn)
+    if (a == null || !a.alive || !a.tame || a.trained >= MAX_TRICKS) { endJob(p); return }
+    if (j.stage == 0) {
+        val r = goTo(p, a.x, a.y, adjacent = true)
+        if (r == -1) abort(p) else if (r == 0) { j.stage = 1; j.timer = 0 }
+        return
+    }
+    if (++j.timer >= 300) {
+        j.timer = 0
+        p.gainXp(SkillType.ANIMALS, 60f)
+        val chance = (0.25f + p.level(SkillType.ANIMALS) * 0.05f) * (1.2f - a.race.wildness)
+        if (rng.float() < chance.coerceIn(0.05f, 0.9f)) {
+            a.trained++
+            say("${p.name} taught ${a.name} a trick.", 0)
+            endJob(p)
+        }
+    }
 }
 
 private fun Game.driveTame(p: Pawn, j: Job) {

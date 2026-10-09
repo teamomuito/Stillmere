@@ -457,6 +457,12 @@ internal fun Game.findHandle(p: Pawn): Job? {
                 return j
             }
         }
+        // Teach tame animals tricks once they are fed.
+        if (a.tame && a.trained < MAX_TRICKS && a.food >= 0.3f && !a.downed) {
+            reserve(p, k)
+            val j = Job(JobType.TRAIN, a.x, a.y); j.targetPawn = a.id; j.key = k
+            return j
+        }
         // Gather wool and milk.
         val prod = a.race.product
         if (prod != null && (prod == ItemType.WOOL || prod == ItemType.MILK) && a.animalProductTimer > TICKS_PER_DAY * 0.7f && a.tame && a.stage == LifeStage.ADULT) {

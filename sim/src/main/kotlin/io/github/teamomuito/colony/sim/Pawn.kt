@@ -16,7 +16,12 @@ enum class JobType(val label: String) {
     CLEAN("Cleaning"), FIREFIGHT("Fighting fire"), JOY("Relaxing"), REST("Resting"), SURGERY("Operating"),
     SOCIAL("Chatting"), GRAZE("Grazing"), WAIT("Waiting"), TRADE("Trading"), CHASE("Chasing"), HUNT_PREY("Hunting"),
     EXTINGUISH("Putting out fire"), DELIVER("Delivering"), BURY("Burying"), SMOKE("Taking a drug"),
+    // Appended last: saves store job types by ordinal.
+    TRAIN("Training animal"),
 }
+
+/** Most tricks a tamed animal can learn. */
+const val MAX_TRICKS = 2
 
 class Job(val type: JobType, var tx: Int = -1, var ty: Int = -1) {
     var stage = 0
@@ -73,6 +78,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var warmup = 0
     /** Under fire until this tick: the pawn's own ranged shots are less accurate. */
     var suppressedUntil = 0L
+    /** Tricks a tamed animal has learned, 0 to [MAX_TRICKS]. Trained animals hit harder. */
+    var trained = 0
     /** The target this pawn is currently aiming at; -1 for none. Not saved: it is re-chosen after a load. */
     var fightTarget = -1
     var carriedBy = -1
@@ -271,7 +278,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
 
     val weapon: Weapon get() = weaponItem?.weapon ?: race.weapon
 
-    fun weaponDamageMult() = if (weaponItem != null) weaponQuality.mult else 1f
+    fun weaponDamageMult() = (if (weaponItem != null) weaponQuality.mult else 1f) * (if (isAnimal) 1f + 0.2f * trained else 1f)
 
     fun armorFor(coverBit: Int, sharp: Boolean): Float {
         var armor = if (race.mech) race.armor * (if (sharp) 1f else 0.6f) else 0f
