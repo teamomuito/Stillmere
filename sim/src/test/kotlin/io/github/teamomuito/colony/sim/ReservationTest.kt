@@ -143,10 +143,11 @@ class ReservationTest {
         assertTrue(g.reserve(patient, key(40, K_ITEM)))
 
         val l = SaveGame.read(SaveGame.write(g))
-        assertTrue("no claims survive a load", l.reservations.isEmpty())
-        assertEquals("the bed is free after a load", -1, l.map.building[bed]!!.occupant)
+        // The claim is part of the saved job state, so it comes back with its owner and no one else holds it.
         val loadedPatient = l.pawns.first { it.id == patient.id }
-        assertTrue(loadedPatient.reserved.isEmpty())
-        assertTrue("a loaded pawn can claim again", l.reserve(loadedPatient, key(40, K_ITEM)))
+        assertEquals(setOf(key(40, K_ITEM)), loadedPatient.reserved.toSet())
+        assertEquals(setOf(patient.id), l.reservations[key(40, K_ITEM)])
+        // A patient with no job does not hold a hospital bed after a load.
+        assertEquals("the bed is free after a load", -1, l.map.building[bed]!!.occupant)
     }
 }

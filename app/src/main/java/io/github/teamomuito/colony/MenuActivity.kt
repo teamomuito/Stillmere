@@ -10,6 +10,8 @@ import android.view.View
 import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import io.github.teamomuito.colony.sim.SaveException
+import io.github.teamomuito.colony.sim.SaveSession
 import io.github.teamomuito.colony.sim.SaveStore
 import java.io.File
 
@@ -18,8 +20,12 @@ class MenuActivity : Activity() {
     private lateinit var ui: UiKit
     private lateinit var prefs: Prefs
     private val store by lazy { SaveStore(File(filesDir, "saves")) }
-    /** Continue has a game when there is an autosave, or the old single save file that has not been moved over yet. */
-    private fun continueAvailable() = store.exists(SaveStore.AUTOSAVE) || File(filesDir, "colony.sav").exists()
+    private val session by lazy { SaveSession(store, PrefsSettings(prefs)) }
+    /**
+     * Continue has a game when there is an autosave, its recovery copy, or the old single save file that has not been
+     * moved over yet.
+     */
+    private fun continueAvailable() = store.exists(SaveStore.AUTOSAVE) || store.exists(SaveStore.AUTOSAVE_BACKUP) || File(filesDir, "colony.sav").exists()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,8 +56,8 @@ class MenuActivity : Activity() {
                 ui.lin(-1, -2, 0f, 0, 0, 0, 8))
         }
         item("Continue", continueAvailable()) { start(MainActivity.ACTION_CONTINUE) }
-        item("Load game") { SaveUi.showList(this, ui, store, "Load game") { info -> start(MainActivity.ACTION_LOAD, info.id) } }
-        item("Quickload", store.exists(SaveStore.QUICKSAVE)) { start(MainActivity.ACTION_LOAD, SaveStore.QUICKSAVE) }
+        item("Load game") { SaveUi.showList(this, ui, store, "Load game") { info -> confirmLoad(info.id) } }
+        item("Quickload", store.exists(SaveStore.QUICKSAVE)) { confirmLoad(SaveStore.QUICKSAVE) }
         item("New colony") { confirmReplace { start(MainActivity.ACTION_NEW) } }
         item("Tutorial colony") { confirmReplace { start(MainActivity.ACTION_TUTORIAL) } }
         item("Settings") { settings() }
@@ -62,6 +68,22 @@ class MenuActivity : Activity() {
 
         val scroll = ScrollView(this).apply { addView(root); isVerticalScrollBarEnabled = false; isFillViewport = true }
         setContentView(scroll)
+    }
+
+    /**
+     * Checks the save, then loads it. Loading makes it the game Continue resumes, so when Continue is a different game
+     * the player is told; that game is kept as the backup, not lost. A save that can't be read is refused here.
+     */
+    private fun confirmLoad(id: String) {
+        val plan = try { session.planLoad(id) } catch (e: SaveException) {
+            android.widget.Toast.makeText(this, "That save couldn't be loaded: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!plan.replacesContinue) { start(MainActivity.ACTION_LOAD, id); return }
+        AlertDialog.Builder(this).setTitle("Load \"${plan.loaded.info.name}\"?")
+            .setMessage("Continue currently resumes a different game. Loading this save makes it the game Continue resumes. The game Continue has now is kept as a backup.")
+            .setPositiveButton("Load") { _, _ -> start(MainActivity.ACTION_LOAD, id) }
+            .setNegativeButton("Cancel", null).show()
     }
 
     private fun start(action: String, slot: String? = null) {

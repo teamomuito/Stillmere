@@ -23,24 +23,41 @@ private fun Game.run(ticks: Int) { repeat(ticks) { step() } }
 
 private fun newStore(): SaveStore = SaveStore(Files.createTempDirectory("saves").toFile())
 
-/**
- * Changes a slot's body after [edit]. With [fixChecksum] the checksum is recomputed, so the change looks like a valid
- * file; without it the change is damage the checksum must catch.
- */
+/** Where a slot's header ends and its body starts, and where the body length sits. */
+private class SlotLayout(val bodyLenPos: Int, val bodyStart: Int)
+
+private fun layoutOf(bytes: ByteArray): SlotLayout {
+    val h = java.io.DataInputStream(bytes.inputStream())
+    h.readInt(); val container = h.readInt(); h.readUTF(); h.readLong(); h.readLong(); h.readUTF(); h.readInt(); h.readInt(); h.readLong()
+    val bodyLenPos = bytes.size - h.available()
+    h.readInt(); h.readLong()
+    if (container >= 2) repeat(h.readInt()) { h.readInt(); h.readUTF(); h.readUTF() }
+    return SlotLayout(bodyLenPos, bytes.size - h.available())
+}
+
+/** Changes the stored (compressed) body of a slot. Without [fixChecksum] the change is damage the checksum must catch. */
 private fun SaveStore.editBody(id: String, fixChecksum: Boolean, edit: (ByteArray) -> Unit) {
     val f = file(id)
     val bytes = f.readBytes()
-    val h = DataInputStream(bytes.inputStream())
-    h.readInt(); h.readInt(); h.readUTF(); h.readLong(); h.readLong(); h.readUTF(); h.readInt(); h.readInt(); h.readLong()
-    val bodyLen = h.readInt(); h.readLong()
-    val headerEnd = bytes.size - h.available()
-    val body = bytes.copyOfRange(headerEnd, bytes.size)
+    val layout = layoutOf(bytes)
+    val body = bytes.copyOfRange(layout.bodyStart, bytes.size)
     edit(body)
-    val crc = CRC32().apply { update(body) }.value
-    val out = bytes.copyOf(headerEnd)
-    // The checksum is the last 8 bytes of the header; the body length sits just before it.
-    if (fixChecksum) java.nio.ByteBuffer.wrap(out, headerEnd - 8, 8).putLong(crc)
-    java.nio.ByteBuffer.wrap(out, headerEnd - 12, 4).putInt(bodyLen)
+    val out = bytes.copyOf(layout.bodyStart)
+    if (fixChecksum) java.nio.ByteBuffer.wrap(out, layout.bodyLenPos + 4, 8).putLong(CRC32().apply { update(body) }.value)
+    f.writeBytes(out + body)
+}
+
+/** Changes the game inside a slot and writes it back properly: unpacked, edited, packed again, with the checksum renewed. */
+private fun SaveStore.editPayload(id: String, edit: (ByteArray) -> Unit) {
+    val f = file(id)
+    val bytes = f.readBytes()
+    val layout = layoutOf(bytes)
+    val raw = java.util.zip.InflaterInputStream(bytes.copyOfRange(layout.bodyStart, bytes.size).inputStream()).readBytes()
+    edit(raw)
+    val body = java.io.ByteArrayOutputStream().also { packed -> java.util.zip.DeflaterOutputStream(packed).use { it.write(raw) } }.toByteArray()
+    val out = bytes.copyOf(layout.bodyStart)
+    java.nio.ByteBuffer.wrap(out, layout.bodyLenPos, 4).putInt(body.size)
+    java.nio.ByteBuffer.wrap(out, layout.bodyLenPos + 4, 8).putLong(CRC32().apply { update(body) }.value)
     f.writeBytes(out + body)
 }
 
@@ -213,7 +230,7 @@ class SaveStoreTest {
         val g = newGame(91)
         store.write("save-a", "Alpha", g)
         // The game payload's version number is its first four bytes, after the payload length.
-        store.editBody("save-a", fixChecksum = true) { body -> java.nio.ByteBuffer.wrap(body, 4, 4).putInt(99) }
+        store.editPayload("save-a") { raw -> java.nio.ByteBuffer.wrap(raw, 4, 4).putInt(99) }
         try { store.read("save-a"); fail("an incompatible save loaded") } catch (e: SaveException) {
             assertTrue(e.message!!, e.message!!.contains("incompatible"))
         }

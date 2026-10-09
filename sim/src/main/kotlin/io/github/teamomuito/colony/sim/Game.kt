@@ -35,12 +35,19 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     val finder = Pathfinder(map)
     var tick = 6L * TICKS_PER_HOUR
     val pawns = ArrayList<Pawn>()
+    /**
+     * Shots and blasts on screen. They are presentation only: damage is applied when a shot is fired or an explosion
+     * goes off, so nothing here changes the game. They are not saved, and a loaded game shows none of them. Only the
+     * renderer reads them (SaveRestoreTest checks that nothing else depends on them).
+     */
     val shots = ArrayList<Shot>()
     val blasts = ArrayList<Blast>()
     val log = ArrayList<LogEntry>()
     /** Who holds each reserved key. See Reservations.kt. */
     val reservations = HashMap<Int, LinkedHashSet<Int>>()
     val unreachable = HashMap<Long, Long>()
+    /** Milliseconds of play time, counted by the app while the game is running. Saved with the game. */
+    var playMs = 0L
     var nextPawnId = 1
 
     // Settings

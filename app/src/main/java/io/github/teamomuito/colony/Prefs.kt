@@ -22,9 +22,24 @@ class Prefs(c: Context) {
         get() = p.getString("current_slot", null)
         set(v) { p.edit().putString("current_slot", v).apply() }
 
+    /** The save the autosave was loaded from. Null for a game that started new. */
+    var continueOrigin: String?
+        get() = p.getString("continue_origin", null)
+        set(v) { p.edit().putString("continue_origin", v).apply() }
+
     fun loadTutorial(): TutorialState = TutorialState(p.getInt("tut_index", 0), p.getBoolean("tut_active", true))
 
     fun saveTutorial(t: TutorialState) {
         p.edit().putInt("tut_index", t.index).putBoolean("tut_active", t.active).apply()
     }
+}
+
+/** The session's settings, kept in the device's preferences. */
+class PrefsSettings(private val p: Prefs) : io.github.teamomuito.colony.sim.SessionSettings {
+    override var currentSlot: String?
+        get() = p.currentSlot
+        set(v) { p.currentSlot = v }
+    override var continueOrigin: String?
+        get() = p.continueOrigin
+        set(v) { p.continueOrigin = v }
 }

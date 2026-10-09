@@ -15,7 +15,9 @@ internal const val K_STATION = 7
 internal const val K_GRAVE = 8
 
 internal fun key(i: Int, kind: Int) = i * KEY_KINDS + kind
-internal fun pawnKey(id: Int, kind: Int) = 2_000_000 + id * KEY_KINDS + kind
+/** Pawn claims start here, above every cell key. */
+internal const val PAWN_KEY_BASE = 2_000_000
+internal fun pawnKey(id: Int, kind: Int) = PAWN_KEY_BASE + id * KEY_KINDS + kind
 
 fun Game.endJob(p: Pawn) {
     releaseAll(p)

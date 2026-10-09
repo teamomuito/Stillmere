@@ -8,7 +8,7 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 18
+    private const val VERSION = 19
     private const val OLDEST_READABLE = 14
 
     private fun DataOutputStream.writePlan(p: BattlePlan, version: Int) {
@@ -29,6 +29,48 @@ object SaveGame {
         return p
     }
     private fun DataOutputStream.opt(s: String?) { writeBoolean(s != null); if (s != null) writeUTF(s) }
+
+    /** An item stack held by a job (carried to a drop cell, or a corpse on its way to a grave). Keeps its id. */
+    private fun DataOutputStream.writeJobStack(s: ItemStack) {
+        writeInt(s.id); writeInt(s.type.ordinal); writeShort(s.x); writeShort(s.y); writeInt(s.count)
+        writeByte(s.quality.ordinal); writeFloat(s.rot); writeFloat(s.hp); writeBoolean(s.forbidden)
+        opt(s.corpseOf); writeInt(s.corpseRace?.ordinal ?: -1); writeBoolean(s.corpseColonist); writeInt(s.corpseAge)
+    }
+
+    private fun DataInputStream.readJobStack(): ItemStack {
+        val id = readInt(); val t = ItemType.entries[readInt()]
+        val x = readShort().toInt(); val y = readShort().toInt(); val n = readInt()
+        val s = ItemStack(id, t, n, x, y)
+        s.quality = Quality.entries[readByte().toInt()]; s.rot = readFloat(); s.hp = readFloat(); s.forbidden = readBoolean()
+        s.corpseOf = opt(); val cr = readInt(); s.corpseRace = if (cr >= 0) Race.entries[cr] else null
+        s.corpseColonist = readBoolean(); s.corpseAge = readInt()
+        return s
+    }
+
+    /** A job exactly as it was: what it is doing, its targets, progress, what it holds, and the stack it carries. */
+    private fun DataOutputStream.writeJob(j: Job) {
+        writeInt(j.type.ordinal); writeInt(j.tx); writeInt(j.ty); writeInt(j.stage); writeInt(j.timer); writeFloat(j.work)
+        writeInt(j.targetPawn); writeInt(j.key); writeInt(j.amount); writeInt(j.dx); writeInt(j.dy); writeInt(j.bench); writeInt(j.billIndex)
+        writeInt(j.item?.ordinal ?: -1); writeInt(j.aux); writeInt(j.ingIdx); writeInt(j.collected)
+        writeInt(j.held.size); for ((t, n, q) in j.held) { writeInt(t.ordinal); writeInt(n); writeInt(q.ordinal) }
+        writeFloat(j.heldRot)
+        val st = j.stack
+        writeBoolean(st != null)
+        if (st != null) writeJobStack(st)
+    }
+
+    private fun DataInputStream.readJob(): Job {
+        val type = JobType.entries[readInt()]
+        val j = Job(type, readInt(), readInt())
+        j.stage = readInt(); j.timer = readInt(); j.work = readFloat()
+        j.targetPawn = readInt(); j.key = readInt(); j.amount = readInt(); j.dx = readInt(); j.dy = readInt(); j.bench = readInt(); j.billIndex = readInt()
+        val item = readInt(); j.item = if (item >= 0) ItemType.entries[item] else null
+        j.aux = readInt(); j.ingIdx = readInt(); j.collected = readInt()
+        repeat(readInt()) { val t = ItemType.entries[readInt()]; val n = readInt(); j.held.add(Triple(t, n, Quality.entries[readInt()])) }
+        j.heldRot = readFloat()
+        if (readBoolean()) j.stack = readJobStack()
+        return j
+    }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
 
     /** [version] other than the current one exists only so tests can check that older saves still load. */
@@ -161,6 +203,10 @@ object SaveGame {
             o.writeLong(g.rng.state)
             o.writeBoolean(g.gameOver); o.writeBoolean(g.won); o.writeBoolean(g.encounter); o.writeBoolean(g.mentalBreaksEnabled)
         }
+        if (version >= 19) {
+            o.writeLong(g.playMs)
+            o.writeInt(g.unreachable.size); for ((k, v) in g.unreachable) { o.writeLong(k); o.writeLong(v) }
+        }
         o.flush()
         return bytes.toByteArray()
     }
@@ -208,6 +254,22 @@ object SaveGame {
             o.writeInt(p.carryType?.ordinal ?: -1); o.writeInt(p.carryCount); o.writeInt(p.carryQuality.ordinal)
             o.writeInt(p.surgeries.size)
             for (s in p.surgeries) { o.writeInt(s.kind.ordinal); o.writeInt(s.part); o.writeInt(s.implant?.ordinal ?: -1) }
+        }
+        if (version >= 19) {
+            // Where the pawn is in its movement, its path, what it has claimed, and the job it is doing.
+            o.writeInt(p.carriedBy); o.writeInt(p.carrying); o.writeInt(p.attackCd); o.writeInt(p.warmup); o.writeInt(p.burstLeft)
+            o.writeInt(p.moveCd); o.writeInt(p.moveTotal); o.writeInt(p.fromX); o.writeInt(p.fromY)
+            val joy = p.lastJoyKind.toByteArray(); o.writeInt(joy.size); o.write(joy)
+            o.writeFloat(p.recruitProgress)
+            // Read by the next mood update, which runs before the comfort tick that would refresh them.
+            o.writeFloat(p.temp); o.writeBoolean(p.dark)
+            o.writeInt(p.pathKey); o.writeInt(p.pathI)
+            val path = p.path
+            if (path == null) o.writeInt(-1) else { o.writeInt(path.size); for (c in path) o.writeInt(c) }
+            o.writeInt(p.reserved.size); for (k in p.reserved) o.writeInt(k)
+            val j = p.job
+            o.writeBoolean(j != null)
+            if (j != null) o.writeJob(j)
         }
     }
 
@@ -371,11 +433,14 @@ object SaveGame {
             g.rng.restore(i.readLong())
             g.gameOver = i.readBoolean(); g.won = i.readBoolean(); g.encounter = i.readBoolean(); g.mentalBreaksEnabled = i.readBoolean()
         }
+        if (version >= 19) {
+            g.playMs = i.readLong()
+            repeat(i.readInt()) { g.unreachable[i.readLong()] = i.readLong() }
+        }
         map.rebuildRooms(g.outdoorTemp())
-        // Jobs and reservations are not saved, so no patient is in a hospital bed after loading.
-        for (b in map.buildings()) if (b.def.medical) b.occupant = -1
         for (p in g.pawns) g.recomputeHealth(p)
         for (c in g.caravans) for (p in c.members) g.recomputeHealth(p)
+        g.restoreJobState()
         return g
     }
 
@@ -427,6 +492,18 @@ object SaveGame {
                 val kind = SurgeryKind.entries[i.readInt()]; val part = i.readInt(); val imp = i.readInt()
                 p.surgeries.add(SurgeryOrder(kind, part, if (imp >= 0) Implant.entries[imp] else null))
             }
+        }
+        if (version >= 19) {
+            p.carriedBy = i.readInt(); p.carrying = i.readInt(); p.attackCd = i.readInt(); p.warmup = i.readInt(); p.burstLeft = i.readInt()
+            p.moveCd = i.readInt(); p.moveTotal = i.readInt(); p.fromX = i.readInt(); p.fromY = i.readInt()
+            p.lastJoyKind = ByteArray(i.readInt()).also { i.readFully(it) }.decodeToString()
+            p.recruitProgress = i.readFloat()
+            p.temp = i.readFloat(); p.dark = i.readBoolean()
+            p.pathKey = i.readInt(); p.pathI = i.readInt()
+            val pathLen = i.readInt()
+            p.path = if (pathLen < 0) null else IntArray(pathLen) { i.readInt() }
+            repeat(i.readInt()) { p.reserved.add(i.readInt()) }
+            if (i.readBoolean()) p.job = i.readJob()
         }
         return p
     }
