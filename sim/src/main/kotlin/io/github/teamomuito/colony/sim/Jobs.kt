@@ -653,10 +653,9 @@ internal fun Game.zoneBestFor(p: Pawn, s: ItemStack, from: Int): Int {
     var best = -1
     var bp = if (fromZone != null && fromZone.accepts(s.type, s.quality)) fromZone.priority else -1
     var bd = Int.MAX_VALUE
-    for (i in 0 until map.size) {
-        if (map.zoneId[i] == 0 || i == from) continue
+    for (i in map.storageCells()) {
+        if (i == from) continue
         val z = map.zones[map.zoneId[i]] ?: continue
-        if (z.kind != ZoneKind.STOCKPILE && z.kind != ZoneKind.DUMPING) continue
         if (!z.accepts(s.type, s.quality)) continue
         if (z.priority < bp) continue
         if (fromZone != null && z.priority == bp && fromZone === z) continue

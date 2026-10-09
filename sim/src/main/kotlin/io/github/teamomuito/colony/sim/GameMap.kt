@@ -169,7 +169,35 @@ class GameMap(val w: Int, val h: Int) {
     fun zoneKind(i: Int): Int = zoneAt(i)?.kind ?: 0
 
     private var nextZone = 1
+    /** Bumped whenever zone membership changes, so cached lists of zone cells can be checked for staleness. */
+    var zoneVersion = 0
+    private var storageCache: IntArray? = null
+    private var storageCacheVersion = -1
+
+    /**
+     * The cells that belong to a stockpile or dumping zone, in ascending index order. Rebuilt only when zone membership
+     * changes: the destination search for every haul used to scan the whole map to find these.
+     */
+    fun storageCells(): IntArray {
+        val cached = storageCache
+        if (cached != null && storageCacheVersion == zoneVersion) return cached
+        var n = 0
+        for (i in 0 until size) if (isStorage(i)) n++
+        val out = IntArray(n)
+        var k = 0
+        for (i in 0 until size) if (isStorage(i)) out[k++] = i
+        storageCache = out; storageCacheVersion = zoneVersion
+        return out
+    }
+
+    private fun isStorage(i: Int): Boolean {
+        if (zoneId[i] == 0) return false
+        val z = zones[zoneId[i]] ?: return false
+        return z.kind == ZoneKind.STOCKPILE || z.kind == ZoneKind.DUMPING
+    }
+
     fun newZone(kind: Int): Zone {
+        zoneVersion++
         val z = Zone(nextZone++, kind)
         z.name = when (kind) { ZoneKind.STOCKPILE -> "Stockpile ${z.id}"; ZoneKind.GROWING -> "Growing zone ${z.id}"; else -> "Dumping ${z.id}" }
         zones[z.id] = z

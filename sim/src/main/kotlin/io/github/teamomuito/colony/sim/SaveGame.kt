@@ -360,6 +360,7 @@ object SaveGame {
         }
         for (a in 0 until 3) { map.areaNames[a] = i.readUTF(); for (c in 0 until map.size) map.areas[a][c] = i.readBoolean() }
         map.setNextZone(i.readInt())
+        map.zoneVersion++
         repeat(i.readInt()) {
             val z = Zone(i.readInt(), i.readInt())
             z.name = i.readUTF(); z.priority = i.readInt(); z.crop = PlantType.entries[i.readInt()]

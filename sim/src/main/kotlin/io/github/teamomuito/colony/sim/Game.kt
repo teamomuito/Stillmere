@@ -352,6 +352,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val z = map.newZone(ZoneKind.STOCKPILE)
         z.allowed[ItemType.CORPSE_HUMAN.ordinal] = false
         for (yy in sy - 2..sy) for (xx in sx - 2..sx + 1) { map.zoneId[map.idx(xx, yy)] = z.id; z.cells++ }
+        map.zoneVersion++
         val sup = ArrayList<Pair<ItemType, Int>>()
         when (sc) {
             Scenario.CRASHLANDED -> {
@@ -414,6 +415,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val z = map.newZone(ZoneKind.STOCKPILE)
         z.allowed[ItemType.CORPSE_HUMAN.ordinal] = false
         for (yy in sy - 2..sy) for (xx in sx - 2..sx + 1) { map.zoneId[map.idx(xx, yy)] = z.id; z.cells++ }
+        map.zoneVersion++
         var k = 0
         for ((lot, n) in cargo.entries()) { val cell = k % 8; map.drop(lot, n, sx - 2 + cell % 4, sy - 2 + cell / 4); k++ }
         map.rebuildRooms(outdoorTemp())
@@ -507,6 +509,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             val z = map.zoneAt(i)
             if (z != null) { z.cells--; if (z.cells <= 0) map.zones.remove(z.id) }
             map.zoneId[i] = 0
+            map.zoneVersion++
             return null
         }
         val t = map.terrain[i]
@@ -522,6 +525,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             if (kind == ZoneKind.DUMPING) { it.allowed.fill(false); it.allowed[ItemType.CORPSE_HUMAN.ordinal] = true; it.priority = 0 }
         }
         map.zoneId[i] = z.id
+        map.zoneVersion++
         z.cells++
         return z
     }
@@ -546,6 +550,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     fun deleteZone(zone: Zone) {
         for (i in 0 until map.size) if (map.zoneId[i] == zone.id) map.zoneId[i] = 0
         map.zones.remove(zone.id)
+        map.zoneVersion++
     }
 
     fun setPriority(p: Pawn, w: WorkType, v: Int) {
