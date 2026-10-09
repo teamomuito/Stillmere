@@ -342,9 +342,11 @@ private fun Game.defenderPoints(s: Settlement): Float {
     return (base + day * 2.2f) * difficulty.threat.coerceAtLeast(0.6f)
 }
 
-private fun Game.clearSite(c: Caravan, site: Site) {
+internal fun Game.clearSite(c: Caravan, site: Site) {
     say("${c.name} reached the ${site.name}.", 1)
-    startFight(c, "the ${site.name}", 0, site.strength, true, BattleAftermath.SITE, site = site.id, enemyFaction = site.factionId)
+    val rescue = openQuestAt(site.id)?.kind == QuestKind.RESCUE_CAPTIVES
+    val aftermath = if (rescue) BattleAftermath.RESCUE_CAPTIVES else BattleAftermath.SITE
+    startFight(c, "the ${site.name}", 0, site.strength, true, aftermath, site = site.id, enemyFaction = site.factionId)
 }
 
 /** Attack a settlement: its defenders fight behind sandbags on a battle map the player commands. */

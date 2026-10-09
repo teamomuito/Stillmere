@@ -37,7 +37,7 @@ fun Game.factionsDaily() {
             if (g < 0) world.goodwill[f.id] = g + 1 else if (g > 50) world.goodwill[f.id] = g - 1
         }
     }
-    world.sites.removeAll { it.expires < tick }
+    questsDaily()
     // A faction that likes you may ask for a favour: clear a rival camp.
     if (day >= 6 && world.sites.size < 3 && rng.chance(0.12f)) offerSite()
 }
@@ -57,9 +57,10 @@ private fun Game.offerSite() {
         if (!world.passable(t) || world.settlementAt(t) != null || world.siteAt(t) != null || t == world.homeTile || world.river[t]) return@repeat
         val strength = 24f + day * 1.2f + rng.range(0, 20)
         val reward = (strength * 9f).toInt()
-        val s = Site(world.nextSiteId++, t, 0, foe.id, reward, tick + 14L * TICKS_PER_DAY, strength, "${foe.name} camp")
+        val s = Site(world.nextSiteId++, t, 0, foe.id, reward, tick + CAMP_QUEST_DAYS * TICKS_PER_DAY.toLong(), strength, "${foe.name} camp")
         world.sites.add(s)
-        say("${patron.name} asks you to destroy a ${foe.name} camp near ${home.name} (reward ${s.reward} silver). It appears on the world map.", 1)
+        offerCampQuest(patron, s)
+        say("${patron.name} asks you to destroy a ${foe.name} camp near ${home.name} (reward ${s.reward} silver). Accept the request on the world map.", 1)
         return
     }
 }

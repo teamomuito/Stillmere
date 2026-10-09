@@ -46,6 +46,11 @@ class World(val w: Int, val h: Int) {
     val relation = Array(8) { IntArray(8) }
     val sites = ArrayList<Site>()
     var nextSiteId = 1
+    /** Offers and obligations; see Quests.kt. Saved. */
+    val quests = ArrayList<Quest>()
+    var nextQuestId = 1
+    /** Colonists the enemy holds at camps. Saved with their full pawn state. */
+    val captives = ArrayList<Captive>()
     var homeTile = 0
 
     fun x(t: Int) = t % w

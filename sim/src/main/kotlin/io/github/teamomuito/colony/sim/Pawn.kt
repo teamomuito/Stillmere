@@ -74,6 +74,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     /** The target this pawn is currently aiming at; -1 for none. Not saved: it is re-chosen after a load. */
     var fightTarget = -1
     var carriedBy = -1
+    /** Left on a battle map during a retreat. The enemy may take an abandoned person captive. */
+    var abandoned = false
     var carrying = -1
     var raidId = 0
     var retreating = false

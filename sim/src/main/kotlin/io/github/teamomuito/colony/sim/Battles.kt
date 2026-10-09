@@ -3,7 +3,7 @@ package io.github.teamomuito.colony.sim
 import kotlin.math.max
 
 /** What a won fight does to the world, beyond the loot. Stored as data so it survives a save. */
-enum class BattleAftermath { AMBUSH, SITE, SETTLEMENT_GUARDS, SETTLEMENT_ASSAULT }
+enum class BattleAftermath { AMBUSH, SITE, SETTLEMENT_GUARDS, SETTLEMENT_ASSAULT, RESCUE_CAPTIVES }
 
 enum class BattleOutcome(val label: String) { VICTORY("victory"), DEFEAT("defeat"), RETREAT("retreat") }
 
@@ -94,7 +94,8 @@ fun Game.requestRetreat() {
             carrier.carrying = d.id; d.carriedBy = carrier.id; d.clearPath(); d.job = null
             b.carrierOf[d.id] = carrier.id
         } else {
-            pawns.remove(d); battleMembers.remove(d); releaseAll(d); b.lostOnRetreat++
+            // Left on the field: resolveBattle decides whether the enemy takes them captive.
+            pawns.remove(d); releaseAll(d); d.clearPath(); d.job = null; d.abandoned = true; b.lostOnRetreat++
             say("${d.name} was left behind.", 3)
         }
     }
@@ -115,10 +116,13 @@ fun Game.resolveBattle(bg: Game) {
     val c = caravans.firstOrNull { it.id == plan.caravanId } ?: return
     c.inBattle = false
     val back = bg.battleMembers.filter { it.alive }.toMutableList()
+    // Members abandoned on the field during a retreat. Everyone else either stayed or walked off the edge.
+    val left = back.filter { it.abandoned }
     for (p in back) {
         p.drafted = false; p.retreating = false; p.job = null; releaseAll(p); p.clearPath()
-        p.moveCd = 0; p.carriedBy = -1; p.carrying = -1
+        p.moveCd = 0; p.carriedBy = -1; p.carrying = -1; p.abandoned = false
     }
+    back.removeAll { it in left }
     when (out) {
         BattleOutcome.DEFEAT -> {
             caravans.remove(c)
@@ -129,6 +133,11 @@ fun Game.resolveBattle(bg: Game) {
             c.route.clear(); c.progress = 0f
             c.lastEvent = "Retreated from ${plan.label}."
             say("${c.name} withdrew from ${plan.label}.", 2)
+            // The enemy takes the people left behind. Animals simply wander off.
+            val captor = world.factions.firstOrNull { it.id == plan.enemyFaction }
+            val taken = left.filter { !it.isAnimal }
+            if (captor != null) takeCaptive(c.tile, captor, taken, plan.points)
+            else if (taken.isNotEmpty()) say("${taken.size} people were lost on the way.", 3)
         }
         BattleOutcome.VICTORY -> {
             // Battlefield loot: what the dead and the enemy left behind. Corpses are not taken.
@@ -138,6 +147,8 @@ fun Game.resolveBattle(bg: Game) {
                 makePrisoner(e, -1); back.add(e)
             }
             if (plan.kind == 0) c.inventory[ItemType.SILVER] = caravanSilver(c) + rng.range(20, 90)
+            // Nobody took them, so the people left on the field walk home with the rest.
+            back.addAll(left)
             c.members.clear(); c.members.addAll(back)
             c.lastEvent = "Defeated ${plan.label}."
             say("${c.name} defeated ${plan.label}.", 1)
@@ -153,9 +164,26 @@ private fun Game.afterVictory(c: Caravan, plan: BattlePlan) {
         BattleAftermath.SITE -> {
             val site = world.sites.firstOrNull { it.id == plan.site } ?: return
             world.sites.remove(site)
-            c.inventory[ItemType.SILVER] = caravanSilver(c) + site.reward
-            say("The ${site.name} is cleared. Reward: ${site.reward} silver.", 1)
+            val q = openQuestAt(site.id)
+            if (q != null && q.state == QuestState.ACCEPTED) {
+                q.state = QuestState.COMPLETED; q.resolveAt(tick)
+                c.inventory[ItemType.SILVER] = caravanSilver(c) + q.reward
+                adjustGoodwill(patronOf(q), CAMP_BOUNTY_GOODWILL)
+                say("The ${site.name} is cleared. Reward: ${q.reward} silver.", 1)
+            } else {
+                // Nobody asked for this camp, or the request was never accepted: no bounty.
+                q?.let { it.state = QuestState.EXPIRED; it.resolveAt(tick) }
+                say("The ${site.name} is cleared. Nobody asked for it, so there is no reward.", 1)
+            }
             for (f in world.factions) if (!f.permanentEnemy && world.goodwill[f.id] in 1..99 && world.relation[f.id][site.factionId] == -1) adjustGoodwill(f, 6, false)
+        }
+        BattleAftermath.RESCUE_CAPTIVES -> {
+            val site = world.sites.firstOrNull { it.id == plan.site } ?: return
+            world.sites.remove(site)
+            val q = openQuestAt(site.id) ?: return
+            val n = releaseCaptives(q, c)
+            q.state = QuestState.COMPLETED; q.resolveAt(tick)
+            say("The ${site.name} is cleared. $n ${if (n == 1) "colonist is" else "colonists are"} rescued.", 1)
         }
         BattleAftermath.SETTLEMENT_ASSAULT -> {
             val s = world.settlements.getOrNull(plan.settlement) ?: return

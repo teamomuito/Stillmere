@@ -8,7 +8,7 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 20
+    private const val VERSION = 21
     private const val OLDEST_READABLE = 14
 
     private fun DataOutputStream.writePlan(p: BattlePlan, version: Int) {
@@ -167,6 +167,16 @@ object SaveGame {
         o.writeInt(g.world.nextSiteId)
         o.writeInt(g.world.sites.size)
         for (s2 in g.world.sites) { o.writeInt(s2.id); o.writeInt(s2.tile); o.writeInt(s2.kind); o.writeInt(s2.factionId); o.writeInt(s2.reward); o.writeLong(s2.expires); o.writeFloat(s2.strength); o.writeUTF(s2.name) }
+        if (version >= 21) {
+            o.writeInt(g.world.nextQuestId)
+            o.writeInt(g.world.quests.size)
+            for (q in g.world.quests) {
+                o.writeInt(q.id); o.writeInt(q.kind.ordinal); o.writeInt(q.factionId); o.writeInt(q.siteId); o.writeInt(q.reward)
+                o.writeLong(q.deadline); o.writeInt(q.state.ordinal); o.writeLong(q.resolvedAt)
+            }
+            o.writeInt(g.world.captives.size)
+            for (c in g.world.captives) { o.writeInt(c.questId); writePawn(o, c.pawn, g.tick, version) }
+        }
         o.writeInt(g.nextCaravanId)
         o.writeInt(g.caravans.size)
         for (c in g.caravans) {
@@ -268,6 +278,7 @@ object SaveGame {
             o.writeFloat(p.recruitProgress)
             // Read by the next mood update, which runs before the comfort tick that would refresh them.
             o.writeFloat(p.temp); o.writeBoolean(p.dark)
+            if (version >= 21) o.writeBoolean(p.abandoned)
             o.writeInt(p.pathKey); o.writeInt(p.pathI)
             val path = p.path
             if (path == null) o.writeInt(-1) else { o.writeInt(path.size); for (c in path) o.writeInt(c) }
@@ -403,6 +414,15 @@ object SaveGame {
             }
             g.world.nextSiteId = i.readInt()
             repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readLong(), i.readFloat(), i.readUTF())) }
+            if (version >= 21) {
+                g.world.nextQuestId = i.readInt()
+                repeat(i.readInt()) {
+                    val q = Quest(i.readInt(), QuestKind.entries[i.readInt()], i.readInt(), i.readInt(), i.readInt(), i.readLong())
+                    q.state = QuestState.entries[i.readInt()]; q.resolvedAt = i.readLong()
+                    g.world.quests.add(q)
+                }
+                repeat(i.readInt()) { val qid = i.readInt(); g.world.captives.add(Captive(readPawn(i, tick, version), qid)) }
+            }
             g.nextCaravanId = i.readInt()
             repeat(i.readInt()) {
                 val c = Caravan(i.readInt(), i.readUTF(), i.readInt())
@@ -512,6 +532,7 @@ object SaveGame {
             p.lastJoyKind = ByteArray(i.readInt()).also { i.readFully(it) }.decodeToString()
             p.recruitProgress = i.readFloat()
             p.temp = i.readFloat(); p.dark = i.readBoolean()
+            if (version >= 21) p.abandoned = i.readBoolean()
             p.pathKey = i.readInt(); p.pathI = i.readInt()
             val pathLen = i.readInt()
             p.path = if (pathLen < 0) null else IntArray(pathLen) { i.readInt() }

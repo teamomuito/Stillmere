@@ -39,6 +39,12 @@ import io.github.teamomuito.colony.sim.caravanSell
 import io.github.teamomuito.colony.sim.caravanSellPrice
 import io.github.teamomuito.colony.sim.caravanSilver
 import io.github.teamomuito.colony.sim.attackSettlement
+import io.github.teamomuito.colony.sim.acceptQuest
+import io.github.teamomuito.colony.sim.declineQuest
+import io.github.teamomuito.colony.sim.openQuestAt
+import io.github.teamomuito.colony.sim.captivesOf
+import io.github.teamomuito.colony.sim.QuestKind
+import io.github.teamomuito.colony.sim.QuestState
 import io.github.teamomuito.colony.sim.carryCapacity
 import io.github.teamomuito.colony.sim.disbandCaravan
 import io.github.teamomuito.colony.sim.foodDays
@@ -315,6 +321,16 @@ fun Dialogs.worldMap(focus: Caravan? = null) {
             val site = w.siteAt(sel)
             if (site != null) {
                 info.addView(ui.label("${site.name}: clear it for ${site.reward} silver. Strength ${site.strength.toInt()}, expires in ${f1((site.expires - game.tick).toFloat() / TICKS_PER_DAY)} days.", 11.5f, ui.warn))
+                val q = game.openQuestAt(site.id)
+                if (q != null && q.kind == QuestKind.RESCUE_CAPTIVES) {
+                    val n = game.captivesOf(q).size
+                    info.addView(ui.label("$n colonist${if (n == 1) " is" else "s are"} held here. Clear the camp to bring them home.", 11.5f, ui.warn))
+                }
+                if (q != null && q.state == QuestState.OFFERED) {
+                    info.addView(ui.label("${game.world.factions.first { it.id == q.factionId }.name} asks you to clear this camp. Clearing it unaccepted pays nothing.", 11.5f, ui.dim))
+                    info.addView(ui.button("Accept", 12f) { game.acceptQuest(q.id); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
+                    info.addView(ui.button("Decline", 12f) { game.declineQuest(q.id); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
+                }
             }
         }
         val a2 = active
