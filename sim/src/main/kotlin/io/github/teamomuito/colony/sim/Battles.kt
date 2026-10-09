@@ -116,7 +116,7 @@ fun Game.resolveBattle(bg: Game) {
     c.inBattle = false
     val back = bg.battleMembers.filter { it.alive }.toMutableList()
     for (p in back) {
-        p.drafted = false; p.retreating = false; p.job = null; p.reserved.clear(); p.clearPath()
+        p.drafted = false; p.retreating = false; p.job = null; releaseAll(p); p.clearPath()
         p.moveCd = 0; p.carriedBy = -1; p.carrying = -1
     }
     when (out) {

@@ -38,7 +38,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     val shots = ArrayList<Shot>()
     val blasts = ArrayList<Blast>()
     val log = ArrayList<LogEntry>()
-    val reservations = HashMap<Int, Int>()
+    /** Who holds each reserved key. See Reservations.kt. */
+    val reservations = HashMap<Int, LinkedHashSet<Int>>()
     val unreachable = HashMap<Long, Long>()
     var nextPawnId = 1
 
@@ -390,7 +391,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         for (yy in sy - 4..sy + 4) for (xx in sx - 4..sx + 4) if (map.inB(xx, yy)) map.plant[map.idx(xx, yy)] = null
         for ((k, p) in members.withIndex()) {
             p.x = sx - 1 + k % 5; p.y = sy + 2 + k / 5; p.fromX = p.x; p.fromY = p.y; p.moveCd = 0
-            p.job = null; p.bedId = -1; p.homeTile = -1; p.reserved.clear(); p.clearPath()
+            p.job = null; p.bedId = -1; p.homeTile = -1; releaseAll(p); p.clearPath()
             for (b in 0 until 3) { }
             pawns.add(p)
             recomputeHealth(p)
@@ -405,30 +406,6 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         nextRaid = tick + 6L * TICKS_PER_DAY
         nextTrader = tick + 8L * TICKS_PER_DAY
         say("$name is founded. Build beds, grow food, and survive.", 1)
-    }
-
-    // ------------------------------------------------------------------ reservations
-    fun reserve(p: Pawn, key: Int): Boolean {
-        val holder = reservations[key]
-        if (holder != null && holder != p.id) {
-            val other = pawnById(holder)
-            if (other != null && other.alive && other.reserved.contains(key)) return false
-        }
-        reservations[key] = p.id
-        if (!p.reserved.contains(key)) p.reserved.add(key)
-        return true
-    }
-
-    fun isFree(p: Pawn, key: Int): Boolean {
-        val holder = reservations[key] ?: return true
-        if (holder == p.id) return true
-        val other = pawnById(holder) ?: return true
-        return !(other.alive && other.reserved.contains(key))
-    }
-
-    fun releaseAll(p: Pawn) {
-        for (k in p.reserved) if (reservations[k] == p.id) reservations.remove(k)
-        p.reserved.clear()
     }
 
     // ------------------------------------------------------------------ player API
@@ -694,6 +671,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     // ------------------------------------------------------------------ slow tick (every 250)
     private fun slowTick() {
+        pruneReservations()
         worldSlowTick()
         if (caravans.isNotEmpty() && pendingBattle == null) caravansTick()
         for (p in pawns) if (p.alive) {

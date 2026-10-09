@@ -101,7 +101,8 @@ class JobAiTest {
         val before = g.steelTotal()
         repeat(400) {
             g.step()
-            val holders = g.colonists.flatMap { it.reserved }.groupingBy { it }.eachCount()
+            // Items are worked alone; stockpile destinations are shared, so only item keys are checked here.
+            val holders = g.colonists.flatMap { it.reserved }.filter { kindOf(it) == K_ITEM }.groupingBy { it }.eachCount()
             assertTrue("two pawns reserved one item", holders.values.all { it <= 1 })
             assertEquals("steel conserved", before, g.steelTotal())
         }

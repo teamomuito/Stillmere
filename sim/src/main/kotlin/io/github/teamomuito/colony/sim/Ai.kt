@@ -303,8 +303,7 @@ internal fun Game.findWarden(p: Pawn): Job? {
         .minByOrNull { abs(it.x - p.x) + abs(it.y - p.y) }
     if (captive != null) {
         val bed = prisonBedFor(p)
-        if (bed >= 0) {
-            reserve(p, pawnKey(captive.id, K_PATIENT)); reserve(p, key(bed, K_BED))
+        if (bed >= 0 && reserveAll(p, pawnKey(captive.id, K_PATIENT), key(bed, K_BED))) {
             val j = Job(JobType.CAPTURE, captive.x, captive.y)
             j.targetPawn = captive.id; j.dx = map.xOf(bed); j.dy = map.yOf(bed); j.key = pawnKey(captive.id, K_PATIENT)
             return j
@@ -320,8 +319,7 @@ internal fun Game.findWarden(p: Pawn): Job? {
             val hasFood = map.items.values.any { it.type.isFood && it.type.humanFood && room >= 0 && map.roomId[map.idx(it.x, it.y)] == room }
             if (!hasFood) {
                 val food = nearestItem(p) { it.type.cat == ItemCat.FOOD_MEAL }
-                if (food != null) {
-                    reserve(p, k); reserve(p, key(map.idx(food.x, food.y), K_ITEM))
+                if (food != null && reserveAll(p, k, key(map.idx(food.x, food.y), K_ITEM))) {
                     val j = Job(JobType.FEED_PRISONER, food.x, food.y)
                     j.targetPawn = o.id; j.dx = food.x; j.dy = food.y; j.key = k
                     return j
@@ -369,8 +367,7 @@ internal fun Game.findHandle(p: Pawn): Job? {
         if (a.food < 0.3f) {
             val carn = a.race.diet == Diet.CARNIVORE
             val s = nearestItem(p) { (it.type == ItemType.KIBBLE || (!carn && it.type == ItemType.HAY) || (carn && it.type == ItemType.MEAT) || it.type == ItemType.HAY && a.race.diet != Diet.CARNIVORE) }
-            if (s != null) {
-                reserve(p, k); reserve(p, key(map.idx(s.x, s.y), K_ITEM))
+            if (s != null && reserveAll(p, k, key(map.idx(s.x, s.y), K_ITEM))) {
                 val j = Job(JobType.FEED_ANIMAL, s.x, s.y); j.targetPawn = a.id; j.dx = s.x; j.dy = s.y; j.key = k
                 return j
             }

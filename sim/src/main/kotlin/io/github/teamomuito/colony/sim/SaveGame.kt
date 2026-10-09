@@ -358,6 +358,8 @@ object SaveGame {
             repeat(i.readInt()) { g.ransomCooldown[i.readInt()] = i.readLong() }
         }
         map.rebuildRooms(g.outdoorTemp())
+        // Jobs and reservations are not saved, so no patient is in a hospital bed after loading.
+        for (b in map.buildings()) if (b.def.medical) b.occupant = -1
         for (p in g.pawns) g.recomputeHealth(p)
         for (c in g.caravans) for (p in c.members) g.recomputeHealth(p)
         return g

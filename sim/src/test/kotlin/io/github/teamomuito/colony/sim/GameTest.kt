@@ -920,6 +920,7 @@ class ContentTest {
 
     @Test fun dormantMechsWakeNearColonists() {
         val g = newGame(54); g.quiet()
+        for (p in g.colonists) p.priority[WorkType.HAUL.ordinal] = 0   // hauling would walk the colonist away from the mech
         val far = g.newMech(Race.SCYTHER, g.homeX + 40, g.homeY + 40, -9)
         far.dormant = true
         g.run(200)
@@ -940,6 +941,7 @@ class ContentTest {
 class RulesTest {
     @Test fun outdoorGearWearsAwayButRoofedGearDoesNot() {
         val g = newGame(61); g.quiet()
+        for (p in g.colonists) p.priority[WorkType.HAUL.ordinal] = 0   // gear is hauled to storage otherwise, which is not what this checks
         for (yy in g.homeY + 5..g.homeY + 6) for (xx in g.homeX + 5..g.homeX + 8) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
         g.map.drop(ItemType.W_CLUB, 1, g.homeX + 5, g.homeY + 5)
         g.map.drop(ItemType.W_CLUB, 1, g.homeX + 8, g.homeY + 6)

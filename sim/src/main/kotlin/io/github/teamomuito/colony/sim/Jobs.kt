@@ -12,9 +12,10 @@ internal const val K_DEST = 4
 internal const val K_BED = 5
 internal const val K_PATIENT = 6
 internal const val K_STATION = 7
+internal const val K_GRAVE = 8
 
-internal fun key(i: Int, kind: Int) = i * 8 + kind
-internal fun pawnKey(id: Int, kind: Int) = 2_000_000 + id * 8 + kind
+internal fun key(i: Int, kind: Int) = i * KEY_KINDS + kind
+internal fun pawnKey(id: Int, kind: Int) = 2_000_000 + id * KEY_KINDS + kind
 
 fun Game.endJob(p: Pawn) {
     releaseAll(p)
@@ -33,11 +34,6 @@ fun Game.endJob(p: Pawn) {
 /** A hospital bed is held by its patient, and stays held until that patient's job ends. */
 internal fun Game.releaseMedicalBeds(p: Pawn) {
     for (b in map.buildings()) if (b.def.medical && b.occupant == p.id) b.occupant = -1
-}
-
-internal fun Game.unreserve(p: Pawn, k: Int) {
-    if (reservations[k] == p.id) reservations.remove(k)
-    p.reserved.remove(k)
 }
 
 internal fun Game.markUnreachable(p: Pawn, k: Int) { unreachable[p.id * 10_000_000L + k] = tick + 900 }
@@ -673,8 +669,7 @@ internal fun Game.findHaul(p: Pawn): Job? {
     }
     if (fire >= 0 && map.countItems(ItemType.WOOD) >= 4) {
         val s = nearestItem(p) { it.type == ItemType.WOOD }
-        if (s != null) {
-            reserve(p, key(fire, K_STATION)); reserve(p, key(map.idx(s.x, s.y), K_ITEM))
+        if (s != null && reserveAll(p, key(fire, K_STATION), key(map.idx(s.x, s.y), K_ITEM))) {
             val j = Job(JobType.REFUEL, s.x, s.y)
             j.dx = map.xOf(fire); j.dy = map.yOf(fire); j.key = key(fire, K_STATION)
             return j
@@ -684,8 +679,7 @@ internal fun Game.findHaul(p: Pawn): Job? {
     val mortar = nearestCell(p, K_STATION) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.MORTAR && b.shells < 5 }
     if (mortar >= 0) {
         val s = nearestItem(p) { it.type == ItemType.SHELL }
-        if (s != null) {
-            reserve(p, key(mortar, K_STATION)); reserve(p, key(map.idx(s.x, s.y), K_ITEM))
+        if (s != null && reserveAll(p, key(mortar, K_STATION), key(map.idx(s.x, s.y), K_ITEM))) {
             val j = Job(JobType.REFUEL, s.x, s.y); j.aux = 1
             j.dx = map.xOf(mortar); j.dy = map.yOf(mortar); j.key = key(mortar, K_STATION)
             return j
@@ -698,16 +692,15 @@ internal fun Game.findHaul(p: Pawn): Job? {
         val ci = map.idx(corpse.x, corpse.y)
         val human = corpse.corpseRace == Race.HUMAN
         if (human) {
-            val grave = nearestCell(p, K_DEST) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.GRAVE && b.occupant == -1 }
-            if (grave >= 0) {
-                reserve(p, key(ci, K_ITEM)); reserve(p, key(grave, K_DEST))
+            val grave = nearestCell(p, K_GRAVE) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.GRAVE && b.occupant == -1 }
+            if (grave >= 0 && reserveAll(p, key(ci, K_ITEM), key(grave, K_GRAVE))) {
                 val j = Job(JobType.BURY, corpse.x, corpse.y); j.dx = map.xOf(grave); j.dy = map.yOf(grave); j.key = key(ci, K_ITEM)
                 return j
             }
         }
         val dump = zoneBestFor(p, corpse, ci)
-        if (dump >= 0 && map.zoneKind(ci) != ZoneKind.DUMPING && map.zoneAt(dump)?.accepts(ItemType.CORPSE_HUMAN, Quality.NORMAL) == true) {
-            reserve(p, key(ci, K_ITEM)); reserve(p, key(dump, K_DEST))
+        if (dump >= 0 && map.zoneKind(ci) != ZoneKind.DUMPING && map.zoneAt(dump)?.accepts(ItemType.CORPSE_HUMAN, Quality.NORMAL) == true &&
+            reserveAll(p, key(ci, K_ITEM), key(dump, K_DEST))) {
             val j = Job(JobType.HAUL, corpse.x, corpse.y); j.dx = map.xOf(dump); j.dy = map.yOf(dump); j.key = key(ci, K_ITEM); j.aux = 7
             return j
         }
@@ -723,7 +716,7 @@ internal fun Game.findHaul(p: Pawn): Job? {
         if (!isFree(p, k) || isBad(p, k)) continue
         val dest = zoneBestFor(p, s, i)
         if (dest < 0) continue
-        reserve(p, k); reserve(p, key(dest, K_DEST))
+        if (!reserveAll(p, k, key(dest, K_DEST))) continue
         val j = Job(JobType.HAUL, s.x, s.y)
         j.dx = map.xOf(dest); j.dy = map.yOf(dest); j.key = k
         return j
@@ -797,7 +790,7 @@ internal fun Game.findButcher(p: Pawn): Job? {
         it.corpseOf != null && it.corpseRace != null && it.corpseRace != Race.HUMAN && !it.forbidden && it.rot < 0.7f &&
             isFree(p, key(map.idx(it.x, it.y), K_ITEM)) && !isBad(p, key(map.idx(it.x, it.y), K_ITEM)) && (it.corpseRace?.meat ?: 0) > 0
     }.minByOrNull { abs(it.x - p.x) + abs(it.y - p.y) } ?: return null
-    reserve(p, key(map.idx(corpse.x, corpse.y), K_ITEM)); reserve(p, key(table, K_STATION))
+    if (!reserveAll(p, key(map.idx(corpse.x, corpse.y), K_ITEM), key(table, K_STATION))) return null
     val j = Job(JobType.BUTCHER, corpse.x, corpse.y)
     j.dx = map.xOf(table); j.dy = map.yOf(table); j.key = key(map.idx(corpse.x, corpse.y), K_ITEM)
     return j
