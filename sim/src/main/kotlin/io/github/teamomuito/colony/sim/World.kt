@@ -124,6 +124,8 @@ fun Game.explode(x: Int, y: Int, radius: Float, damage: Float, source: Pawn? = n
 // ----------------------------------------------------------------------------------- power
 
 fun Game.powerTick() {
+    // Autodoors open or close with the power, which changes what can be walked through.
+    if (map.buildings().any { it.def == BuildDef.AUTODOOR }) map.markWalkChanged()
     val m = map
     val ps = power
     ps.produced = 0f; ps.consumed = 0f; ps.stored = 0f; ps.capacity = 0f

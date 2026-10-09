@@ -112,18 +112,25 @@ class GameMap(val w: Int, val h: Int) {
     val floorQuality = Array(size) { Quality.NORMAL }
     val building = arrayOfNulls<Building>(size)
     private var bVersion = 0
+    /**
+     * Changes whenever something that decides walkability changes: buildings placed or removed, construction finishing,
+     * terrain mined or changed, and doors powering on or off. Reachability caches are rebuilt when it changes.
+     */
+    var walkVersion = 0
+        private set
+    fun markWalkChanged() { walkVersion++ }
     private var bCache: List<Building> = emptyList()
     private var bCacheVersion = -1
 
     /** Put a building on every cell of its footprint. */
     fun setBuilding(b: Building) {
         for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy)) building[idx(xx, yy)] = b
-        roomDirty = true; bVersion++
+        roomDirty = true; bVersion++; walkVersion++
     }
 
     fun removeBuilding(b: Building) {
         for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy) && building[idx(xx, yy)] === b) building[idx(xx, yy)] = null
-        roomDirty = true; bVersion++
+        roomDirty = true; bVersion++; walkVersion++
     }
 
     /** Each building once, even if it covers several cells. */

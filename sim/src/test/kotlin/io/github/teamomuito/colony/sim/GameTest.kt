@@ -28,6 +28,7 @@ class PathfinderTest {
         assertNotNull(breach)
         assertEquals(m.idx(17, 10), breach!!.last())
         m.building[m.idx(10, 10)] = Building(BuildDef.DOOR, 10, 10, true)
+        m.markWalkChanged()   // a direct write to the array must say so, or cached regions go stale
         assertNotNull(f.find(2, 10, 17, 10))
     }
 

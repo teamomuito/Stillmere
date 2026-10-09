@@ -50,6 +50,7 @@ internal fun Game.nearestCell(p: Pawn, kind: Int, pred: (Int) -> Boolean): Int {
     var best = -1
     var bd = Int.MAX_VALUE
     val restricted = p.areaRestriction != 0
+    val start = map.idx(p.x, p.y)
     for (i in 0 until map.size) {
         if (restricted && !allowedFor(p, i)) continue
         if (!pred(i)) continue
@@ -57,6 +58,7 @@ internal fun Game.nearestCell(p: Pawn, kind: Int, pred: (Int) -> Boolean): Int {
         if (d >= bd) continue
         val k = key(i, kind)
         if (!isFree(p, k) || isBad(p, k)) continue
+        if (!finder.regions.mayReachTarget(start, i)) continue
         best = i; bd = d
     }
     return best
@@ -65,6 +67,7 @@ internal fun Game.nearestCell(p: Pawn, kind: Int, pred: (Int) -> Boolean): Int {
 internal fun Game.nearestItem(p: Pawn, shared: Boolean = false, skip: Int = -1, pred: (ItemStack) -> Boolean): ItemStack? {
     var best: ItemStack? = null
     var bd = Int.MAX_VALUE
+    val start = map.idx(p.x, p.y)
     for (s in map.items.values) {
         if (s.forbidden || s.corpseOf != null) continue
         if (!pred(s)) continue
@@ -75,6 +78,7 @@ internal fun Game.nearestItem(p: Pawn, shared: Boolean = false, skip: Int = -1, 
         if (d >= bd) continue
         val k = key(i, K_ITEM)
         if ((!shared && !isFree(p, k)) || isBad(p, k)) continue
+        if (!finder.regions.mayReachTarget(start, i)) continue
         best = s; bd = d
     }
     return best

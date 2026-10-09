@@ -32,7 +32,7 @@ internal fun Game.createBattleGame(c: Caravan, plan: BattlePlan): Game {
     val m = bg.map
     for (y in 0 until m.h) for (x in 0 until m.w) {
         val i = m.idx(x, y)
-        if (x < 9 || x > 34) { if (m.terrain[i] == Terrain.ROCK || m.terrain[i] == Terrain.WATER_DEEP) m.terrain[i] = Terrain.SOIL; m.natRoof[i] = false }
+        if (x < 9 || x > 34) { if (m.terrain[i] == Terrain.ROCK || m.terrain[i] == Terrain.WATER_DEEP) m.terrain[i] = Terrain.SOIL; m.markWalkChanged(); m.natRoof[i] = false }
     }
     fun Game.placeNear(p: Pawn, x0: Int, y0: Int) {
         for (r in 0..12) for (dy in -r..r) for (dx in -r..r) {

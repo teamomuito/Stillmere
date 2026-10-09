@@ -423,6 +423,7 @@ private fun Game.driveMine(p: Pawn, j: Job) {
         } else if (rng.chance(0.55f)) map.drop(ItemType.STONE_CHUNK, 1, p.x, p.y)
         map.ore[i] = Ore.NONE
         map.terrain[i] = Terrain.GRAVEL
+        map.markWalkChanged()
         map.desig[i] = 0
         map.roomDirty = true
         // Cave-ins are not modelled; mined rock stays roofed (natRoof).
@@ -640,6 +641,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                     map.removeBuilding(b)
                 } else {
                     b.built = true
+                    map.markWalkChanged()
                     b.hp = b.maxHp
                     b.quality = q
                     if (b.def.blocksMove || b.def.isWall || b.def.isDoor) ejectPawns(i)
