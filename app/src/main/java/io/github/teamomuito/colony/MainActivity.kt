@@ -22,6 +22,7 @@ import io.github.teamomuito.colony.sim.LogEntry
 import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.Research
 import io.github.teamomuito.colony.sim.SaveGame
+import io.github.teamomuito.colony.sim.TutorialState
 import io.github.teamomuito.colony.sim.beginBattle
 import io.github.teamomuito.colony.sim.requestRetreat
 import io.github.teamomuito.colony.sim.resolveBattle
@@ -36,6 +37,14 @@ import java.io.File
 import kotlin.math.min
 
 class MainActivity : Activity() {
+    companion object {
+        /** Intent extra saying what the main menu asked for: carry on, a new colony, or the tutorial colony. */
+        const val EXTRA_ACTION = "action"
+        const val ACTION_CONTINUE = "continue"
+        const val ACTION_NEW = "new"
+        const val ACTION_TUTORIAL = "tutorial"
+    }
+
     lateinit var view: GameView
     lateinit var game: Game
     lateinit var root: FrameLayout
@@ -50,6 +59,9 @@ class MainActivity : Activity() {
     private lateinit var rotChip: TextView
     private lateinit var materialChip: TextView
     private lateinit var battleChip: TextView
+    private lateinit var prefs: Prefs
+    private lateinit var tutorial: TutorialState
+    private lateinit var tutorialCard: TutorialCard
     lateinit var tileCard: LinearLayout
     private lateinit var tileText: TextView
     private lateinit var tileActions: LinearLayout
@@ -77,15 +89,59 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ui = UiKit(this)
-        val loaded = loadSave()
+        prefs = Prefs(this)
+        // The main menu starts the game with one of these; the default is to carry on from the save.
+        val action = intent.getStringExtra(EXTRA_ACTION) ?: ACTION_CONTINUE
+        val loaded = if (action == ACTION_CONTINUE) loadSave() else null
+        if (loaded == null && action != ACTION_CONTINUE) saveFile.delete()
         game = loaded ?: Game(System.currentTimeMillis()).also { it.startNewColony() }
+        tutorial = if (action == ACTION_CONTINUE) prefs.loadTutorial() else TutorialState()
+        if (action != ACTION_CONTINUE) prefs.saveTutorial(tutorial)
+        if (!prefs.tutorialOn && action != ACTION_TUTORIAL) tutorial.hide()
         hookAutosave(game)
         buildUi()
         immersive()
         refreshBattleChip()
-        if (loaded == null) root.post { dialogs.newColony(firstRun = true) }
-        else if (game.pendingBattle != null) root.post { beginBattleUi() }
+        renderTutorial(force = true)
+        when {
+            loaded == null && action == ACTION_CONTINUE -> root.post { dialogs.newColony(firstRun = true) }
+            loaded == null && action == ACTION_NEW -> root.post { dialogs.newColony(firstRun = false) }
+            game.pendingBattle != null -> root.post { beginBattleUi() }
+        }
         started = true
+    }
+
+    // ------------------------------------------------------------------ tutorial
+    /** Moves the tutorial past lessons the colony already satisfies; called with the HUD, a few times a second. */
+    private fun tutorialTick() {
+        if (tutorial.update(game)) prefs.saveTutorial(tutorial)
+        renderTutorial()
+    }
+
+    private var shownTutorial = ""
+    private fun renderTutorial(force: Boolean = false) {
+        if (!::tutorialCard.isInitialized) return
+        val key = "${tutorial.active}:${tutorial.index}"
+        if (!force && key == shownTutorial) return
+        shownTutorial = key
+        tutorialCard.render(tutorial)
+    }
+
+    fun tutorialNext() { tutorial.next(); tutorial.update(game); prefs.saveTutorial(tutorial); renderTutorial(true) }
+    fun tutorialSkipLesson() { tutorial.skipLesson(); tutorial.update(game); prefs.saveTutorial(tutorial); renderTutorial(true) }
+    fun tutorialHide() { tutorial.hide(); prefs.saveTutorial(tutorial); renderTutorial(true) }
+    fun tutorialActive() = tutorial.active
+
+    fun toggleTutorial() {
+        if (tutorial.active) tutorial.hide() else tutorial.show()
+        prefs.saveTutorial(tutorial); renderTutorial(true)
+    }
+
+    /** Saves the colony and goes back to the main menu. */
+    fun backToMenu() {
+        save()
+        startActivity(android.content.Intent(this, MenuActivity::class.java))
+        finish()
     }
 
     private var errorCount = 0
@@ -262,6 +318,9 @@ class MainActivity : Activity() {
         )
         for ((t, a) in items) bar.addView(ui.button(t, 12f) { a() }, ui.lin(-2, -2, 0f, 0, 0, 4, 0))
         root.addView(ui.hscroll(bar), ui.fl(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, 0, 0, 0, 5))
+        tutorialCard = TutorialCard(this)
+        val cardWidth = minOf(resources.displayMetrics.widthPixels - ui.dp(24), ui.dp(520))
+        root.addView(tutorialCard, FrameLayout.LayoutParams(cardWidth, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = ui.dp(64) })
 
         tileCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; background = ui.bg(ui.panel, 10)
@@ -286,6 +345,7 @@ class MainActivity : Activity() {
 
     // ------------------------------------------------------------------ HUD refresh
     fun refreshHud() {
+        tutorialTick()
         val g = game
         val temp = g.outdoorTemp()
         val ev = if (g.tempEventUntil > 0) "  ⚠ ${g.tempEventName}" else ""
@@ -694,6 +754,10 @@ class MainActivity : Activity() {
     fun restart(newGame: Game) {
         saveFile.delete()
         game = newGame
+        // A new colony starts the tutorial again, if the player wants it.
+        if (prefs.tutorialOn) tutorial.restart() else tutorial.hide()
+        prefs.saveTutorial(tutorial)
+        renderTutorial(true)
         hookAutosave(game)
         view.game = game
         view.selectedId = -1

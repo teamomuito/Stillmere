@@ -80,6 +80,8 @@ class Dialogs(val a: MainActivity) {
             item("Colony statistics") { a.panels.toggle("stats") }
             item("Storyteller & difficulty") { settings() }
             item("How to play") { help() }
+            item(if (a.tutorialActive()) "Hide tutorial" else "Show tutorial") { a.toggleTutorial() }
+            item("Main menu (saves first)") { a.backToMenu() }
             a.lastError()?.let { err -> item("Last error (for bug reports)") { dialog("Last error", { b2, d2 -> b2.addView(ui.mono(err, 10f)); b2.addView(closeRow(d2), ui.lin(-1, -2, 0f, 0, 10, 0, 0)) }) } }
             if (game.shipComplete()) item("🚀 Launch the escape ship") {
                 AlertDialog.Builder(a).setMessage("Launch the ship and leave the rim for good? This ends the game.")
@@ -127,31 +129,7 @@ class Dialogs(val a: MainActivity) {
     }
 
     fun help() {
-        val msg = """
-            Survive on a hostile rimworld, build a colony, and eventually build a ship to leave it.
-
-            BASICS
-            • Drag to look around, pinch to zoom. Tap people and things for details.
-            • Architect → Orders: mine rock, chop trees, hunt, tame, deconstruct.
-            • Architect → Zones: stockpiles (where hauled items go), growing zones (crops), dumping.
-            • Colonists work by priority (Work tab) and the Schedule (Anything / Work / Joy / Sleep).
-
-            SURVIVAL
-            • Build beds (colonists want their own), tables, and a campfire or stove. Add a cooking bill on it.
-            • Workbenches have bills: tap the building, then Open. Smith, tailor and craft there.
-            • Mood matters: food, sleep, comfort, beauty, recreation. Low mood causes mental breaks.
-            • Keep warm: clothes (parkas) and heaters. Rooms need walls and doors; fire and campfires heat them.
-
-            DANGERS
-            • Raids come every few days. Draft a colonist, then tap the ground to move or tap an enemy to attack.
-            • Walls, doors, sandbags, turrets, traps and mortars help.
-            • Wounds bleed and infect; doctors need medicine and a bed. Hospital beds are best.
-            • Downed raiders can be captured into prisoner beds and recruited. Toggle a bed as prisoner bed in its menu.
-
-            LONG GAME
-            • Research unlocks power, firearms, hydroponics, bionics and finally the ship parts.
-            • Traders visit; sell your surplus and buy what you lack.
-        """.trimIndent()
+        val msg = HelpText.text
         dialog("How to play", { body, d ->
             body.addView(ui.label(msg, 12f))
             body.addView(closeRow(d), ui.lin(-1, -2, 0f, 0, 12, 0, 0))

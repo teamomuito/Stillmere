@@ -85,7 +85,13 @@ player control.
 
 ## how to play
 
-Landscape only. Drag to pan, pinch to zoom, tap to inspect. Open **Menu → How to play** in the game.
+The app opens on the main menu: **Continue**, **New colony**, **Tutorial colony**, **Settings** and **How to play**.
+On first start it asks whether you want the optional tutorial. The tutorial is a short walkthrough of the basics: each
+step either waits for you to press Next or finishes when you do the thing (mark trees, build a bed, make a stockpile,
+add a cooking bill, start research). Skip any step, hide the tutorial, or turn it off in Settings. Progress is kept
+per device, and the in-game **Menu** can show or hide it or return you to the main menu.
+
+Landscape only. Drag to pan, pinch to zoom, tap to inspect. **Menu → How to play** has the full help.
 
 ## building it
 

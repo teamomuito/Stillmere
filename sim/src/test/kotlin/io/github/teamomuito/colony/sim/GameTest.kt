@@ -1380,3 +1380,53 @@ class CaravanBattleTest {
         if (bg.battle!!.outcome == BattleOutcome.VICTORY) assertTrue(s.destroyedUntil > g.tick)
     }
 }
+
+class TutorialTest {
+    @Test fun lessonsAdvanceByThemselvesWhenTheColonyDoesTheThing() {
+        val g = newGame(101); g.quiet()
+        val t = TutorialState()
+        // Manual lessons do not move on their own.
+        assertFalse(t.update(g))
+        assertEquals(0, t.index)
+        assertTrue(t.next()); assertTrue(t.next())
+        assertEquals(2, t.index)
+        // Chop trees: marking one tree advances past that lesson.
+        val tree = (0 until g.map.size).first { g.map.plant[it]?.type?.isTree == true }
+        g.designate(g.map.xOf(tree), g.map.yOf(tree), Desig.CUT)
+        assertTrue(t.update(g))
+        assertEquals(3, t.index)
+        // Bed, stockpile and cooking bill follow.
+        g.map.setBuilding(Building(BuildDef.BED, g.homeX + 9, g.homeY, true))
+        t.update(g)
+        assertEquals(4, t.index)
+        t.update(g)
+        assertEquals(4, t.index)                 // the starting stockpile does not count
+        g.paintZone(g.homeX - 22, g.homeY - 2, g.homeX - 20, g.homeY + 2, ZoneKind.STOCKPILE)
+        t.update(g)
+        assertEquals(5, t.index)
+    }
+
+    @Test fun nextIsRefusedOnConditionLessons() {
+        val t = TutorialState(index = 2)
+        assertFalse(t.next())
+        assertEquals(2, t.index)
+    }
+
+    @Test fun hidingStopsTheTutorialAndRestartBringsItBack() {
+        val g = newGame(102); g.quiet()
+        val t = TutorialState()
+        t.hide()
+        assertNull(t.current)
+        assertFalse(t.update(g))
+        t.restart()
+        assertEquals(0, t.index)
+        assertNotNull(t.current)
+    }
+
+    @Test fun theTutorialHasAnEndAndEveryLessonHasText() {
+        val t = TutorialState()
+        while (!t.finished) { assertTrue(t.current!!.text.isNotBlank()); t.skipLesson() }
+        assertNull(t.current)
+        assertEquals(Tutorial.lessons.size, t.index)
+    }
+}
