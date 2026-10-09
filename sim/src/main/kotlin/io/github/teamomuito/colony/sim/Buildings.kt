@@ -105,7 +105,10 @@ enum class BuildDef(
     BREWERY("Brewery", listOf(c(ItemType.STEEL, 60), c(ItemType.WOOD, 40)), 450, 110f, "Production", blocksMove = true, workbench = true, research = Research.BREWING),
     FERMENTING_BARREL("Fermenting barrel", listOf(c(ItemType.WOOD, 30)), 200, 60f, "Production", blocksMove = true, workbench = true, research = Research.BREWING),
     CREMATORIUM("Crematorium", listOf(c(ItemType.STEEL, 80), c(ItemType.STONE, 60)), 800, 200f, "Production", blocksMove = true, power = -250f, research = Research.CREMATION, w = 2, h = 2),
-    MINI_TURRET("Mini-turret", listOf(c(ItemType.STEEL, 45), c(ItemType.COMPONENT, 1)), 300, 120f, "Security", blocksMove = true, research = Research.GUN_TURRETS);
+    MINI_TURRET("Mini-turret", listOf(c(ItemType.STEEL, 45), c(ItemType.COMPONENT, 1)), 300, 120f, "Security", blocksMove = true, research = Research.GUN_TURRETS),
+    // Appended after the saved entries: saves store building definitions by ordinal, so new entries must go last.
+    SOFA("Sofa", listOf(c(ItemType.WOOD, 25), c(ItemType.CLOTH, 40)), 380, 80f, "Furniture", comfort = 0.85f, beauty = 0.8f, research = Research.COMPLEX_FURNITURE, flam = 1f, w = 2, h = 1),
+    BOOKSHELF("Bookshelf", listOf(c(ItemType.WOOD, 40)), 260, 70f, "Furniture", blocksMove = true, beauty = 0.8f, research = Research.COMPLEX_FURNITURE, flam = 1f);
 
     val isPowered get() = power != 0f
     val producesPower get() = power > 0f

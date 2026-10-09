@@ -163,4 +163,17 @@ class MoodSocialTest {
         }
         assertTrue(argued)
     }
+
+    // ----------------------------------------------------------------------------------- furniture
+
+    @Test fun newFurnitureIsAppendedSoSavedOrdinalsStillMatch() {
+        assertEquals(BuildDef.MINI_TURRET.ordinal + 1, BuildDef.SOFA.ordinal)
+        assertEquals(BuildDef.SOFA.ordinal + 1, BuildDef.BOOKSHELF.ordinal)
+    }
+
+    @Test fun aSofaIsComfortableAndNeedsComplexFurniture() {
+        assertTrue(BuildDef.SOFA.comfort > BuildDef.ARMCHAIR.comfort)
+        assertEquals(Research.COMPLEX_FURNITURE, BuildDef.SOFA.research)
+        assertEquals(Research.COMPLEX_FURNITURE, BuildDef.BOOKSHELF.research)
+    }
 }
