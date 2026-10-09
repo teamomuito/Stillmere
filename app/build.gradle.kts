@@ -18,13 +18,27 @@ android {
         versionName = "2.0.0"
     }
 
+    // A release keystore, from the environment (CI decodes it from a secret). Every build must be signed with the same
+    // key, or Android refuses to install it over the one already on the device. Without the variables, the build falls
+    // back to the debug key, which only works for builds made on the same machine.
+    val releaseKeystore = providers.environmentVariable("KEYSTORE_PATH").orNull
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so the APK is installable without a keystore.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
         }
     }
 

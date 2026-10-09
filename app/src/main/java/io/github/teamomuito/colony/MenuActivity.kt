@@ -60,6 +60,7 @@ class MenuActivity : Activity() {
         item("Quickload", store.exists(SaveStore.QUICKSAVE)) { confirmLoad(SaveStore.QUICKSAVE) }
         item("New colony") { confirmReplace { start(MainActivity.ACTION_NEW) } }
         item("Tutorial colony") { confirmReplace { start(MainActivity.ACTION_TUTORIAL) } }
+        item("Check for updates") { checkForUpdate() }
         item("Settings") { settings() }
         item("How to play") { howToPlay() }
         item("Quit") { finishAffinity() }
@@ -85,6 +86,44 @@ class MenuActivity : Activity() {
             .setPositiveButton("Load") { _, _ -> start(MainActivity.ACTION_LOAD, id) }
             .setNegativeButton("Cancel", null).show()
     }
+
+    private fun checkForUpdate() {
+        toast("Checking for updates…")
+        Thread {
+            val latest = try { Updater.fetchLatest() } catch (e: Exception) { null }
+            runOnUiThread {
+                when {
+                    latest == null -> toast("Couldn't reach the update server. Try again later.")
+                    !Updater.isNewer(this, latest) -> toast("You have the latest version.")
+                    else -> AlertDialog.Builder(this).setTitle("Update available")
+                        .setMessage("Version ${latest.tag} is available. Your saved games are kept.")
+                        .setPositiveButton("Download") { _, _ -> downloadUpdate(latest) }
+                        .setNegativeButton("Later", null).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun downloadUpdate(latest: Updater.Release) {
+        toast("Downloading the update…")
+        Thread {
+            try {
+                val apk = Updater.download(this, latest)
+                runOnUiThread {
+                    if (!packageManager.canRequestPackageInstalls()) {
+                        startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName")))
+                        toast("Allow installs from this app, then choose Check for updates again.")
+                    } else {
+                        Updater.install(this, apk)
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread { toast("The update couldn't be downloaded. Try again later.") }
+            }
+        }.start()
+    }
+
+    private fun toast(text: String) = android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()
 
     private fun start(action: String, slot: String? = null) {
         val intent = Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_ACTION, action)
