@@ -60,18 +60,25 @@ cutting. Results: walking 67 vs 69 cells per hour; mined cells 7.5 vs 7.5 per da
 wounds, needs and fire match within sampling noise. The stone-chunk and mood differences are within the variation of random draws:
 the draws happen in a different order now, so outcomes diverge even for the same seed.
 
-## Open: existing saves
+## Existing saves: migration (option 1, done)
 
-Save version 24 stores tick numbers in the old base. Loading such a save into the new base would move its calendar and every timer
-(raids, weather, traders, quests, pawn breaks, job timers) by a factor of 2.5. That is a save-breaking change, and `CLAUDE.md` says
-to ask before making one. The affected fields span roughly two dozen save sections.
+The save format is now version 25. Versions 14 to 24 are still readable. Each tick-valued quantity is converted on read when the
+save is older than version 25:
 
-Options, for a decision:
+* **Absolute times** (game tick, channel timers, raid and weather end times, incident history, trader leave times, quest and
+  request deadlines, battle start, ransom expiry and cooldown, unreachable marks, log timestamps, pawn break, escape, social,
+  pregnancy and suppression times) are multiplied by 2.5.
+* **Countdowns and durations in ticks** (job timers, pawn attack and warmup cooldowns, move countdowns, animal production
+  timers, injury and hediff ages and durations, plant age, caravan progress) are multiplied by 2.5.
+* **Sentinels are kept**: 0 and negative values (the "none" markers such as -1 and the -1,000,000 stock marker), and any value at or
+  past Long.MAX_VALUE / 4 (the "never" marker used in battle maps).
+* **Not converted**, because they are not in ticks: day counts, severities, fractions, work units, rates, play time in
+  milliseconds, the RNG state, ids and keys.
+* The header's copy of the tick (`SaveInfo.tick`) is informational only, and nothing in the game or app reads it. It is left as it
+  was stored. The day in the header is a day count, so it does not change.
 
-1. **Migrate.** Save version 25 writes the new base. Loading a version 24 save multiplies every tick-valued field by 2.5. Needs a
-   field-by-field list and a test per section. Largest effort; keeps old saves.
-2. **Break.** Bump the version. Old saves are refused with a clear message. Smallest effort; the user loses old saves.
-3. **Keep both bases.** Store the time base in the save and run old saves on the legacy base. Most code; it keeps a second calendar
-   alive.
+The audit that found these fields is recorded in the commit history (`save-tick-audit`). Four raw literals it found are fixed:
+the insult cooldown (120), the wake-up duration (3000), the bench in-use timer (700), and the blast fade in the app (14).
 
-The change is committed to branch `ccr-fd954ed9-2t8rr7` so it can be reviewed and tested. **Do not merge it to the default branch until this is decided.** Until the default branch changes, the release workflow publishes nothing from this work.
+Test: `LegacySaveMigrationTest` loads a real version-24 save written by the pre-change game, and checks each converted value
+against what the old game held. It also checks that the calendar (day, hour, season) comes out the same in both bases.

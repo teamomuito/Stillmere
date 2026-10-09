@@ -101,8 +101,8 @@ reach the save file are now `EnumMap`, so save bytes do not depend on JVM identi
 value, defaulting to 0 (R1). Save IDs count up instead of using UUIDs. A test runs the same seed twice and compares a SHA-256 of the
 full save bytes; another checks that save and load leave the state identical, and that a loaded game keeps running identically.
 
-**Open:** existing saves store tick counts in old units. Loading one into the new time base would shift its calendar and timers. See
-`docs/fidelity/time.md`.
+**Saves:** version 25 converts every tick-valued field when a version 14 to 24 save is loaded, so existing saves keep working.
+See `docs/fidelity/time.md` (migration section) and `LegacySaveMigrationTest`, which uses a real pre-change save.
 
 ### 3.2 Map generation
 

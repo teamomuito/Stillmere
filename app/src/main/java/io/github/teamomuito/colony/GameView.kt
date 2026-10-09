@@ -13,6 +13,7 @@ import android.view.View
 import io.github.teamomuito.colony.sim.BuildDef
 import io.github.teamomuito.colony.sim.Desig
 import io.github.teamomuito.colony.sim.Faction
+import io.github.teamomuito.colony.sim.tk
 import io.github.teamomuito.colony.sim.Game
 import io.github.teamomuito.colony.sim.ItemCat
 import io.github.teamomuito.colony.sim.ItemType
@@ -426,7 +427,8 @@ class GameView(context: Context) : View(context) {
             }
         }
         for (bl in g.blasts) {
-            val left = (bl.expires - g.tick).coerceIn(0, 14) / 14f
+            val fade = tk(14).toLong()
+            val left = (bl.expires - g.tick).coerceIn(0L, fade) / fade.toFloat()
             fill.color = Color.argb((left * 200).toInt(), 255, 170, 60)
             c.drawCircle((bl.x + 0.5f - camX) * s, (bl.y + 0.5f - camY) * s, bl.radius * s * (1.2f - left * 0.4f), fill)
         }

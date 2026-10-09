@@ -171,7 +171,7 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
                 val o = pawnById(j.targetPawn)
                 if (o == null || !o.alive) { j.stage = 0; return }
                 if (goTo(p, o.x, o.y, adjacent = true) == 0 && p.attackCd == 0) {
-                    p.attackCd = 120
+                    p.attackCd = tk(120)
                     o.addThought("Insulted by ${p.name.substringBefore(' ')}", -0.07f, tick, 2 * TICKS_PER_DAY)
                     o.opinion[p.id] = (o.opinion[p.id] ?: 0) - 25
                     j.stage = 0
@@ -390,7 +390,7 @@ fun Game.applyDrug(p: Pawn, t: ItemType) {
         ItemType.FLAKE -> HediffKind.FLAKE_HIGH to HediffKind.FLAKE_ADDICTION
         ItemType.YAYO -> HediffKind.YAYO_HIGH to HediffKind.YAYO_ADDICTION
         ItemType.GO_JUICE -> HediffKind.GOJUICE_HIGH to HediffKind.GOJUICE_ADDICTION
-        ItemType.WAKE_UP -> { p.rest = min(1f, p.rest + 0.45f); addHediff(p, HediffKind.WAKEUP_HIGH, 0.5f).duration = 3000; p.addThought("Drug use", 0.04f, tick, TICKS_PER_DAY / 2); return }
+        ItemType.WAKE_UP -> { p.rest = min(1f, p.rest + 0.45f); addHediff(p, HediffKind.WAKEUP_HIGH, 0.5f).duration = tk(3000); p.addThought("Drug use", 0.04f, tick, TICKS_PER_DAY / 2); return }
         else -> return
     }
     val h = addHediff(p, high, 0.5f)
@@ -832,7 +832,7 @@ private fun Game.driveBill(p: Pawn, j: Job) {
             if (rr == -1) abort(p, true) else if (rr == 0) { j.stage = 3; j.work = 0f }
         }
         3 -> {
-            bench.inUse = 700
+            bench.inUse = tk(700)
             val sk = r.workType.skill() ?: SkillType.CRAFTING
             if (doWork(p, j, sk, r.work.toFloat() * (if (bench.def.workbench) 1f else 1f))) {
                 j.held.clear()
