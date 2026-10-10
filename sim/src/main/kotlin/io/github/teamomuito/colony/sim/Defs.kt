@@ -113,6 +113,8 @@ enum class ItemType(
     val label: String, val cat: ItemCat, val stack: Int, val value: Float, val nutrition: Float = 0f,
     val spoilDays: Float = 0f, val flammable: Float = 0f, val weapon: Weapon? = null, val apparel: Apparel? = null,
     val potency: Float = 0f, val humanFood: Boolean = true,
+    /** Highest tend quality this medicine can produce. */
+    val maxTendQuality: Float = 1f,
 ) {
     WOOD("Wood", ItemCat.RESOURCE, 75, 0.5f, flammable = 1f),
     STONE_CHUNK("Stone chunk", ItemCat.RESOURCE, 1, 0.1f),
@@ -145,7 +147,7 @@ enum class ItemType(
     HAY("Hay", ItemCat.FOOD_ANIMAL, 75, 0.4f, 0.05f, 40f, flammable = 1f, humanFood = false),
 
     HEALROOT("Healroot", ItemCat.MEDICINE, 75, 1f, flammable = 0.8f),
-    MEDS_HERBAL("Herbal medicine", ItemCat.MEDICINE, 25, 10f, potency = 0.6f),
+    MEDS_HERBAL("Herbal medicine", ItemCat.MEDICINE, 25, 10f, potency = 0.6f, maxTendQuality = 0.7f),
     MEDS_INDUSTRIAL("Medicine", ItemCat.MEDICINE, 25, 18f, potency = 1.0f),
 
     BEER("Beer", ItemCat.DRUG, 25, 12f),
