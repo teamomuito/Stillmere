@@ -286,24 +286,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     }
 
     // ------------------------------------------------------------------ scenario
+    /** The start chosen when the map was generated; a hand-built map gets its open pad found now. */
     private fun findStartSpot(): Pair<Int, Int> {
-        val cx = map.w / 2
-        val cy = map.h / 2
-        var sx = cx; var sy = cy
-        loop@ for (r in 0 until 30) for (y in cy - r..cy + r) for (x in cx - r..cx + r) {
-            if (!map.inB(x, y)) continue
-            val i = map.idx(x, y)
-            if (map.terrain[i] == Terrain.SOIL || map.terrain[i] == Terrain.RICH_SOIL || (map.biome == Biome.DESERT || map.biome == Biome.ARID) && map.terrain[i] == Terrain.SAND) {
-                var ok = true
-                for (yy in y - 3..y + 3) for (xx in x - 3..x + 3) {
-                    if (!map.inB(xx, yy)) { ok = false; continue }
-                    val t = map.terrain[map.idx(xx, yy)]
-                    if (!t.passable || t == Terrain.WATER_SHALLOW) ok = false
-                }
-                if (ok) { sx = x; sy = y; break@loop }
-            }
-        }
-        return sx to sy
+        if (map.spawnX >= 0) return map.spawnX to map.spawnY
+        return map.findOpenPad() ?: (map.w / 2 to map.h / 2)
     }
 
     fun startNewColony(sc: Scenario = scenario, supplied: List<Pawn>? = null) {

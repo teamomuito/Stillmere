@@ -2,6 +2,7 @@ package io.github.teamomuito.colony.sim
 
 import java.util.PriorityQueue
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
 
@@ -130,7 +131,11 @@ class World(val w: Int, val h: Int) {
         private val outlanderNames = listOf("Cross-Harbor union", "Free Settlers' league", "New Haven co-op", "Iron Road company", "Greenfield union", "Quarry Guild")
         private val pirateNames = listOf("Rough-Knife gang", "Black Dune pirates", "Red Fang raiders", "Salt Wolves", "Grim Flag band", "Dust Vultures")
 
-        fun generate(seed: Long, homeBiome: Biome): World {
+        /**
+         * The planet for [seed]. The home tile is the land tile nearest the middle, of [homeBiome] when one is given. Given no
+         * biome, the home tile's biome is whatever the planet has there, and that is the colony's biome.
+         */
+        fun generate(seed: Long, homeBiome: Biome? = null): World {
             val world = World(W, H)
             val rng = Rng(seed * 31 + 7)
             val s = (seed xor 0x5bd1e995L).toInt()
@@ -204,7 +209,7 @@ class World(val w: Int, val h: Int) {
             var best = -1; var bd = Int.MAX_VALUE
             for (y in 0 until H) for (x in 0 until W) {
                 val t = y * W + x
-                if (world.water[t] || world.hills[t] == Hills.MOUNTAIN || world.biome[t] != homeBiome) continue
+                if (world.water[t] || world.hills[t] == Hills.MOUNTAIN || (homeBiome != null && world.biome[t] != homeBiome)) continue
                 val d = abs(x - W / 2) + abs(y - H / 2)
                 if (d < bd) { bd = d; best = t }
             }
@@ -216,7 +221,7 @@ class World(val w: Int, val h: Int) {
                     if (d < bd) { bd = d; best = t }
                 }
                 if (best < 0) { best = (H / 2) * W + W / 2; world.water[best] = false }
-                world.biome[best] = homeBiome
+                world.biome[best] = homeBiome ?: Biome.TEMPERATE
             }
             world.hills[best] = if (world.hills[best] == Hills.MOUNTAIN) Hills.LARGE else world.hills[best]
             world.homeTile = best
@@ -267,9 +272,24 @@ class World(val w: Int, val h: Int) {
         }
     }
 
-    /** What the colony's own map should look like, given its world tile. */
-    fun localTerrain(): LocalTerrain = LocalTerrain(river[homeTile], adjacentWater(homeTile) && !river[homeTile], hills[homeTile])
+    /**
+     * What the map of tile [t] (the colony's home by default) should look like: its river and lake, its hills, and the way they
+     * run in from the neighbouring tiles. A river runs across the map along the axis it enters on; the lake sits on the side
+     * the neighbouring water is on. Either is null when the neighbours do not settle it, and the map then picks at random.
+     */
+    fun localTerrain(t: Int = homeTile): LocalTerrain {
+        fun riverAt(dx: Int, dy: Int) = inB(x(t) + dx, y(t) + dy) && river[tile(x(t) + dx, y(t) + dy)]
+        fun waterAt(dx: Int, dy: Int) = inB(x(t) + dx, y(t) + dy) && water[tile(x(t) + dx, y(t) + dy)]
+        val acrossEW = riverAt(1, 0) || riverAt(-1, 0)
+        val acrossNS = riverAt(0, -1) || riverAt(0, 1)
+        val horizontal: Boolean? = if (acrossEW && !acrossNS) true else if (acrossNS && !acrossEW) false else null
+        var sx = 0; var sy = 0; var nWater = 0
+        for (dy in -1..1) for (dx in -1..1) if ((dx != 0 || dy != 0) && waterAt(dx, dy)) { sx += dx; sy += dy; nWater++ }
+        val lakeAngle = if (nWater > 0 && (sx != 0 || sy != 0)) atan2(sy.toFloat(), sx.toFloat()) else null
+        return LocalTerrain(river[t], adjacentWater(t) && !river[t], hills[t], horizontal, lakeAngle)
+    }
 
 
-    class LocalTerrain(val river: Boolean, val lake: Boolean, val hills: Hills)
+    /** [riverHorizontal]: true when the river runs east-west across the map, false for north-south, null when unknown. [lakeAngle]: the direction of the lake, in radians with y pointing down. */
+    class LocalTerrain(val river: Boolean, val lake: Boolean, val hills: Hills, val riverHorizontal: Boolean? = null, val lakeAngle: Float? = null)
 }

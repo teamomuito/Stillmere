@@ -484,7 +484,7 @@ fun Game.settle(c: Caravan, name: String): Settled? {
     caravans.remove(c)
     val archive = SaveGame.write(this)
     val biome = world.biome[tile]
-    val lt = World.LocalTerrain(world.river[tile], world.adjacentWater(tile) && !world.river[tile], world.hills[tile])
+    val lt = world.localTerrain(tile)
     val g = Game(seed, GameMap.generate(map.w, map.h, seed * 17 + tick, biome, lt))
     g.worldBiome = worldBiome
     g.world = world
