@@ -89,7 +89,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     /** Tick the last raid ended; -1 if none has. Threat incidents wait a little after it. */
     var raidLastEnded = -1L
     /** When each incident last happened. Cooldowns and the quiet after raids read this. Saved. */
-    val incidentLast = HashMap<Incident, Long>()
+    val incidentLast: MutableMap<Incident, Long> = java.util.EnumMap(Incident::class.java)
     var raidCounter = 0
     var gameOver = false
     var won = false
@@ -140,10 +140,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     }
 
     // ------------------------------------------------------------------ time
-    val hour get() = ((tick / TICKS_PER_HOUR) % 24).toInt()
+    val hour get() = ((tick / TICKS_PER_HOUR) % HOURS_PER_DAY).toInt()
     val day get() = (tick / TICKS_PER_DAY).toInt()
-    val season get() = Season.entries[(day / DAYS_PER_SEASON) % 4]
-    val year get() = 5500 + day / (DAYS_PER_SEASON * 4)
+    val season get() = Season.entries[(day / DAYS_PER_SEASON) % SEASONS_PER_YEAR]
+    val year get() = 5500 + day / DAYS_PER_YEAR
     val dayOfSeason get() = day % DAYS_PER_SEASON + 1
     val isSleepHour get() = hour >= 22 || hour < 6
 
@@ -161,22 +161,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         return l
     }
 
-    private fun seasonTemp(s: Season): Float {
-        val b = map.biome
-        return when (s) { Season.SPRING -> b.springT; Season.SUMMER -> b.summerT; Season.FALL -> b.fallT; Season.WINTER -> b.winterT }
-    }
-
-    fun outdoorTemp(): Float {
-        val h = (tick % TICKS_PER_DAY) / TICKS_PER_HOUR.toFloat()
-        val diurnal = sin(((h - 9f) / 24f) * 2f * PI.toFloat()) * (if (map.biome == Biome.DESERT || map.biome == Biome.ARID) 10f else 7f)
-        val s = season
-        val next = Season.entries[(s.ordinal + 1) % 4]
-        val blend = (dayOfSeason - 1) / DAYS_PER_SEASON.toFloat()
-        val base = seasonTemp(s) + (seasonTemp(next) - seasonTemp(s)) * blend * 0.5f
-        var w = 0f
-        when (weather) { Weather.RAIN -> w = -2f; Weather.SNOW -> w = -3f; Weather.THUNDER -> w = -3f; Weather.CLOUDY -> w = -1f; else -> {} }
-        return base + diurnal + tempOffset + w
-    }
+    fun outdoorTemp(): Float = Climate.outdoorTemp(map.biome, tick, tempOffset, weather)
 
     fun dateLabel() = "${hour.toString().padStart(2, '0')}:00  Day $dayOfSeason of ${season.label}, $year"
 
@@ -625,13 +610,13 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         tick++
         for (p in pawns.toList()) pawnTick(p)
         if (battle != null) battleTick()
-        if (tick % 10 == 0L) { turretsTick(); trapsTick() }
-        if (tick % 4 == 0L) fireTick()
+        if (tick % tk(10) == 0L) { turretsTick(); trapsTick() }
+        if (tick % tk(4) == 0L) fireTick()
         shots.removeAll { it.expires < tick }
         blasts.removeAll { it.expires < tick }
-        if (tick % 250 == 0L) slowTick()
+        if (tick % SLOW_TICK == 0L) slowTick()
         if (tick % TICKS_PER_HOUR == 0L) hourlyTick()
-        val gone = pawns.filter { it.dead && tick - it.deathTick > 10 }
+        val gone = pawns.filter { it.dead && tick - it.deathTick > tk(10) }
         if (gone.isNotEmpty()) pawns.removeAll(gone.toSet())
         if (!encounter && humansOnSide.none { it.colonist } && caravans.none { c -> c.inBattle || c.members.any { it.colonist && it.alive } } && !gameOver) {
             gameOver = true
@@ -653,8 +638,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             if (p.job?.type != JobType.JOY) p.joy = max(0f, p.joy - joyDrain)
         }
         if (p.food <= 0f && !p.isAnimal || p.food <= 0f && p.isAnimal) starvationTick(p)
-        if (tick % 10 == (p.id % 10).toLong()) {
-            healthTick(p, 10)
+        if (tick % HEALTH_STRIDE == (p.id % HEALTH_STRIDE).toLong()) {
+            healthTick(p, HEALTH_STRIDE)
             if (p.dead) return
             if (p.downed) maybeStandUp(p)
         }
@@ -670,15 +655,15 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (p.dormant) { dormantTick(p); return }
         if (p.isBaby) { babyTick(p); return }
         if (p.attackCd > 0) p.attackCd--
-        if (map.fires.isNotEmpty() && tick % 3 == (p.id % 3).toLong() && p.moveCd <= 0) stepOutOfFire(p)
+        if (map.fires.isNotEmpty() && tick % tk(3) == (p.id % tk(3)).toLong() && p.moveCd <= 0) stepOutOfFire(p)
         // Drafted animals of the colony fight under the same AI as drafted colonists.
         if (p.isAnimal && p.drafted && p.faction == Faction.PLAYER) { draftedAI(p); return }
         if (p.isAnimal) { animalTick(p); return }
-        if (p.drafted && !p.retreating && tick % 60 == (p.id % 60).toLong() && (p.food < 0.08f || p.rest < 0.04f) && pawns.none { it.hostile && it.alive && !it.downed }) {
+        if (p.drafted && !p.retreating && tick % tk(60) == (p.id % tk(60)).toLong() && (p.food < 0.08f || p.rest < 0.04f) && pawns.none { it.hostile && it.alive && !it.downed }) {
             setDrafted(p, false)
             say("${p.name} stood down to rest and eat.", 0)
         }
-        if (p.colonist && !p.drafted && p.job != null && tick % 10 == (p.id % 10).toLong()) {
+        if (p.colonist && !p.drafted && p.job != null && tick % HEALTH_STRIDE == (p.id % HEALTH_STRIDE).toLong()) {
             if (shouldReact(p)) endJob(p) else interruptForNeeds(p)
         }
         if (p.job == null) think(p)
@@ -686,9 +671,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     }
 
     private fun starvationTick(p: Pawn) {
-        if (tick % 10 != (p.id % 10).toLong()) return
+        if (tick % HEALTH_STRIDE != (p.id % HEALTH_STRIDE).toLong()) return
         val h = addHediff(p, HediffKind.MALNUTRITION, 0f)
-        h.severity = min(1f, h.severity + 10f * 0.28f / TICKS_PER_DAY)
+        h.severity = min(1f, h.severity + HEALTH_STRIDE * 0.28f / TICKS_PER_DAY)
         p.healthDirty = true
         if (h.severity >= 1f) { die(p, "starvation") }
     }
@@ -721,6 +706,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     companion object {
         const val MAP_SIZE = 100
+        /** Ticks between slow updates (weather, power, climate, plants, spoilage, mood). */
+        val SLOW_TICK = tk(250).toLong()
+        /** Ticks between a pawn's health and need-interrupt checks; also the elapsed time each health update covers. */
+        val HEALTH_STRIDE = tk(10)
     }
 }
 
@@ -750,7 +739,7 @@ fun Game.stepOutOfFire(p: Pawn) {
     if (best >= 0) {
         p.fromX = p.x; p.fromY = p.y
         p.x = map.xOf(best); p.y = map.yOf(best)
-        p.moveTotal = 6; p.moveCd = 6
+        p.moveTotal = tk(6); p.moveCd = tk(6)
         p.clearPath()
         if (p.job?.type != JobType.FIREFIGHT) { val jb = p.job; if (jb != null && p.colonist) endJob(p) }
     }

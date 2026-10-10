@@ -38,7 +38,7 @@ internal fun Game.releaseMedicalBeds(p: Pawn) {
     for (b in map.buildings()) if (b.def.medical && b.occupant == p.id) b.occupant = -1
 }
 
-internal fun Game.markUnreachable(p: Pawn, k: Int) { unreachable[p.id * 10_000_000L + k] = tick + 900 }
+internal fun Game.markUnreachable(p: Pawn, k: Int) { unreachable[p.id * 10_000_000L + k] = tick + tk(900) }
 internal fun Game.isBad(p: Pawn, k: Int): Boolean {
     // Checked for every candidate a job considers, so skip the boxed lookup when nothing is marked.
     if (unreachable.isEmpty()) return false
@@ -126,7 +126,7 @@ fun Game.goTo(p: Pawn, tx: Int, ty: Int, adjacent: Boolean = false, breach: Bool
     p.fromX = p.x; p.fromY = p.y
     p.x = map.xOf(next); p.y = map.yOf(next)
     p.pathI++
-    p.moveTotal = max(3, p.moveSpeedTicks() * map.stepCost(next) / 10)
+    p.moveTotal = max(tk(3), p.moveSpeedTicks() * map.stepCost(next) / 10)
     p.moveCd = p.moveTotal
     // Tracking dirt indoors.
     if (!p.isAnimal && !map.roofed(prevIdx) && map.roofed(next) && rng.chance(0.06f) && map.filth[next] < 3) map.filth[next] = (map.filth[next] + 1).toByte()
@@ -136,7 +136,7 @@ fun Game.goTo(p: Pawn, tx: Int, ty: Int, adjacent: Boolean = false, breach: Bool
 
 internal fun Game.attackBuilding(p: Pawn, b: Building) {
     if (p.attackCd > 0) return
-    p.attackCd = 40
+    p.attackCd = tk(40)
     val dmg = if (p.weapon.ranged) 6f else p.weapon.damage * 1.2f
     b.hp -= dmg
     if (b.hp <= 0f) {
@@ -205,7 +205,7 @@ fun Game.think(p: Pawn) {
     val sleepy = p.rest < 0.25f || (act == 3 && p.rest < sleepHourRest)
     if (sleepy && startSleep(p)) return
     // Gear.
-    if (tick % 5 == (p.id % 5).toLong()) findGear(p)?.let { p.job = it; return }
+    if (tick % tk(5) == (p.id % tk(5)).toLong()) findGear(p)?.let { p.job = it; return }
     if (act == 2 && p.joy < 0.95f) startJoy(p)?.let { p.job = it; return }
     val workHour = act == 1 || act == 0 || act == 3 && p.rest >= 0.92f
     if (workHour) {
@@ -222,7 +222,7 @@ fun Game.think(p: Pawn) {
     if (p.food < 0.55f && startEat(p)) return
     if (p.joy < (if (act == 1) 0.2f else 0.55f)) startJoy(p)?.let { p.job = it; return }
     val j = Job(if (rng.chance(0.4f)) JobType.WANDER else JobType.IDLE)
-    j.timer = rng.range(40, 90)
+    j.timer = rng.range(tk(40), tk(90))
     p.job = j
 }
 
@@ -377,7 +377,7 @@ internal fun Game.startJoy(p: Pawn): Job? {
         val j = Job(JobType.SOCIAL, o.x, o.y); j.targetPawn = o.id
         return j
     }
-    return Job(JobType.JOY, p.x, p.y).also { it.stage = 9; it.timer = 900 }
+    return Job(JobType.JOY, p.x, p.y).also { it.stage = 9; it.timer = tk(900) }
 }
 
 // ---------------------------------------------------------------- gear

@@ -6,8 +6,9 @@ import kotlin.math.max
 import kotlin.math.min
 
 private fun Game.doWork(p: Pawn, j: Job, skill: SkillType?, total: Float): Boolean {
-    j.work += p.workSpeed(skill)
-    if (skill != null) p.gainXp(skill, 0.07f)
+    // Work and skill gain are per tick, so they are divided by TIME_SCALE to keep their effect per game hour.
+    j.work += p.workSpeed(skill) / TIME_SCALE
+    if (skill != null) p.gainXp(skill, 0.07f / TIME_SCALE)
     return j.work >= total
 }
 
@@ -99,7 +100,7 @@ private fun Game.driveWander(p: Pawn, j: Job) {
         if (j.stage == 0) endJob(p)
     } else {
         val r = goTo(p, j.tx, j.ty)
-        p.joy = min(1f, p.joy + 0.00003f)
+        p.joy = min(1f, p.joy + 0.00003f / TIME_SCALE)
         if (r != 1) endJob(p)
     }
 }
@@ -115,7 +116,7 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
         }
         Break.TANTRUM -> {
             // Smash the nearest furniture or item.
-            if (j.stage == 0 || j.timer++ % 120 == 0) {
+            if (j.stage == 0 || j.timer++ % tk(120) == 0) {
                 val t = nearestCell(p, K_DESIG) { val b = map.building[it]; b != null && b.built && !b.def.isWall && b.def.category != "Ship" && b.def != BuildDef.CONDUIT }
                 if (t >= 0) { j.tx = map.xOf(t); j.ty = map.yOf(t); j.stage = 1 } else if (j.stage == 0) { j.stage = 9 }
             }
@@ -129,14 +130,14 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
             } else if (j.stage == 9) wanderStep(p, j)
         }
         Break.FIRE -> {
-            if (j.stage == 0 || j.timer++ % 300 == 0) {
+            if (j.stage == 0 || j.timer++ % tk(300) == 0) {
                 val x = (p.x + rng.range(-6, 6)).coerceIn(1, map.w - 2); val y = (p.y + rng.range(-6, 6)).coerceIn(1, map.h - 2)
                 j.tx = x; j.ty = y; j.stage = 1
             }
             if (goTo(p, j.tx, j.ty) != 1) { igniteCell(map.idx(p.x, p.y), 0.5f); j.stage = 0 }
         }
         Break.BINGE_FOOD -> {
-            if (j.stage == 0 || j.timer++ % 200 == 0) {
+            if (j.stage == 0 || j.timer++ % tk(200) == 0) {
                 val s = nearestItem(p, shared = true) { it.type.cat == ItemCat.FOOD_MEAL || it.type.cat == ItemCat.FOOD_PLANT && it.type.humanFood }
                 if (s != null) { j.tx = s.x; j.ty = s.y; j.stage = 1 } else { j.stage = 9 }
             }
@@ -151,7 +152,7 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
             } else wanderStep(p, j)
         }
         Break.BINGE_DRUGS -> {
-            if (j.stage == 0 || j.timer++ % 200 == 0) {
+            if (j.stage == 0 || j.timer++ % tk(200) == 0) {
                 val s = nearestItem(p, shared = true) { it.type == ItemType.BEER || it.type == ItemType.JOINT }
                 if (s != null) { j.tx = s.x; j.ty = s.y; j.stage = 1 } else j.stage = 9
             }
@@ -162,7 +163,7 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
             } else wanderStep(p, j)
         }
         Break.INSULT -> {
-            if (j.stage == 0 || j.timer++ % 150 == 0) {
+            if (j.stage == 0 || j.timer++ % tk(150) == 0) {
                 val o = pawns.filter { it !== p && it.colonist && it.alive && !it.downed }.minByOrNull { distance(p.x, p.y, it.x, it.y) }
                 if (o != null) { j.targetPawn = o.id; j.stage = 1 } else j.stage = 9
             }
@@ -170,7 +171,7 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
                 val o = pawnById(j.targetPawn)
                 if (o == null || !o.alive) { j.stage = 0; return }
                 if (goTo(p, o.x, o.y, adjacent = true) == 0 && p.attackCd == 0) {
-                    p.attackCd = 120
+                    p.attackCd = tk(120)
                     o.addThought("Insulted by ${p.name.substringBefore(' ')}", -0.07f, tick, 2 * TICKS_PER_DAY)
                     o.opinion[p.id] = (o.opinion[p.id] ?: 0) - 25
                     j.stage = 0
@@ -182,7 +183,7 @@ private fun Game.driveBreak(p: Pawn, j: Job) {
         }
         Break.HIDE -> {
             // Retreat to the nearest free bed and stay there until the break passes.
-            if (j.stage == 0 || j.timer++ % 200 == 0) {
+            if (j.stage == 0 || j.timer++ % tk(200) == 0) {
                 val t = nearestCell(p, K_BED) { val b = map.building[it]; b != null && b.built && b.def.sleeps && (b.occupant == -1 || b.occupant == p.id) }
                 if (t >= 0) { j.tx = map.xOf(t); j.ty = map.yOf(t); j.stage = 1 } else j.stage = 9
             }
@@ -201,7 +202,7 @@ private fun Game.wanderStep(p: Pawn, j: Job) {
 }
 
 private fun Game.driveFlee(p: Pawn, j: Job) {
-    if (j.timer % 40 == 0 || j.stage == 0) {
+    if (j.timer % tk(40) == 0 || j.stage == 0) {
         var bx = p.x; var by = p.y; var bs = -1e9f
         val threats = hostiles.filter { !it.downed }
         for (t in 0 until 14) {
@@ -217,8 +218,8 @@ private fun Game.driveFlee(p: Pawn, j: Job) {
     }
     j.timer++
     goTo(p, j.tx, j.ty)
-    if (!threatNear(p) && j.timer > 120) endJob(p)
-    if (j.timer > 2400) endJob(p)
+    if (!threatNear(p) && j.timer > tk(120)) endJob(p)
+    if (j.timer > tk(2400)) endJob(p)
 }
 
 // ---------------------------------------------------------------- needs
@@ -253,7 +254,7 @@ private fun Game.driveEat(p: Pawn, j: Job) {
             val t = p.carryType
             if (t == null || p.carryCount == 0) { endJob(p); return }
             j.timer++
-            val total = if (t.nutrition >= 0.5f) 120 else 40 + p.carryCount * 3
+            val total = if (t.nutrition >= 0.5f) tk(120) else tk(40) + p.carryCount * tk(3)
             if (j.timer >= total) {
                 val amount = t.nutrition * p.carryCount
                 p.food = min(1f, p.food + amount * p.cap[Cap.EATING.ordinal].coerceAtLeast(0.3f))
@@ -310,7 +311,8 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
     val inBed = j.amount == 1
     val bed = if (inBed) map.building[map.idx(p.x, p.y)] else null
     val comfort = bed?.def?.comfort ?: 0f
-    val gain = if (inBed) 0.00010f + comfort * 0.00004f else 0.00007f
+    // Rest gain is per tick: divided by TIME_SCALE so a bed restores the same amount per game hour.
+    val gain = (if (inBed) 0.00010f + comfort * 0.00004f else 0.00007f) / TIME_SCALE
     j.timer++
     if (j.type == JobType.REST) {
         p.rest = min(1f, p.rest + gain * 0.6f)
@@ -348,7 +350,7 @@ private fun Game.driveJoy(p: Pawn, j: Job) {
             val x = (homeX + rng.range(-7, 7)).coerceIn(1, map.w - 2); val y = (homeY + rng.range(-7, 7)).coerceIn(1, map.h - 2)
             j.dx = if (map.walkable(map.idx(x, y))) x else -1; j.dy = y
         }
-        p.joy = min(1f, p.joy + 0.00022f)
+        p.joy = min(1f, p.joy + 0.00022f / TIME_SCALE)
         if (--j.timer <= 0 || p.joy > 0.9f) endJob(p)
         return
     }
@@ -360,8 +362,8 @@ private fun Game.driveJoy(p: Pawn, j: Job) {
         return
     }
     val tol = if (p.lastJoyKind == b.def.name) 0.7f else 1f
-    p.joy = min(1f, p.joy + b.def.joy * 0.6f / 1000f * tol)
-    if (j.timer++ > 3200 || p.joy >= 0.98f) {
+    p.joy = min(1f, p.joy + b.def.joy * 0.6f / (LEGACY_TICKS_PER_HOUR * TIME_SCALE) * tol)
+    if (j.timer++ > tk(3200) || p.joy >= 0.98f) {
         p.lastJoyKind = b.def.name
         if (b.def == BuildDef.HORSESHOES) p.addThought("Played horseshoes", 0.04f, tick, TICKS_PER_DAY / 2)
         endJob(p)
@@ -377,7 +379,7 @@ private fun Game.driveSmoke(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) { map.take(i, 1); j.stage = 1 }
         return
     }
-    if (++j.timer > 160) { applyDrug(p, j.item!!); p.joy = min(1f, p.joy + 0.3f); endJob(p) }
+    if (++j.timer > tk(160)) { applyDrug(p, j.item!!); p.joy = min(1f, p.joy + 0.3f); endJob(p) }
 }
 
 fun Game.applyDrug(p: Pawn, t: ItemType) {
@@ -388,11 +390,11 @@ fun Game.applyDrug(p: Pawn, t: ItemType) {
         ItemType.FLAKE -> HediffKind.FLAKE_HIGH to HediffKind.FLAKE_ADDICTION
         ItemType.YAYO -> HediffKind.YAYO_HIGH to HediffKind.YAYO_ADDICTION
         ItemType.GO_JUICE -> HediffKind.GOJUICE_HIGH to HediffKind.GOJUICE_ADDICTION
-        ItemType.WAKE_UP -> { p.rest = min(1f, p.rest + 0.45f); addHediff(p, HediffKind.WAKEUP_HIGH, 0.5f).duration = 3000; p.addThought("Drug use", 0.04f, tick, TICKS_PER_DAY / 2); return }
+        ItemType.WAKE_UP -> { p.rest = min(1f, p.rest + 0.45f); addHediff(p, HediffKind.WAKEUP_HIGH, 0.5f).duration = tk(3000); p.addThought("Drug use", 0.04f, tick, TICKS_PER_DAY / 2); return }
         else -> return
     }
     val h = addHediff(p, high, 0.5f)
-    h.duration = if (t == ItemType.BEER) 3500 else if (t == ItemType.GO_JUICE) 4000 else 2600
+    h.duration = if (t == ItemType.BEER) tk(3500) else if (t == ItemType.GO_JUICE) tk(4000) else tk(2600)
     if (t == ItemType.FLAKE) p.addThought("Flake rush", 0.28f, tick, TICKS_PER_DAY)
     if (t == ItemType.YAYO) p.addThought("Yayo rush", 0.3f, tick, TICKS_PER_DAY)
     // Existing addiction is satisfied again.
@@ -413,7 +415,7 @@ private fun Game.driveSocial(p: Pawn, j: Job) {
         if (r == -1) abort(p) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (++j.timer > 180) {
+    if (++j.timer > tk(180)) {
         socialInteract(p, o)
         p.joy = min(1f, p.joy + 0.18f)
         o.joy = min(1f, o.joy + 0.1f)
@@ -543,7 +545,7 @@ private fun Game.driveBury(p: Pawn, j: Job) {
             if (r == 0) { j.stage = 2; j.timer = 0 }
         }
         2 -> {
-            if (++j.timer > 120) {
+            if (++j.timer > tk(120)) {
                 val g = map.building[map.idx(j.dx, j.dy)]
                 val s = j.stack
                 if (g != null && s != null) {
@@ -702,8 +704,8 @@ private fun Game.driveRepair(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    b.hp = min(b.maxHp, b.hp + 0.4f * p.workSpeed(SkillType.CONSTRUCTION))
-    p.gainXp(SkillType.CONSTRUCTION, 0.04f)
+    b.hp = min(b.maxHp, b.hp + 0.4f * p.workSpeed(SkillType.CONSTRUCTION) / TIME_SCALE)
+    p.gainXp(SkillType.CONSTRUCTION, 0.04f / TIME_SCALE)
     if (b.hp >= b.maxHp) { map.desig[i] = 0; endJob(p) }
 }
 
@@ -715,7 +717,7 @@ private fun Game.driveClean(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    j.work += p.workSpeed(null)
+    j.work += p.workSpeed(null) / TIME_SCALE
     if (j.work >= 90f) {
         j.work = 0f
         map.filth[i] = (map.filth[i] - 1).coerceAtLeast(0).toByte()
@@ -732,7 +734,7 @@ private fun Game.driveFirefight(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    j.work += p.workSpeed(null)
+    j.work += p.workSpeed(null) / TIME_SCALE
     if (j.work >= 40f) {
         j.work = 0f
         f.intensity -= 0.45f
@@ -751,7 +753,7 @@ private fun Game.driveEquip(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (++j.timer > 60) {
+    if (++j.timer > tk(60)) {
         val old = p.weaponItem
         val oq = p.weaponQuality
         map.take(i, 1)
@@ -771,7 +773,7 @@ private fun Game.driveWear(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (++j.timer > 100) {
+    if (++j.timer > tk(100)) {
         map.take(i, 1)
         // Remove conflicting pieces: same slot, or outer layers overlapping the same body areas.
         val drop = p.apparel.filter { w ->
@@ -830,7 +832,7 @@ private fun Game.driveBill(p: Pawn, j: Job) {
             if (rr == -1) abort(p, true) else if (rr == 0) { j.stage = 3; j.work = 0f }
         }
         3 -> {
-            bench.inUse = 700
+            bench.inUse = tk(700)
             val sk = r.workType.skill() ?: SkillType.CRAFTING
             if (doWork(p, j, sk, r.work.toFloat() * (if (bench.def.workbench) 1f else 1f))) {
                 j.held.clear()
@@ -859,9 +861,9 @@ private fun Game.driveResearch(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    p.gainXp(SkillType.INTELLECTUAL, 0.07f)
+    p.gainXp(SkillType.INTELLECTUAL, 0.07f / TIME_SCALE)
     val mult = if (bench.def == BuildDef.HI_TECH_BENCH) 1.6f else 1f
-    val prog = (researchProgress[cur] ?: 0f) + p.workSpeed(SkillType.INTELLECTUAL) * 0.25f * mult * (if (Trait.TOO_SMART in p.traits) 1.35f else 1f)
+    val prog = (researchProgress[cur] ?: 0f) + p.workSpeed(SkillType.INTELLECTUAL) / TIME_SCALE * 0.25f * mult * (if (Trait.TOO_SMART in p.traits) 1.35f else 1f)
     researchProgress[cur] = prog
     if (prog >= cur.cost) {
         researchDone.add(cur)
@@ -870,7 +872,7 @@ private fun Game.driveResearch(p: Pawn, j: Job) {
         endJob(p)
         return
     }
-    if (++j.timer > 900) endJob(p)
+    if (++j.timer > tk(900)) endJob(p)
 }
 
 // ---------------------------------------------------------------- medical
@@ -979,7 +981,7 @@ private fun Game.driveWarden(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (++j.timer > 240) {
+    if (++j.timer > tk(240)) {
         val soc = p.level(SkillType.SOCIAL)
         p.gainXp(SkillType.SOCIAL, 120f)
         if (o.recruitMode == 0) {
@@ -1101,7 +1103,7 @@ private fun Game.driveHunt(p: Pawn, j: Job) {
         if (d < 1.6f) { fire(p, a); return }
         if (goTo(p, a.x, a.y, adjacent = true) == -1) abort(p)
     }
-    if (++j.timer > 2600) abort(p)
+    if (++j.timer > tk(2600)) abort(p)
 }
 
 /** Teaches a tame animal one trick at a time. Each attempt takes a while and succeeds more often with a skilled handler. */
@@ -1113,7 +1115,7 @@ private fun Game.driveTrain(p: Pawn, j: Job) {
         if (r == -1) abort(p) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (++j.timer >= 300) {
+    if (++j.timer >= tk(300)) {
         j.timer = 0
         p.gainXp(SkillType.ANIMALS, 60f)
         val chance = (0.25f + p.level(SkillType.ANIMALS) * 0.05f) * (1.2f - a.race.wildness)
@@ -1133,7 +1135,7 @@ private fun Game.driveTame(p: Pawn, j: Job) {
         if (r == -1) abort(p) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (++j.timer >= 260) {
+    if (++j.timer >= tk(260)) {
         j.timer = 0
         val skill = p.level(SkillType.ANIMALS)
         val chance = (0.18f + skill * 0.035f - a.race.tameDifficulty * 0.1f).coerceIn(0.03f, 0.9f) * (0.5f + (1f - a.race.wildness) * 0.6f)
@@ -1161,7 +1163,7 @@ private fun Game.driveSlaughter(p: Pawn, j: Job) {
         if (r == -1) abort(p) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (++j.timer > 90) {
+    if (++j.timer > tk(90)) {
         a.slaughterMark = false
         die(a, "slaughtered", p)
         endJob(p)

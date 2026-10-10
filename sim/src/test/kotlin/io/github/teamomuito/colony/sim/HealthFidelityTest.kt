@@ -299,10 +299,10 @@ class InjuryConditionTest {
         assertEquals(1e-5f, HealthRules.bleedRate(1e-5f, false, 0f), 0f)
         assertEquals("a perfect tend leaves nothing", 0f, HealthRules.bleedRate(1e-5f, true, 1f), 0f)
         assertEquals("a poor tend leaves a trickle", 1e-5f * 0.5f * 0.06f, HealthRules.bleedRate(1e-5f, true, 0.5f), 1e-9f)
-        val untended = HealthRules.clot(1e-5f, false, 1000)
-        val tended = HealthRules.clot(1e-5f, true, 1000)
+        val untended = HealthRules.clot(1e-5f, false, 1000f)
+        val tended = HealthRules.clot(1e-5f, true, 1000f)
         assertTrue(untended < 1e-5f && tended < untended)
-        assertEquals("never more than half per step", 0.5e-5f, HealthRules.clot(1e-5f, true, 100_000), 1e-9f)
+        assertEquals("never more than half per step", 0.5e-5f, HealthRules.clot(1e-5f, true, 100_000f), 1e-9f)
     }
 
     @Test fun lostBloodComesBackSlowerWhenHungry() {

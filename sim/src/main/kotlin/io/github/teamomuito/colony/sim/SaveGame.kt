@@ -8,7 +8,19 @@ import java.io.DataOutputStream
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
     /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 24
+    private const val VERSION = 25
+
+    /** Saves older than this count ticks in the old base of 1,000 ticks per hour. Their times are converted when read. */
+    private const val TIME_BASE_VERSION = 25
+
+    /** Times at or past this are "never" markers (Long.MAX_VALUE in battle maps). They are left alone. */
+    private const val NEVER = Long.MAX_VALUE / 4
+
+    private fun Long.fromOldBase(version: Int): Long =
+        if (version >= TIME_BASE_VERSION || this <= 0L || this >= NEVER) this else Math.round(this * TIME_SCALE.toDouble())
+    private fun Int.fromOldBase(version: Int): Int = if (version >= TIME_BASE_VERSION) this else Math.round(this * TIME_SCALE)
+    private fun Float.fromOldBase(version: Int): Float = if (version >= TIME_BASE_VERSION) this else this * TIME_SCALE
+    private fun DataInputStream.tickAt(version: Int): Long = readLong().fromOldBase(version)
     private const val OLDEST_READABLE = 14
 
     /** Goods off the map: one entry per lot. Before version 22 these were plain kind-and-count pairs. */
@@ -45,7 +57,7 @@ object SaveGame {
     }
 
     private fun DataInputStream.readPlan(version: Int): BattlePlan {
-        val p = BattlePlan(readInt(), readUTF(), readInt(), readFloat(), readBoolean(), BattleAftermath.entries[readInt()], readInt(), readInt(), readBoolean(), readLong())
+        val p = BattlePlan(readInt(), readUTF(), readInt(), readFloat(), readBoolean(), BattleAftermath.entries[readInt()], readInt(), readInt(), readBoolean(), tickAt(version))
         p.retreating = readBoolean()
         val oc = readInt(); p.outcome = if (oc >= 0) BattleOutcome.entries[oc] else null
         p.lostOnRetreat = readInt()
@@ -84,10 +96,10 @@ object SaveGame {
         if (st != null) writeJobStack(st)
     }
 
-    private fun DataInputStream.readJob(): Job {
+    private fun DataInputStream.readJob(version: Int): Job {
         val type = JobType.entries[readInt()]
         val j = Job(type, readInt(), readInt())
-        j.stage = readInt(); j.timer = readInt(); j.work = readFloat()
+        j.stage = readInt(); j.timer = readInt().fromOldBase(version); j.work = readFloat()
         j.targetPawn = readInt(); j.key = readInt(); j.amount = readInt(); j.dx = readInt(); j.dy = readInt(); j.bench = readInt(); j.billIndex = readInt()
         val item = readInt(); j.item = if (item >= 0) ItemType.entries[item] else null
         j.aux = readInt(); j.ingIdx = readInt(); j.collected = readInt()
@@ -322,14 +334,14 @@ object SaveGame {
         val i = DataInputStream(ByteArrayInputStream(data))
         val version = i.readInt()
         require(version in OLDEST_READABLE..VERSION) { "Unsupported save version" }
-        val seed = i.readLong(); val tick = i.readLong(); val name = i.readUTF()
+        val seed = i.readLong(); val tick = i.tickAt(version); val name = i.readUTF()
         val scenario = Scenario.entries[i.readInt()]; val story = Storyteller.entries[i.readInt()]; val diff = Difficulty.entries[i.readInt()]
         val nextPawn = i.readInt(); val raidCounter = i.readInt(); val survived = i.readInt()
-        val nr = i.readLong(); val nw = i.readLong(); val np = i.readLong(); val nt = i.readLong(); val nm = i.readLong(); val ntr = i.readLong()
-        val raidActive = i.readBoolean(); val raidStart = i.readInt(); val raidEnds = i.readLong(); val rsa = i.readLong()
-        val weather = Weather.entries[i.readInt()]; val weatherUntil = i.readLong()
-        val tempOffset = i.readFloat(); val tempUntil = i.readLong(); val tempName = i.readUTF()
-        val flare = i.readLong(); val toxic = i.readLong(); val eclipse = i.readLong()
+        val nr = i.tickAt(version); val nw = i.tickAt(version); val np = i.tickAt(version); val nt = i.tickAt(version); val nm = i.tickAt(version); val ntr = i.tickAt(version)
+        val raidActive = i.readBoolean(); val raidStart = i.readInt(); val raidEnds = i.tickAt(version); val rsa = i.tickAt(version)
+        val weather = Weather.entries[i.readInt()]; val weatherUntil = i.tickAt(version)
+        val tempOffset = i.readFloat(); val tempUntil = i.tickAt(version); val tempName = i.readUTF()
+        val flare = i.tickAt(version); val toxic = i.tickAt(version); val eclipse = i.tickAt(version)
         val hx = i.readInt(); val hy = i.readInt(); val wind = i.readFloat()
         val killed = i.readInt(); val earned = i.readInt(); val hints = i.readInt()
         val grave = List(i.readInt()) { i.readUTF() }
@@ -337,16 +349,16 @@ object SaveGame {
         val done = List(i.readInt()) { Research.entries[i.readInt()] }
         val prog = List(i.readInt()) { Research.entries[i.readInt()] to i.readFloat() }
         val traderList = List(i.readInt()) {
-            val t = TraderInfo(i.readInt(), i.readUTF(), i.readLong(), i.readLong())
+            val t = TraderInfo(i.readInt(), i.readUTF(), i.tickAt(version), i.tickAt(version))
             t.silver = i.readInt()
             t.stock.addAll(i.readStock(version))
             t
         }
         var raidEnded = -1L
-        val incidents = HashMap<Incident, Long>()
+        val incidents: MutableMap<Incident, Long> = java.util.EnumMap(Incident::class.java)
         if (version >= 20) {
-            raidEnded = i.readLong()
-            repeat(i.readInt()) { val name = i.readUTF(); val at = i.readLong(); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
+            raidEnded = i.tickAt(version)
+            repeat(i.readInt()) { val name = i.readUTF(); val at = i.tickAt(version); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
         }
 
         val w = i.readInt(); val h = i.readInt()
@@ -394,7 +406,7 @@ object SaveGame {
         repeat(i.readInt()) {
             val t = PlantType.entries[i.readInt()]
             val x = i.readShort().toInt(); val y = i.readShort().toInt()
-            val pl = Plant(t, x, y, i.readFloat()); pl.age = i.readInt()
+            val pl = Plant(t, x, y, i.readFloat()); pl.age = i.readInt().fromOldBase(version)
             map.plant[map.idx(x, y)] = pl
         }
         repeat(i.readInt()) {
@@ -437,18 +449,18 @@ object SaveGame {
             for (k in g.world.goodwill.indices) g.world.goodwill[k] = i.readInt()
             repeat(i.readInt()) { idx ->
                 val st = g.world.settlements.getOrNull(idx)
-                val silver = i.readInt(); val stockTick = i.readLong(); val destroyed = i.readLong()
+                val silver = i.readInt(); val stockTick = i.tickAt(version); val destroyed = i.tickAt(version)
                 val stock = i.readStock(version)
-                val req = if (i.readBoolean()) SettlementRequest(ItemType.entries[i.readInt()], i.readInt(), i.readInt(), i.readLong()) else null
+                val req = if (i.readBoolean()) SettlementRequest(ItemType.entries[i.readInt()], i.readInt(), i.readInt(), i.tickAt(version)) else null
                 if (st != null) { st.silver = silver; st.stockTick = stockTick; st.destroyedUntil = destroyed; st.stock.addAll(stock); st.request = req }
             }
             g.world.nextSiteId = i.readInt()
-            repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readLong(), i.readFloat(), i.readUTF())) }
+            repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.tickAt(version), i.readFloat(), i.readUTF())) }
             if (version >= 21) {
                 g.world.nextQuestId = i.readInt()
                 repeat(i.readInt()) {
-                    val q = Quest(i.readInt(), QuestKind.entries[i.readInt()], i.readInt(), i.readInt(), i.readInt(), i.readLong())
-                    q.state = QuestState.entries[i.readInt()]; q.resolvedAt = i.readLong()
+                    val q = Quest(i.readInt(), QuestKind.entries[i.readInt()], i.readInt(), i.readInt(), i.readInt(), i.tickAt(version))
+                    q.state = QuestState.entries[i.readInt()]; q.resolvedAt = i.tickAt(version)
                     g.world.quests.add(q)
                 }
                 repeat(i.readInt()) { val qid = i.readInt(); g.world.captives.add(Captive(readPawn(i, tick, version), qid)) }
@@ -456,7 +468,7 @@ object SaveGame {
             g.nextCaravanId = i.readInt()
             repeat(i.readInt()) {
                 val c = Caravan(i.readInt(), i.readUTF(), i.readInt())
-                c.destination = i.readInt(); c.progress = i.readFloat(); c.resting = i.readBoolean(); c.goingHome = i.readBoolean()
+                c.destination = i.readInt(); c.progress = i.readFloat().fromOldBase(version); c.resting = i.readBoolean(); c.goingHome = i.readBoolean()
                 c.lastEvent = i.readUTF(); c.forageNote = i.readBoolean()
                 repeat(i.readInt()) { c.route.add(i.readInt()) }
                 c.inventory.addAll(i.readStock(version))
@@ -466,7 +478,7 @@ object SaveGame {
             }
         }
         g.log.clear()
-        repeat(i.readInt()) { g.log.add(LogEntry(i.readLong(), i.readUTF(), i.readInt())) }
+        repeat(i.readInt()) { g.log.add(LogEntry(i.tickAt(version), i.readUTF(), i.readInt())) }
         if (version >= 16) {
             if (i.readBoolean()) g.pendingBattle = i.readPlan(version)
             if (i.readBoolean()) {
@@ -489,8 +501,8 @@ object SaveGame {
         }
         if (version >= 17) {
             g.nextRansomId = i.readInt()
-            repeat(i.readInt()) { g.ransomOffers.add(RansomOffer(i.readInt(), i.readInt(), i.readUTF(), i.readInt(), i.readInt(), i.readLong())) }
-            repeat(i.readInt()) { g.ransomCooldown[i.readInt()] = i.readLong() }
+            repeat(i.readInt()) { g.ransomOffers.add(RansomOffer(i.readInt(), i.readInt(), i.readUTF(), i.readInt(), i.readInt(), i.tickAt(version))) }
+            repeat(i.readInt()) { g.ransomCooldown[i.readInt()] = i.tickAt(version) }
         }
         if (version >= 18) {
             g.rng.restore(i.readLong())
@@ -498,7 +510,7 @@ object SaveGame {
         }
         if (version >= 19) {
             g.playMs = i.readLong()
-            repeat(i.readInt()) { g.unreachable[i.readLong()] = i.readLong() }
+            repeat(i.readInt()) { g.unreachable[i.readLong()] = i.tickAt(version) }
         }
         map.rebuildRooms(g.outdoorTemp())
         for (p in g.pawns) g.recomputeHealth(p)
@@ -513,7 +525,7 @@ object SaveGame {
         p.x = i.readShort().toInt(); p.y = i.readShort().toInt(); p.fromX = p.x; p.fromY = p.y
         p.downed = i.readBoolean(); p.drafted = i.readBoolean(); p.prisoner = i.readBoolean(); p.hostileFlag = i.readBoolean()
         p.age = i.readInt(); p.female = i.readBoolean(); p.mood = i.readFloat()
-        p.breakUntil = i.readLong(); p.breakKind = i.readInt()
+        p.breakUntil = i.tickAt(version); p.breakKind = i.readInt()
         p.food = i.readFloat(); p.rest = i.readFloat(); p.joy = i.readFloat(); p.bloodLoss = i.readFloat()
         p.careLevel = i.readInt(); p.foodPolicy = i.readInt(); p.allowDrugs = i.readBoolean(); p.outfit = i.readInt(); p.drugPolicy = i.readInt()
         for (s in p.skill.indices) p.skill[s] = i.readInt()
@@ -527,24 +539,24 @@ object SaveGame {
         repeat(i.readInt()) {
             val inj = Injury(i.readInt(), DamageKind.entries[i.readInt()], i.readFloat(), i.readFloat())
             inj.tended = i.readBoolean(); inj.tendQuality = i.readFloat(); inj.infection = i.readFloat(); inj.infectable = i.readBoolean()
-            inj.permanent = i.readBoolean(); inj.missing = i.readBoolean(); inj.scar = i.readBoolean(); inj.implant = i.readUTF(); inj.age = i.readInt(); inj.immune = i.readFloat()
+            inj.permanent = i.readBoolean(); inj.missing = i.readBoolean(); inj.scar = i.readBoolean(); inj.implant = i.readUTF(); inj.age = i.readInt().fromOldBase(version); inj.immune = i.readFloat()
             p.injuries.add(inj)
         }
         repeat(i.readInt()) {
             val h = Hediff(HediffKind.entries[i.readInt()], i.readFloat(), i.readFloat())
-            h.tended = i.readBoolean(); h.tendQuality = i.readFloat(); h.age = i.readInt(); h.part = i.readInt(); h.duration = i.readInt()
+            h.tended = i.readBoolean(); h.tendQuality = i.readFloat(); h.age = i.readInt().fromOldBase(version); h.part = i.readInt(); h.duration = i.readInt().fromOldBase(version)
             p.hediffs.add(h)
         }
-        repeat(i.readInt()) { p.thoughts.add(Thought(i.readUTF(), i.readFloat(), i.readLong() + now)) }
+        repeat(i.readInt()) { p.thoughts.add(Thought(i.readUTF(), i.readFloat(), i.tickAt(version) + now)) }
         repeat(i.readInt()) { p.opinion[i.readInt()] = i.readInt() }
         p.spouse = i.readInt(); p.lover = i.readInt()
         for (s in p.schedule.indices) p.schedule[s] = i.readInt()
         p.bedId = i.readInt(); p.homeTile = i.readInt()
-        p.tame = i.readBoolean(); p.master = i.readInt(); p.animalProductTimer = i.readInt(); p.manhunter = i.readBoolean()
+        p.tame = i.readBoolean(); p.master = i.readInt(); p.animalProductTimer = i.readInt().fromOldBase(version); p.manhunter = i.readBoolean()
         p.huntMark = i.readBoolean(); p.tameMark = i.readBoolean(); p.slaughterMark = i.readBoolean()
         p.resistance = i.readFloat(); p.escaping = i.readBoolean(); p.recruitMode = i.readInt()
         p.raidId = i.readInt(); p.raidMode = i.readInt(); p.campX = i.readInt(); p.campY = i.readInt(); p.retreating = i.readBoolean()
-        p.escapeTick = i.readLong(); p.wanderer = i.readBoolean(); p.lastSocial = i.readLong(); p.wfaction = i.readInt(); p.ally = i.readBoolean(); p.birthday = i.readInt(); p.ageDays = i.readInt(); p.mother = i.readInt(); p.father = i.readInt(); p.pregnantUntil = i.readLong(); p.pregnantBy = i.readInt(); p.dormant = i.readBoolean()
+        p.escapeTick = i.tickAt(version); p.wanderer = i.readBoolean(); p.lastSocial = i.tickAt(version); p.wfaction = i.readInt(); p.ally = i.readBoolean(); p.birthday = i.readInt(); p.ageDays = i.readInt(); p.mother = i.readInt(); p.father = i.readInt(); p.pregnantUntil = i.tickAt(version); p.pregnantBy = i.readInt(); p.dormant = i.readBoolean()
         p.herdLeader = i.readInt()
         p.refugee = i.readBoolean(); p.areaRestriction = i.readInt()
         repeat(i.readInt()) { p.implants[i.readInt()] = Implant.entries[i.readInt()] }
@@ -557,19 +569,19 @@ object SaveGame {
             }
         }
         if (version >= 19) {
-            p.carriedBy = i.readInt(); p.carrying = i.readInt(); p.attackCd = i.readInt(); p.warmup = i.readInt(); p.burstLeft = i.readInt()
-            p.moveCd = i.readInt(); p.moveTotal = i.readInt(); p.fromX = i.readInt(); p.fromY = i.readInt()
+            p.carriedBy = i.readInt(); p.carrying = i.readInt(); p.attackCd = i.readInt().fromOldBase(version); p.warmup = i.readInt().fromOldBase(version); p.burstLeft = i.readInt()
+            p.moveCd = i.readInt().fromOldBase(version); p.moveTotal = i.readInt().fromOldBase(version); p.fromX = i.readInt(); p.fromY = i.readInt()
             p.lastJoyKind = ByteArray(i.readInt()).also { i.readFully(it) }.decodeToString()
             p.recruitProgress = i.readFloat()
             p.temp = i.readFloat(); p.dark = i.readBoolean()
             if (version >= 21) p.abandoned = i.readBoolean()
-            if (version >= 23) p.suppressedUntil = i.readLong()
+            if (version >= 23) p.suppressedUntil = i.tickAt(version)
             if (version >= 24) p.trained = i.readInt()
             p.pathKey = i.readInt(); p.pathI = i.readInt()
             val pathLen = i.readInt()
             p.path = if (pathLen < 0) null else IntArray(pathLen) { i.readInt() }
             repeat(i.readInt()) { p.reserved.add(i.readInt()) }
-            if (i.readBoolean()) p.job = i.readJob()
+            if (i.readBoolean()) p.job = i.readJob(version)
         }
         return p
     }

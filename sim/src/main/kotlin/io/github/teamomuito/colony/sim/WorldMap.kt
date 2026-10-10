@@ -121,7 +121,8 @@ class World(val w: Int, val h: Int) {
     companion object {
         const val W = 60
         const val H = 40
-        const val TICKS_PER_COST = 1900f
+        /** Ticks to cross one unit of travel cost; written in old ticks and scaled to the current calendar. */
+        const val TICKS_PER_COST = 1900f * TIME_SCALE
 
         private val names1 = listOf("Ash", "Red", "Stone", "Mill", "Crow", "Dun", "Bright", "Grey", "Thorn", "Fox", "Salt", "Iron", "Moss", "Wolf", "Ember", "Cinder", "Hollow", "Rook", "Black", "Frost", "Elm", "Hawk", "Marsh", "Gull")
         private val names2 = listOf("ford", "haven", "wick", "stead", "ridge", "mere", "fall", "gate", "holm", "camp", "post", "reach", "hold", "bury", "field", "crest")

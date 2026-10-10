@@ -114,12 +114,12 @@ internal fun Game.driveSurgery(p: Pawn, j: Job) {
             if (r == -1) abortSurg(p, j) else if (r == 0) { j.stage = 3; j.work = 0f }
         }
         3 -> {
-            j.work += p.workSpeed(SkillType.MEDICINE)
-            p.gainXp(SkillType.MEDICINE, 0.08f)
+            j.work += p.workSpeed(SkillType.MEDICINE) / TIME_SCALE
+            p.gainXp(SkillType.MEDICINE, 0.08f / TIME_SCALE)
             if (j.work >= 700f) {
                 val hospital = map.building[map.idx(o.x, o.y)]?.def?.medical == true
                 val chance = (0.5f + 0.03f * p.level(SkillType.MEDICINE) + (if (hospital) 0.1f else 0f) + (if (order.kind == SurgeryKind.AMPUTATE) 0.3f else 0f)).coerceIn(0.3f, 0.98f)
-                val h = addHediff(o, HediffKind.ANESTHESIA, 0.5f); h.duration = 3000
+                val h = addHediff(o, HediffKind.ANESTHESIA, 0.5f); h.duration = tk(3000)
                 j.held.clear()
                 if (rng.float() < chance) {
                     applySurgery(o, order)

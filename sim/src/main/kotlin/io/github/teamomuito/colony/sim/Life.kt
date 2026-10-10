@@ -5,7 +5,6 @@ import kotlin.math.min
 
 enum class LifeStage(val label: String) { BABY("Baby"), CHILD("Child"), TEEN("Teenager"), JUVENILE("Juvenile"), ADULT("Adult") }
 
-const val DAYS_PER_YEAR = 60
 const val GESTATION_DAYS = 30
 
 /** Work a child may do: light chores only. Teens can do most things. Babies nothing. */

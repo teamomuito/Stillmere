@@ -94,7 +94,7 @@ class ReservationTest {
         assertTrue(g.reserve(a, k))
         a.reserved.clear()                       // a path that forgot to release
         assertTrue("a stale claim does not block", g.isFree(b, k))
-        g.run(250)                               // one slow tick
+        g.run(Game.SLOW_TICK.toInt())            // one slow tick
         assertNull("the stale entry is gone", g.reservations[k])
     }
 

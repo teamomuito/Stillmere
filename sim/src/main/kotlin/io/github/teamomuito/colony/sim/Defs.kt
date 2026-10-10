@@ -1,8 +1,24 @@
 package io.github.teamomuito.colony.sim
 
-const val TICKS_PER_HOUR = 1000
-const val TICKS_PER_DAY = 24000
+/** The calendar: 60 ticks per second at normal speed, 2,500 ticks to an hour, 60,000 to a day, 15 days to a season, 60 to a year. */
+const val TICKS_PER_HOUR = 2500
+const val TICKS_PER_DAY = 60000
 const val DAYS_PER_SEASON = 15
+const val SEASONS_PER_YEAR = 4
+const val DAYS_PER_YEAR = DAYS_PER_SEASON * SEASONS_PER_YEAR
+const val HOURS_PER_DAY = 24
+
+/**
+ * Many numbers in the simulation were tuned when a day was 24,000 ticks (1,000 per hour). They are still written in those
+ * units. [TIME_SCALE] converts: [tk] turns a count of those old ticks into current ticks (a cooldown, a timer, how often
+ * something updates), and a rate per old tick is divided by [TIME_SCALE] to get a rate per current tick. Anything given in
+ * hours or days needs no conversion.
+ */
+const val LEGACY_TICKS_PER_HOUR = 1000
+const val TIME_SCALE = TICKS_PER_HOUR / LEGACY_TICKS_PER_HOUR.toFloat()
+
+fun tk(legacyTicks: Int): Int = Math.round(legacyTicks * TIME_SCALE)
+fun tk(legacyTicks: Long): Long = Math.round(legacyTicks * TIME_SCALE.toDouble())
 
 enum class Terrain(val label: String, val passable: Boolean, val fertility: Float, val cost: Int) {
     SOIL("Soil", true, 1f, 1),
@@ -284,6 +300,10 @@ enum class Weapon(
     MINI_TURRET_GUN("Mini-turret", true, 8f, 22f, 40, 0.7f, DamageKind.BULLET, burst = 2);
 
     val meleeSkill get() = !ranged
+
+    /** Warmup and cooldown in current ticks; the stats above are written in old ticks (see [TIME_SCALE]). */
+    val warmupTicks get() = tk(warmup)
+    val cooldownTicks get() = tk(cooldown)
 }
 
 enum class ApparelSlot { HEAD, SHIRT, PANTS, OUTER }

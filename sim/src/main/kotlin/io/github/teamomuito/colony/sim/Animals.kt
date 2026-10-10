@@ -46,7 +46,7 @@ private fun Game.anchorOf(p: Pawn): Pair<Int, Int> {
 
 internal fun Game.animalTick(p: Pawn) {
     // Eating and products.
-    if (canGraze(p) && p.food < 0.95f && tick % 4 == 0L) p.food = min(1f, p.food + 0.0016f * (if (p.faction == Faction.PLAYER) 1f else 1.4f))
+    if (canGraze(p) && p.food < 0.95f && tick % tk(4) == 0L) p.food = min(1f, p.food + 0.0016f * (if (p.faction == Faction.PLAYER) 1f else 1.4f))
     if (p.faction == Faction.PLAYER) {
         val prod = p.race.product
         if (prod != null && p.stage == LifeStage.ADULT) {
@@ -107,7 +107,7 @@ internal fun Game.animalTick(p: Pawn) {
     }
     // Idle wandering.
     if (j.timer-- <= 0 || goTo(p, j.tx, j.ty) != 1) {
-        j.timer = rng.range(60, 260)
+        j.timer = rng.range(tk(60), tk(260))
         val (ax, ay) = anchorOf(p)
         val rad = if (p.faction == Faction.PLAYER) 11 else 7
         val x = (ax + rng.range(-rad, rad)).coerceIn(1, map.w - 2)
@@ -125,16 +125,16 @@ internal fun Game.animalHostileAI(p: Pawn) {
     // Provoked animals go after whoever hurt them, then calm down.
     if (p.predatorTarget >= 0 && p.race.insect.not()) {
         val prov = pawnById(p.predatorTarget)
-        if (prov == null || !prov.alive || prov.downed || j.timer > 2400) { p.manhunter = false; p.predatorTarget = -1; p.job = null; return }
+        if (prov == null || !prov.alive || prov.downed || j.timer > tk(2400)) { p.manhunter = false; p.predatorTarget = -1; p.job = null; return }
         j.targetPawn = prov.id
         t = prov
     }
-    if (t == null || !t.alive || t.downed && j.timer % 20 == 0 || j.timer % 80 == 0 && p.predatorTarget < 0) {
+    if (t == null || !t.alive || t.downed && j.timer % tk(20) == 0 || j.timer % tk(80) == 0 && p.predatorTarget < 0) {
         t = nearestPawn(p) { it.alive && it !== p && (it.faction == Faction.PLAYER || it.faction == Faction.VISITOR) && !it.downed }
         j.targetPawn = t?.id ?: -1
     }
     if (t == null) { p.manhunter = false; p.job = null; return }
-    if (p.manhunter && tick % 3000L == 0L && rng.chance(0.2f) && distance(p.x, p.y, t.x, t.y) > 30f) { p.manhunter = false; p.job = null; return }
+    if (p.manhunter && tick % tk(3000L) == 0L && rng.chance(0.2f) && distance(p.x, p.y, t.x, t.y) > 30f) { p.manhunter = false; p.job = null; return }
     if (distance(p.x, p.y, t.x, t.y) < 1.9f) fire(p, t)
     else goTo(p, t.x, t.y, adjacent = true, breach = false)
 }

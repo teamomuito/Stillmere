@@ -37,7 +37,7 @@ class BattlePlan(
 }
 
 /** Battles last at most this long; after that the colony withdraws. */
-const val BATTLE_LIMIT = 15_000L
+val BATTLE_LIMIT = tk(15_000L)
 
 /** The world asks for a fight; nothing happens until the app begins it, so the world freezes meanwhile. */
 fun Game.startFight(

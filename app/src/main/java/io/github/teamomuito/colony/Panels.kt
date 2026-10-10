@@ -11,7 +11,10 @@ import io.github.teamomuito.colony.sim.BuildDef
 import io.github.teamomuito.colony.sim.Cap
 import io.github.teamomuito.colony.sim.Faction
 import io.github.teamomuito.colony.sim.Game
+import io.github.teamomuito.colony.sim.HOURS_PER_DAY
 import io.github.teamomuito.colony.sim.ItemType
+import io.github.teamomuito.colony.sim.TICKS_PER_DAY
+import io.github.teamomuito.colony.sim.TICKS_PER_HOUR
 import io.github.teamomuito.colony.sim.JobType
 import io.github.teamomuito.colony.sim.Pawn
 import io.github.teamomuito.colony.sim.PlantType
@@ -347,8 +350,8 @@ class Panels(private val a: MainActivity) {
         logSig = s
         rebuild(body) { host ->
             for (l in game.log.asReversed().take(90)) {
-                val day = l.tick / 24000L + 1
-                val hour = (l.tick / 1000 % 24).toInt()
+                val day = l.tick / TICKS_PER_DAY.toLong() + 1
+                val hour = (l.tick / TICKS_PER_HOUR.toLong() % HOURS_PER_DAY).toInt()
                 val color = when (l.level) { 3 -> ui.bad; 2 -> ui.warn; 1 -> ui.good; else -> ui.text }
                 host.addView(ui.label("Day $day ${hour.toString().padStart(2, '0')}:00  ${l.text}", 11.5f, color))
             }

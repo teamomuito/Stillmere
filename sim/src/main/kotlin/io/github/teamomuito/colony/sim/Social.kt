@@ -103,7 +103,7 @@ fun Game.startFight(a: Pawn, b: Pawn) {
     a.addThought("Got into a fight", -0.1f, tick, TICKS_PER_DAY)
     b.addThought("Got into a fight", -0.1f, tick, TICKS_PER_DAY)
     a.breakKind = Break.INSULT
-    a.breakUntil = tick + 1200
+    a.breakUntil = tick + tk(1200)
     endJob(a)
     say("${a.name} and ${b.name} are fighting!", 2)
     dealDamage(b, DamageKind.BRUISE, 4f, 0f, a)

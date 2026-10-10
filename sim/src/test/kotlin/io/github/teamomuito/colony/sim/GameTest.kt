@@ -81,7 +81,7 @@ class WorldTest {
         val lamp = Building(BuildDef.STANDING_LAMP, hx + 4, hy, true); g.map.building[g.map.idx(hx + 4, hy)] = lamp
         // Run into daytime.
         g.tick = 12L * TICKS_PER_HOUR
-        g.run(600)
+        g.run(tk(600))
         assertTrue("lamp powered", lamp.powered)
         assertTrue(g.power.produced > 500f)
         // A solar flare shuts everything down.
@@ -740,7 +740,8 @@ class MapSizeTest {
 
 class SettleTest {
     @Test fun caravanFoundsNewColonyAndOldOneIsArchived() {
-        val g = newGame(21, Scenario.LOST_TRIBE); g.quiet()
+        // Seed 22: the random draws moved with the time base, and seed 21's trip now meets an ambush. This test is about settling.
+        val g = newGame(22, Scenario.LOST_TRIBE); g.quiet()
         g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY + 3, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.STEEL, 60, g.homeX, g.homeY)
         val homeTile = g.world.homeTile
@@ -749,7 +750,7 @@ class SettleTest {
         assertNull(g.formCaravan(members, mapOf(ItemType.STEEL to 10), goal))
         val c = g.caravans.single()
         var guard = 0
-        while (g.caravans.contains(c) && c.tile != goal && guard++ < 3000) g.run(250)
+        while (g.caravans.contains(c) && c.tile != goal && guard++ < 3000) g.run(tk(250))
         if (!g.caravans.contains(c) || c.tile != goal) org.junit.Assert.fail("did not arrive")
         val st = g.settle(c, "Newhold")
         assertNotNull(st)
@@ -1625,7 +1626,7 @@ class RansomTest {
         val p = g.prisonerOf(f.id)
         val offer = g.untilOffer(p)!!
         val l = SaveGame.read(SaveGame.write(g))
-        l.run(250) // powered flags are not saved; the power network is recomputed on the next slow tick (every 250 ticks)
+        l.run(Game.SLOW_TICK.toInt()) // powered flags are not saved; the power network is recomputed on the next slow tick
         val lo = l.ransomOffers.single()
         assertEquals(offer.price, lo.price); assertEquals(offer.expires, lo.expires)
         val lp = l.pawnById(p.id)!!

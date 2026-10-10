@@ -91,9 +91,9 @@ object HealthRules {
     fun bleedRate(raw: Float, tended: Boolean, tendQuality: Float): Float =
         if (tended) raw * (1f - tendQuality) * TENDED_BLEED_RESIDUAL else raw
 
-    /** Clotting: the wound's own bleed rate falls with time, never below half per step. */
-    fun clot(bleed: Float, tended: Boolean, dt: Int): Float =
-        bleed * (1f - dt / (if (tended) BLEED_CLOT_TICKS_TENDED else BLEED_CLOT_TICKS_UNTENDED)).coerceAtLeast(0.5f)
+    /** Clotting over [ldt] old ticks: the wound's own bleed rate falls with time, never below half per step. */
+    fun clot(bleed: Float, tended: Boolean, ldt: Float): Float =
+        bleed * (1f - ldt / (if (tended) BLEED_CLOT_TICKS_TENDED else BLEED_CLOT_TICKS_UNTENDED)).coerceAtLeast(0.5f)
 
     /** Blood regained per day once nothing is bleeding. */
     fun bloodRecoveryPerDay(wellFed: Boolean): Float = if (wellFed) 0.36f else 0.1f
