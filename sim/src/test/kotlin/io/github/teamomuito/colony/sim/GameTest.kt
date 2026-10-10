@@ -819,11 +819,16 @@ class LifeTest {
     }
 
     @Test fun animalsBreedAndYoungGrowUp() {
+        // Drive the daily life hook directly. Stepping the whole game is not reliable here: an idle colony
+        // starves or falls ill within about two weeks, before a cow's gestation can finish.
         val g = newGame(34); g.quiet()
         val a = g.newAnimal(Race.COW, g.homeX, g.homeY + 4, Faction.PLAYER); a.female = true; a.ageDays = 100
         val b = g.newAnimal(Race.COW, g.homeX + 1, g.homeY + 4, Faction.PLAYER); b.female = false; b.ageDays = 100
         var guard = 0
-        while (g.pawns.none { it.race == Race.COW && it.stage == LifeStage.JUVENILE } && guard++ < 600) g.run(TICKS_PER_DAY)
+        while (a.pregnantUntil == 0L && guard++ < 600) g.lifeDaily()
+        assertTrue("the cow conceives within 600 daily rolls", a.pregnantUntil > 0L)
+        a.pregnantUntil = g.tick // the due date has come; the next daily roll gives birth
+        g.lifeDaily()
         val calf = g.pawns.firstOrNull { it.race == Race.COW && it.stage == LifeStage.JUVENILE }
         assertNotNull(calf)
         assertTrue(calf!!.bodyScale() < 0.7f)
