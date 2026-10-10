@@ -2,7 +2,6 @@ package io.github.teamomuito.colony.sim
 
 import java.util.PriorityQueue
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.max
 import kotlin.math.min
 
@@ -285,7 +284,7 @@ class World(val w: Int, val h: Int) {
         val horizontal: Boolean? = if (acrossEW && !acrossNS) true else if (acrossNS && !acrossEW) false else null
         var sx = 0; var sy = 0; var nWater = 0
         for (dy in -1..1) for (dx in -1..1) if ((dx != 0 || dy != 0) && waterAt(dx, dy)) { sx += dx; sy += dy; nWater++ }
-        val lakeAngle = if (nWater > 0 && (sx != 0 || sy != 0)) atan2(sy.toFloat(), sx.toFloat()) else null
+        val lakeAngle = if (nWater > 0 && (sx != 0 || sy != 0)) StrictMath.atan2(sy.toDouble(), sx.toDouble()).toFloat() else null
         return LocalTerrain(river[t], adjacentWater(t) && !river[t], hills[t], horizontal, lakeAngle)
     }
 

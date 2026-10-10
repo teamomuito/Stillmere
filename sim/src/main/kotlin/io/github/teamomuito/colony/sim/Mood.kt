@@ -241,15 +241,9 @@ private fun Game.breaksTick(p: Pawn) {
     }
     if (p.breakUntil > 0 || p.downed || p.drafted && p.job?.type == JobType.ATTACK) return
     if (!mentalBreaksEnabled) return
-    val mood = p.mood
-    val chance = when {
-        mood < 0.10f -> 0.03f
-        mood < 0.20f -> 0.012f
-        mood < 0.30f -> 0.0045f
-        else -> 0f
-    } * (if (Trait.PSYCHOPATH in p.traits) 0.8f else 1f) * (if (Trait.IRON_WILLED in p.traits) 0.35f else 1f) * (if (Trait.VOLATILE in p.traits) 1.8f else 1f)
+    val sev = BreakRules.severity(p.mood)
+    val chance = BreakRules.chance(sev) * (if (Trait.PSYCHOPATH in p.traits) 0.8f else 1f) * (if (Trait.IRON_WILLED in p.traits) 0.35f else 1f) * (if (Trait.VOLATILE in p.traits) 1.8f else 1f)
     if (chance <= 0f || rng.float() > chance) return
-    val sev = if (mood < 0.10f) 2 else if (mood < 0.20f) 1 else 0
     val options = ArrayList<Int>()
     options += Break.WANDER; options += Break.BINGE_FOOD; options += Break.INSULT; options += Break.HIDE
     if (sev >= 1) { options += Break.TANTRUM; options += Break.BERSERK; if (Trait.PYROMANIAC in p.traits) { options += Break.FIRE; options += Break.FIRE } }

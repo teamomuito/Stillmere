@@ -186,7 +186,8 @@ private fun Game.caravanStep(c: Caravan, dt: Int) {
     // Needs: food, rest, health.
     for (p in c.members.toList()) {
         if (!p.alive) continue
-        val rate = if (p.isAnimal) 0.55f * Math.pow(p.race.size.toDouble(), 0.5).toFloat() * 0.8f else 0.7f
+        val rate = if (p.isAnimal) 0.55f * StrictMath.pow(p.race.size.toDouble(), 0.5).toFloat() * 0.8f
+            else NeedRules.humanFoodPerDay(Trait.GOURMAND in p.traits, Trait.ASCETIC in p.traits, p.pregnantUntil > 0L, p.age)
         p.food = max(0f, p.food - rate * days)
         if (!p.isAnimal) p.rest = if (c.resting) min(1f, p.rest + 2.4f * days) else max(0f, p.rest - 0.95f * days)
         if (p.food < 0.35f) caravanEat(c, p)

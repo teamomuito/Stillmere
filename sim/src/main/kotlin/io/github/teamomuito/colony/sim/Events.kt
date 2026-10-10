@@ -142,8 +142,8 @@ fun Game.launchRaid() {
             do {
                 val ang = rng.float() * 6.283f
                 val rad = rng.range(12, 22)
-                x = (homeX + (Math.cos(ang.toDouble()) * rad).toInt()).coerceIn(2, map.w - 3)
-                y = (homeY + (Math.sin(ang.toDouble()) * rad).toInt()).coerceIn(2, map.h - 3)
+                x = (homeX + (StrictMath.cos(ang.toDouble()) * rad).toInt()).coerceIn(2, map.w - 3)
+                y = (homeY + (StrictMath.sin(ang.toDouble()) * rad).toInt()).coerceIn(2, map.h - 3)
             } while (tries++ < 20 && (!map.walkable(map.idx(x, y)) || map.roofed(map.idx(x, y))))
         }
         if (!map.walkable(map.idx(x, y))) { left -= 1f; continue }

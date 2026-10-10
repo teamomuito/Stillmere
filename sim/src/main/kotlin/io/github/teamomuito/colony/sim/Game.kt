@@ -4,7 +4,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 import kotlin.math.sqrt
 
 class LogEntry(val tick: Long, val text: String, val level: Int) // level: 0 info, 1 good, 2 warning, 3 bad
@@ -324,24 +323,26 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         z.allowed[ItemType.CORPSE_HUMAN.ordinal] = false
         for (yy in sy - 2..sy) for (xx in sx - 2..sx + 1) { map.zoneId[map.idx(xx, yy)] = z.id; z.cells++ }
         map.zoneVersion++
+        // Food stock is scaled from the old figures, because the hunger rate rose from 0.7 to 1.6 a day. Each opening
+        // lasts as long as it did before, counting the colonists' starting food bars. See docs/fidelity/needs-mood.md.
         val sup = ArrayList<Pair<ItemType, Int>>()
         when (sc) {
             Scenario.CRASHLANDED -> {
                 researchDone.addAll(listOf(Research.COMPLEX_FURNITURE))
-                sup += ItemType.MEAL_PACKAGED to 30; sup += ItemType.WOOD to 150; sup += ItemType.STEEL to 250; sup += ItemType.COMPONENT to 12
+                sup += ItemType.MEAL_PACKAGED to 72; sup += ItemType.WOOD to 150; sup += ItemType.STEEL to 250; sup += ItemType.COMPONENT to 12
                 sup += ItemType.MEDS_HERBAL to 8; sup += ItemType.MEDS_INDUSTRIAL to 4; sup += ItemType.SILVER to 200; sup += ItemType.CLOTH to 60
             }
             Scenario.LOST_TRIBE -> {
-                sup += ItemType.PEMMICAN to 60; sup += ItemType.WOOD to 160; sup += ItemType.STEEL to 60; sup += ItemType.LEATHER to 60
-                sup += ItemType.MEDS_HERBAL to 6; sup += ItemType.CLOTH to 80; sup += ItemType.RICE to 40
+                sup += ItemType.PEMMICAN to 199; sup += ItemType.WOOD to 160; sup += ItemType.STEEL to 60; sup += ItemType.LEATHER to 60
+                sup += ItemType.MEDS_HERBAL to 6; sup += ItemType.CLOTH to 80; sup += ItemType.RICE to 132
                 researchDone.add(Research.BASIC_MELEE); researchDone.add(Research.SMITHING); researchDone.add(Research.BOWS)
             }
             Scenario.RICH_EXPLORER -> {
                 researchDone.addAll(listOf(Research.COMPLEX_FURNITURE, Research.SMITHING, Research.STONECUTTING, Research.TAILORING))
-                sup += ItemType.MEAL_PACKAGED to 20; sup += ItemType.SILVER to 1800; sup += ItemType.STEEL to 400; sup += ItemType.WOOD to 200
+                sup += ItemType.MEAL_PACKAGED to 47; sup += ItemType.SILVER to 1800; sup += ItemType.STEEL to 400; sup += ItemType.WOOD to 200
                 sup += ItemType.MEDS_INDUSTRIAL to 10; sup += ItemType.COMPONENT to 20; sup += ItemType.GOLD to 60
             }
-            Scenario.SOLO -> { sup += ItemType.MEAL_PACKAGED to 6 }
+            Scenario.SOLO -> { sup += ItemType.MEAL_PACKAGED to 15 }
         }
         var k = 0
         for ((t, n) in sup) {
@@ -616,7 +617,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val sleeping = p.job?.type == JobType.SLEEP && p.job?.stage == 1
         if (p.race.mech) { p.food = 1f; p.rest = 1f }
         // Needs.
-        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { Math.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else 0.7f * (if (Trait.GOURMAND in p.traits) 1.3f else if (Trait.ASCETIC in p.traits) 0.9f else 1f) * (if (p.pregnantUntil > 0L) 1.25f else 1f) * (if (p.age < 13) 0.6f else 1f)
+        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { StrictMath.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else NeedRules.humanFoodPerDay(Trait.GOURMAND in p.traits, Trait.ASCETIC in p.traits, p.pregnantUntil > 0L, p.age)
         p.food = max(0f, p.food - foodRate / TICKS_PER_DAY * (if (sleeping) 0.7f else 1f))
         if (!p.isAnimal) {
             if (!sleeping) p.rest = max(0f, p.rest - 0.95f / TICKS_PER_DAY)
