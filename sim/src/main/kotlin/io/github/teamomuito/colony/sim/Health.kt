@@ -4,7 +4,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-fun Pawn.partMax(i: Int): Float = race.body[i].hp * race.hpScale
+fun Pawn.partMax(i: Int): Float = HealthRules.partMax(race.body[i].hp, race.hpScale)
 
 fun Pawn.partMissing(i: Int): Boolean {
     if (implants.containsKey(i)) return false
@@ -22,8 +22,7 @@ fun Pawn.partDamage(i: Int): Float {
 fun Pawn.partEff(i: Int): Float {
     if (partMissing(i)) return 0f
     val imp = implants[i]
-    val base = (1f - partDamage(i) / partMax(i)).coerceIn(0f, 1f)
-    return if (imp != null) base * imp.eff else base
+    return HealthRules.partEfficiency(partDamage(i), partMax(i), imp?.eff)
 }
 
 private fun Pawn.avgEff(tag: PartTag, default: Float = 1f): Float {
@@ -33,6 +32,18 @@ private fun Pawn.avgEff(tag: PartTag, default: Float = 1f): Float {
     return if (n == 0) default else s / n
 }
 
+/** Blood filtration from the body's kidneys and liver as they stand now. */
+fun Pawn.filtrationEff(): Float = HealthRules.bloodFiltration(
+    if (hasTag(PartTag.KIDNEY)) avgEff(PartTag.KIDNEY) else null,
+    if (hasTag(PartTag.LIVER)) avgEff(PartTag.LIVER) else null,
+)
+
+/** The pain level at which this pawn goes into shock. */
+fun Pawn.painShockThreshold(): Float = HealthRules.painShockThreshold(Trait.WIMP in traits)
+
+/** Whether this pawn's current capacities and pain put them on the ground. */
+fun Pawn.shouldBeDowned(): Boolean = HealthRules.shouldBeDowned(cap[Cap.CONSCIOUSNESS.ordinal], cap[Cap.MOVING.ordinal], pain, painShockThreshold())
+
 private fun Pawn.hasTag(tag: PartTag) = race.body.any { it.tag == tag }
 
 fun Game.recomputeHealth(p: Pawn) {
@@ -40,39 +51,28 @@ fun Game.recomputeHealth(p: Pawn) {
     var pain = 0f
     for (inj in p.injuries) {
         if (inj.scar || inj.missing || p.race.mech) continue
-        pain += inj.severity * inj.kind.pain * 0.014f / max(0.5f, p.race.hpScale.let { Math.sqrt(it.toDouble()).toFloat() })
+        pain += HealthRules.woundPain(inj.kind.pain, inj.severity, p.race.hpScale)
     }
     for (h in p.hediffs) pain += h.kind.pain * h.severity
-    if (Trait.WIMP in p.traits) pain *= 1.4f
+    // A wimp's low pain shock threshold is applied in painShockThreshold().
     if (Trait.TOUGH in p.traits) pain *= 0.7f
     // Painkilling drugs (yayo, go-juice) already lower pain through their hediff values above.
     p.pain = pain.coerceIn(0f, 1f)
 
     val legs = p.avgEff(PartTag.LEG)
-    val feet = p.avgEff(PartTag.FOOT)
-    val toes = p.avgEff(PartTag.TOE)
-    var moving = legs * (0.75f + 0.25f * feet) * (0.9f + 0.1f * toes)
-    val hands = p.avgEff(PartTag.HAND)
-    val arms = p.avgEff(PartTag.ARM)
-    // Fingers carry most of a hand's grip: a hand without them still works, but clumsily.
-    val fingers = p.avgEff(PartTag.FINGER)
-    var manip = if (p.hasTag(PartTag.HAND)) hands * (0.6f + 0.4f * fingers) * 0.7f + arms * 0.3f else 1f
-    var sight = if (p.hasTag(PartTag.EYE)) p.avgEff(PartTag.EYE) else 1f
-    var hearing = if (p.hasTag(PartTag.EAR)) p.avgEff(PartTag.EAR) else 1f
-    val jaw = if (p.hasTag(PartTag.JAW)) p.avgEff(PartTag.JAW) else 1f
-    val breathing = if (p.hasTag(PartTag.LUNG)) min(1f, p.avgEff(PartTag.LUNG) * 1.4f) else 1f
-    val pumping = if (p.hasTag(PartTag.HEART)) p.avgEff(PartTag.HEART) else 1f
-    var filtration = 1f
-    if (p.hasTag(PartTag.LIVER)) filtration = min(filtration, p.avgEff(PartTag.LIVER) * 1.2f)
-    if (p.hasTag(PartTag.KIDNEY)) filtration = min(filtration, min(1f, p.avgEff(PartTag.KIDNEY) * 1.6f))
-    val brain = if (p.hasTag(PartTag.BRAIN)) p.avgEff(PartTag.BRAIN) else 1f
+    var moving = HealthRules.moving(legs, p.avgEff(PartTag.FOOT), p.avgEff(PartTag.TOE))
+    var manip = HealthRules.manipulation(p.hasTag(PartTag.HAND), p.avgEff(PartTag.HAND), p.avgEff(PartTag.FINGER), p.avgEff(PartTag.ARM))
+    var sight = HealthRules.sight(p.avgEff(PartTag.EYE))
+    var hearing = HealthRules.hearing(p.avgEff(PartTag.EAR))
+    val jaw = HealthRules.talking(p.avgEff(PartTag.JAW))
+    val breathing = HealthRules.breathing(p.avgEff(PartTag.LUNG))
+    val pumping = HealthRules.bloodPumping(p.avgEff(PartTag.HEART))
+    val filtration = p.filtrationEff()
+    val metabolism = HealthRules.metabolism(p.avgEff(PartTag.STOMACH))
+    val brain = p.avgEff(PartTag.BRAIN)
 
-    var cons = brain
-    cons *= (1f - p.pain * 0.55f)
-    if (p.bloodLoss > 0.3f) cons *= max(0f, 1f - (p.bloodLoss - 0.3f) * 1.4f)
-    cons *= min(1f, breathing + 0.2f)
-    cons *= min(1f, pumping + 0.25f)
-    var eating = jaw * min(1f, 0.4f + p.avgEff(PartTag.STOMACH))
+    var cons = HealthRules.consciousness(brain, p.pain, p.bloodLoss, breathing, pumping, filtration)
+    var eating = HealthRules.eating(jaw)
     for (h in p.hediffs) {
         val s = min(1f, h.severity)
         cons *= (1f - h.kind.cons * s)
@@ -98,6 +98,7 @@ fun Game.recomputeHealth(p: Pawn) {
     p.cap[Cap.BREATHING.ordinal] = breathing
     p.cap[Cap.PUMPING.ordinal] = pumping
     p.cap[Cap.FILTRATION.ordinal] = filtration.coerceIn(0f, 1f)
+    p.cap[Cap.METABOLISM.ordinal] = metabolism.coerceIn(0f, 1f)
 }
 
 private fun Game.pickOuterPart(p: Pawn): Int {
@@ -223,6 +224,7 @@ internal fun Game.checkDeath(p: Pawn, source: Pawn?) {
     }
     val lungs = body.indices.filter { body[it].tag == PartTag.LUNG }
     if (cause == null && lungs.isNotEmpty() && lungs.all { p.partEff(it) <= 0.001f }) cause = "suffocation"
+    if (cause == null && (body.any { it.tag == PartTag.LIVER || it.tag == PartTag.KIDNEY }) && p.filtrationEff() <= 0.001f) cause = "organ failure"
     if (cause == null && p.bloodLoss >= 1f) cause = "blood loss"
     if (cause == null && p.injuries.any { it.infection >= 1f }) cause = "infection"
     if (cause == null) for (h in p.hediffs) if (h.kind.lethal && h.severity >= 1f) { cause = h.kind.label.lowercase(); break }
@@ -251,8 +253,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
         }
         // Bleeding.
         // A tended wound is bandaged and stops bleeding; poor care leaves a trickle.
-        val b = if (inj.tended) inj.bleed * (1f - inj.tendQuality) * 0.06f else inj.bleed
-        bleed += b
+        bleed += HealthRules.bleedRate(inj.bleed, inj.tended, inj.tendQuality)
         if (inj.missing) {
             // Stumps stop bleeding over time.
             inj.bleed = max(0f, inj.bleed - 2e-9f * dt)
@@ -261,38 +262,29 @@ fun Game.healthTick(p: Pawn, dt: Int) {
         // Tending wears off.
         if (inj.tended && inj.age % 30000 < dt && (inj.infection > 0f)) inj.tended = false
         // Healing.
-        var heal = (if (inj.tended) 8f * (0.55f + inj.tendQuality) else 3.2f) / TICKS_PER_DAY * dt
-        if (inBed) heal *= 1.35f
-        if (hospital) heal *= 1.15f
-        if (inj.kind == DamageKind.BRUISE) heal *= 1.5f
-        if (inj.kind == DamageKind.BURN) heal *= 0.7f
-        if (p.food < 0.05f) heal *= 0.3f
+        val heal = HealthRules.healPerDay(inj.tended, inj.tendQuality, inj.kind, inBed, hospital, p.food) / TICKS_PER_DAY * dt
         inj.severity -= heal
-        if (inj.severity <= 0.3f) {
-            if (inj.kind.sharp && rng.chance(0.18f)) {
+        if (inj.severity <= HealthRules.HEALED_SEVERITY) {
+            if (inj.kind.sharp && rng.chance(HealthRules.SCAR_CHANCE)) {
                 inj.scar = true; inj.severity = 0f; inj.bleed = 0f; inj.permanent = true; inj.infection = 0f
             } else it.remove()
             p.healthDirty = true
             continue
         }
-        inj.bleed *= (1f - dt / (if (inj.tended) 12000f else 34000f)).coerceAtLeast(0.5f)
+        inj.bleed = HealthRules.clot(inj.bleed, inj.tended, dt)
         if (inj.bleed < 2e-8f) inj.bleed = 0f
         // Infection: an untreated infection grows faster than the body can fight it; good care tips the balance.
         if (inj.infection > 0f) {
             val q = if (inj.tended) inj.tendQuality else 0f
-            val grow = 1.1f / TICKS_PER_DAY * dt * (1f - 0.8f * q)
-            inj.immune += 0.9f / TICKS_PER_DAY * dt * (1f + 0.6f * q + (if (resting) 0.3f else 0f))
-            inj.infection += grow
+            inj.immune += HealthRules.immuneGain(q, resting, dt)
+            inj.infection += HealthRules.infectionGrowth(q, dt)
             if (inj.immune > inj.infection * 1.1f) inj.infection -= (inj.immune - inj.infection) * 0.9f / TICKS_PER_DAY * dt * 2f
             if (inj.infection >= 1f) { checkDeath(p, null); if (p.dead) return }
             if (inj.infection <= 0f) { inj.infection = 0f; inj.immune = 0f }
-        } else if (inj.infectable && (!inj.tended || inj.tendQuality < 0.3f) && inj.severity > 2f) {
-            var chance = inj.kind.infect * 0.7f / TICKS_PER_DAY * dt * 2.2f
-            if (!map.roomIndoorAt(map.idx(p.x, p.y))) chance *= 1.5f
-            if (hospital) chance *= 0.3f
-            if (inj.tended) chance *= (1f - inj.tendQuality) * 0.5f
+        } else if (inj.infectable && (!inj.tended || inj.tendQuality < HealthRules.INFECTION_SAFE_TEND_QUALITY) && inj.severity > HealthRules.INFECTION_MIN_SEVERITY) {
+            val chance = HealthRules.infectionChance(inj.kind.infect, dt, map.roomIndoorAt(map.idx(p.x, p.y)), hospital, inj.tended, inj.tendQuality)
             if (rng.float() < chance) {
-                inj.infection = 0.04f
+                inj.infection = HealthRules.INFECTION_START
                 if (p.colonist) say("${p.name}'s ${p.race.body[inj.part].label} wound is infected.", 2)
             }
         }
@@ -308,7 +300,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
         }
         p.healthDirty = true
     } else if (p.bloodLoss > 0f) {
-        p.bloodLoss = max(0f, p.bloodLoss - (if (p.food > 0.2f) 0.36f else 0.1f) / TICKS_PER_DAY * dt)
+        p.bloodLoss = max(0f, p.bloodLoss - HealthRules.bloodRecoveryPerDay(p.food > 0.2f) / TICKS_PER_DAY * dt)
         p.healthDirty = true
     }
     if (p.dead) return
@@ -351,7 +343,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
     }
     if (p.healthDirty) recomputeHealth(p)
     // Dropping into shock or unconsciousness.
-    if (!p.downed && (p.cap[Cap.CONSCIOUSNESS.ordinal] < 0.3f || p.cap[Cap.MOVING.ordinal] < 0.12f) || p.pain >= 0.85f && !p.downed) {
+    if (!p.downed && p.shouldBeDowned()) {
         if (!p.dead) downPawn(p)
     }
 }
@@ -369,7 +361,7 @@ fun Game.downPawn(p: Pawn) {
 fun Game.maybeStandUp(p: Pawn) {
     if (!p.downed || p.dead) return
     if (p.breakKind == Break.CATATONIC && p.breakUntil > tick) return
-    if (p.cap[Cap.CONSCIOUSNESS.ordinal] >= 0.4f && (p.cap[Cap.MOVING.ordinal] >= 0.16f) && p.pain < 0.75f && p.carriedBy < 0) {
+    if (!p.shouldBeDowned() && p.carriedBy < 0) {
         p.downed = false
         if (p.colonist) say("${p.name} got back up.", 0)
     }
@@ -377,29 +369,26 @@ fun Game.maybeStandUp(p: Pawn) {
 
 // ---------------------------------------------------------------------------- tending
 
-fun Game.tendQuality(doctor: Pawn?, med: ItemType?, hospital: Boolean): Float {
-    val skill = doctor?.level(SkillType.MEDICINE) ?: 2
-    val base = 0.18f + 0.032f * skill
-    val medFactor = when {
-        med == null -> 0.45f
-        else -> 0.55f + med.potency * 0.45f
-    }
-    var q = base * medFactor * (0.85f + rng.float() * 0.3f)
-    if (hospital) q *= 1.1f
-    if (doctor != null) q *= (0.6f + 0.4f * doctor.cap[Cap.MANIPULATION.ordinal])
-    return q.coerceIn(0.05f, 1f)
+fun Game.tendQuality(doctor: Pawn?, med: ItemType?, hospital: Boolean, self: Boolean = false): Float {
+    val potency = med?.potency?.takeIf { it > 0f } ?: HealthRules.NO_MEDICINE_POTENCY
+    val maxQuality = if (med != null && med.potency > 0f) med.maxTendQuality else HealthRules.NO_MEDICINE_MAX_QUALITY
+    return HealthRules.tendQuality(
+        doctor?.level(SkillType.MEDICINE) ?: HealthRules.DEFAULT_DOCTOR_SKILL,
+        doctor?.cap?.get(Cap.MANIPULATION.ordinal) ?: 1f,
+        potency, maxQuality, hospital, self, rng.float(),
+    )
 }
 
 /** Tends every wound and illness that needs attention in one go. */
 fun Game.tendPawn(doctor: Pawn?, patient: Pawn, med: ItemType?) {
     val hospital = patient.bedId >= 0 && map.building[patient.bedId]?.def?.medical == true
-    val q = tendQuality(doctor, med, hospital)
+    val q = tendQuality(doctor, med, hospital, doctor === patient)
     var any = false
     for (inj in patient.injuries) {
         if (inj.scar || inj.missing && inj.bleed <= 0f) continue
         if (!inj.tended || q > inj.tendQuality) {
             inj.tended = true; inj.tendQuality = q; any = true
-            if (inj.infection > 0f) inj.infection = max(0f, inj.infection - 0.35f * q)
+            if (inj.infection > 0f) inj.infection = max(0f, inj.infection - HealthRules.TEND_INFECTION_CURE * q)
             inj.age = 0
         }
     }

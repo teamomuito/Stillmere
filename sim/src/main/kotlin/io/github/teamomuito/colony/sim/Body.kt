@@ -85,7 +85,8 @@ object Bodies {
     )
 }
 
-enum class Cap { CONSCIOUSNESS, MOVING, MANIPULATION, SIGHT, HEARING, TALKING, EATING, BREATHING, PUMPING, FILTRATION }
+/** Capacities are never saved, so new ones are appended without a format change. */
+enum class Cap { CONSCIOUSNESS, MOVING, MANIPULATION, SIGHT, HEARING, TALKING, EATING, BREATHING, PUMPING, FILTRATION, METABOLISM }
 
 class Injury(
     var part: Int,
