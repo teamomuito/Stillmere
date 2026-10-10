@@ -651,8 +651,8 @@ class GameMap(val w: Int, val h: Int) {
             val lakeRoll = rng.float() * 6.283f
             val lakeR = 8f + rng.float() * 5f
             val lakeAng = local?.lakeAngle ?: lakeRoll
-            val lakeX = cx + (Math.cos(lakeAng.toDouble()) * (w * 0.3)).toFloat()
-            val lakeY = cy + (Math.sin(lakeAng.toDouble()) * (h * 0.3)).toFloat()
+            val lakeX = cx + (StrictMath.cos(lakeAng.toDouble()) * (w * 0.3)).toFloat()
+            val lakeY = cy + (StrictMath.sin(lakeAng.toDouble()) * (h * 0.3)).toFloat()
             val lakeOn = local?.lake == true
             val horizontalRoll = rng.chance(0.5f)
             val horizontal = local?.riverHorizontal ?: horizontalRoll
@@ -685,7 +685,7 @@ class GameMap(val w: Int, val h: Int) {
                     else if (dist < 3.2f && d > 6) t = Terrain.WATER_SHALLOW
                 }
                 if (lakeOn && t != Terrain.ROCK) {
-                    val dl = Math.hypot((x - lakeX).toDouble(), (y - lakeY).toDouble()).toFloat() + (e - 0.5f) * 8f
+                    val dl = StrictMath.hypot((x - lakeX).toDouble(), (y - lakeY).toDouble()).toFloat() + (e - 0.5f) * 8f
                     if (dl < lakeR * 0.6f) t = Terrain.WATER_DEEP else if (dl < lakeR) t = Terrain.WATER_SHALLOW
                 }
                 // Frozen shallows in the tundra are walkable ice; deep water stays open.

@@ -791,9 +791,15 @@ class LifeTest {
         assertNotNull(baby)
         assertEquals(before + 1, g.pawns.count { !it.isAnimal })
         assertEquals(f.id, baby!!.mother)
+        // Babies use 0.6 of the adult rate (1.6 a day), so one meal of milk is not enough for long: they need feeding about twice a day.
+        // Adults eat milk too, so restock it now: the test checks the feeding, not what is left over.
+        g.map.drop(ItemType.MILK, 10, g.homeX, g.homeY)
         baby.food = 0.2f
-        g.run(TICKS_PER_DAY / 2)
-        assertTrue("baby fed", baby.food > 0.3f)
+        var fed = false
+        var last = baby.food
+        repeat(TICKS_PER_DAY) { g.step(); if (baby.food > last + 0.2f) fed = true; last = baby.food }
+        assertTrue("baby fed", fed)
+        assertTrue("baby alive after a day", baby.alive)
         val l = SaveGame.read(SaveGame.write(g))
         assertTrue(l.pawns.any { it.isBaby && it.mother == f.id })
     }

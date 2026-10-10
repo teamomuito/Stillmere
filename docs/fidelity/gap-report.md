@@ -50,7 +50,7 @@ about fidelity.
 |---|---|---|---|
 | R1 | **Wall clock and non-seeded randomness inside `sim/`.** `System.currentTimeMillis()` is a default argument, and `UUID.randomUUID()` names new saves. Neither changes simulation state (they are save metadata), but the rule is "never read the wall clock inside `sim/`". | `SaveStore.kt:115`, `SaveStore.kt:88` | 1 (small fix). **Fixed:** default is now 0 and save IDs count up. |
 | R2 | **Hash-ordered collection written to disk.** `Game.incidentLast` is a `HashMap<Incident, Long>` keyed by an enum, and `SaveGame.kt:128` iterates it when saving. Enum `hashCode()` is identity-based, so entry order can differ between JVM runs and the same game can serialise to different bytes. `Game.kt` already warns about exactly this for `researchDone`. `PerformanceEquivalenceTest.theSameSeedGivesTheSameSaveBytes` passes only because the comparison runs in one JVM. | `Game.kt:92`, `SaveGame.kt:127-128` | 1 (small fix: `EnumMap`). **Fixed:** `EnumMap` in `Game` and the loader. |
-| R3 | **Platform-dependent floating point.** `Math.sin`/`Math.cos` are allowed to differ by 1 ulp between JVM and Android runtime. They feed map generation (lake position), drop-pod landing, and the outdoor temperature curve. A seed could generate a slightly different map on a phone than in the unit tests. **UNVERIFIED in practice**; `StrictMath` removes the doubt. | `GameMap.kt:485-486`, `Events.kt:139-140`, `Game.kt:171` | 2 |
+| R3 | **Platform-dependent floating point.** `Math.sin`/`Math.cos` are allowed to differ by 1 ulp between JVM and Android runtime. They feed map generation (lake position), drop-pod landing, and the outdoor temperature curve. A seed could generate a slightly different map on a phone than in the unit tests. **Fixed.** Every `Math.sin`, `Math.cos`, `Math.pow`, `Math.hypot` and `atan2` in `sim/` is now `StrictMath` (`GameMap.kt`, `Events.kt`, `Game.kt`, `Caravans.kt`, `WorldMap.kt`). The outdoor temperature curve was already `StrictMath` in `Climate.kt`. | 2 |
 
 Everything else checked is clean: no wall-clock reads in the tick loop, one seeded `Rng` (same LCG as `java.util.Random`, state saved
 and restored), and the two `shuffled(java.util.Random(...))` calls are seeded from the sim RNG or the world seed.
@@ -73,7 +73,7 @@ them. Whether the rule covers names or only prose is your call; the list is here
 |---|---|---|
 | X1 | **Release signing key and its password are committed** in plain text (`app/release.jks`, `app/build.gradle.kts:22-28`). The comment says this is deliberate so any build can update an installed copy. Anyone can sign an APK that installs over yours. Needs your decision. | 2 |
 | X2 | README download and release links point at `teamomuito/rimworld` (the old repo name), as does a comment in `.github/workflows/android.yml`. GitHub redirects renamed repos, but the links are stale. | 3 |
-| X3 | README counts are stale: it says 65 buildings and 53 research projects; the code has 72 buildable buildings (76 defined, 4 legacy) and 57 research projects. | 3 |
+| X3 | **Fixed.** README counts and claims (caves, ores, butchery) were stale: it says 65 buildings and 53 research projects; the code has 72 buildable buildings (76 defined, 4 legacy) and 57 research projects. | 3 |
 | X4 | `docs/fidelity/<system>.md` files, which `CLAUDE.md` requires for every implemented constant, **do not exist yet.** Only this report does. | 1 |
 
 ## 3. Systems
@@ -211,17 +211,17 @@ Phase 5. Code in `sim/`, tests in `HealthFidelityTest.kt` (65 new tests; `./grad
 
 ### 3.5 Needs, mood, thoughts, drugs, mental breaks
 
-**Status: Divergent.** **Priority 1.**
+**Status: Divergent, with phase 3 started** (hunger and break thresholds now match sourced values; see `needs-mood.md`). **Priority 1.**
 **Files:** `Mood.kt` (`moodUpdate`, `breaksTick`, `startBreak`), `Game.kt` (`pawnTick` need drain), `JobDrivers.kt` (`driveEat`, `driveSleep`, `driveJoy`, `applyDrug`), `Pawn.kt` (`Thought`, `addThought`), `Body.kt` (drug hediffs), `Jobs.kt` (`foodScore`, `findFood`, `startJoy`).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
-| Hunger rate (adult human) | 0.7 per day of a 0-to-1 bar | **1.6 nutrition per day** | about 0.44x | V |
+| Hunger rate (adult human) | **1.6 per day** of a 0-to-1 bar (was 0.7) | **1.6 nutrition per day** | matches | V |
 | Raw plant food nutrition | 0.05 each | 0.05 each | none | V |
 | Simple meal nutrition / cost | 0.9, from 10 raw items = 0.5 nutrition | 0.9, from 0.5 nutrition of ingredients | none | V |
 | Rest drain | 0.95 per day awake | ? | | ? |
 | Joy drain | 0.42 per day | ? | | ? |
-| Mental break thresholds | 0.30, 0.20, 0.10 of a 0-1 mood; per-check chance 0.45%, 1.2%, 3% | **0.35, 0.20, 0.05** (minor, major, extreme) | minor threshold 5 points too low, extreme 5 points too high | V |
+| Mental break thresholds | **0.35, 0.20, 0.05** of a 0-1 mood (was 0.30, 0.20, 0.10); per-check chance 0.45%, 1.2%, 3% (unchanged, UNVERIFIED) | **0.35, 0.20, 0.05** (minor, major, extreme) | matches | V |
 | Mood baseline | 0.55, smoothed 50/50 with the previous value every 250 ticks | baseline 0.5 recalled; thoughts sum to a level | model differs | M |
 | Break kinds | 10 (wander, berserk, food binge, insult, tantrum, fire, catatonic, run wild, drug binge, hide) | more kinds, each tied to a severity band | partial | M |
 | Distinct thoughts | about 45 | well over 100 recalled | much smaller | M |
@@ -540,9 +540,9 @@ Per `CLAUDE.md`: flagged, not deleted.
 
 ## 7. Top 10 gaps
 
-1. **Time base (24,000 vs 60,000 ticks per day)** and per-tick constants that do not translate. Divergent, save-breaking. (3.1)
+1. ~~**Time base (24,000 vs 60,000 ticks per day)**~~ **Done** (`7e402c9`): 60,000 ticks per day. (3.1)
 2. **Map: 100 x 100, no roofs, grass, caves or ruins**, rooms that count as indoors without a roof. (3.2, 3.3)
-3. **Needs and mood model:** hunger 0.44x vanilla, break thresholds 0.30/0.20/0.10 against 0.35/0.20/0.05, four needs missing, scalar mood. (3.5)
+3. **Needs and mood model:** hunger and break thresholds now match the sourced values. Four needs, drug tolerance and the scalar mood are still missing. (3.5)
 4. **Combat model is custom** end to end: weapon stats, accuracy, armour, melee, cover, no burning. (3.11)
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)
 6. **Health depth:** 29 parts, simplified bleeding and immunity, limited chronic disease, surgery and medicine. (3.4)
@@ -560,7 +560,7 @@ need your sign-off on a save-migration approach first.
 |---|---|---|---|
 | 1 | `phase-1-hygiene` | Pin `<VERSION>`; fix R1 to R3; delete nothing; create `docs/fidelity/` with one file per system and the constant tables above; add a first fidelity test per system as numbers are verified; fix the README counts and links | the version; the naming decision (2.2); the signing-key decision (X1) |
 | 2 | `phase-2-timebase` (time base; largely done, see docs/fidelity/time.md) | Move to 2,500 / 60,000 ticks and rescale every per-tick constant; save migration | approval to break or migrate old saves |
-| 3 | `phase-3-needs-mood` | Hunger rate, rest and joy drains, add comfort, beauty, outdoors and indoors needs, vanilla break thresholds, thought catalogue, tolerance | none after phase 2 |
+| 3 | `phase-3-needs-mood` (partly done: hunger, break thresholds; see `needs-mood.md`) | Hunger rate, rest and joy drains, add comfort, beauty, outdoors and indoors needs, vanilla break thresholds, thought catalogue, tolerance | none after phase 2 |
 | 4 | `phase-4-skills-traits` | Learning rates, decay, XP curve, work-speed curves, trait degrees, backstory set | the backstory approach (original titles only) |
 | 5 | `phase-5-health` (done on `main`, see 3.4) | Body depth, bleeding and immunity, chronic conditions, medicine, surgery | none |
 | 6 | `phase-6-combat` | Weapon stat blocks, accuracy bands, armour roll, melee dodge and parry, burning, cover | none |
@@ -578,3 +578,23 @@ committed signing key (X1); whether to hold the invented mechanics (suppression,
 * `SaveGame.kt` and `SaveStore.kt` were read for structure, not line by line.
 * No vanilla source was available. All vanilla comparisons are **V** (secondary summaries) or **M/UNVERIFIED**.
 * Item-level costs, work amounts, weapon stats and most event numbers were not compared, because no reliable source was reachable.
+
+## 10. Changes since the audit (2026-10-10)
+
+Made on branch `ccr-401b8c33-djvmwb`. Sources for the new values are in `needs-mood.md`.
+
+* **Phase 3, partly:** mental-break thresholds set to 0.35, 0.20 and 0.05 of mood. Human hunger rate set to 1.6 nutrition
+  per day. Starting food in every scenario was scaled so each opening lasts as long as before. Both new numbers are **V**
+  (secondary sources). The per-check chances, the trait multipliers and the scaling factors are Stillmere's own.
+* **R3, fixed:** every `Math.sin`, `Math.cos`, `Math.pow`, `Math.hypot` and `atan2` in `sim/` is `StrictMath`.
+* **README:** counts corrected to 72 buildings and 57 research projects. Removed "caves", changed "six ores" to five, and
+  removed butchery from the bill list.
+* **Tests:** 451 pass, up from 443. Eight are new, in `NeedsMoodFidelityTest`. One existing test changed: the baby
+  feeding check in `LifeTest` now restocks milk and watches a full day, not half. Adults eat milk, so the old stock was gone
+  before the baby needed it.
+* **Not done, and why:** the version pin (no source, `CLAUDE.md` still says `<VERSION>`), the naming decision (2.2), the
+  signing key (X1), the rest and joy drains and the four missing needs (no source), and drug tolerance (no source).
+* **Compiler warnings:** section 1 says three, all in tests. Two more are in `Game.kt` (`Game.kt:455`, "condition always true", and
+  `Game.kt:569`, "always false"). They were already there before this change, and nothing was done about them.
+* **Stale in this report:** section 1's test count (337) and warning count, section 3.3 and 3.4 (health and temperature changed after the
+  audit), and section 7 item 1 (done).

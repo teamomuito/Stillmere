@@ -51,15 +51,15 @@ control of the outcome beyond drafting, moving and retreating.
   frostbite, malnutrition and food poisoning.
 
 **Base building**
-- 65 buildings, many of them multi-tile: walls, doors, beds, tables, workbenches, lighting, heating, power,
+- 72 buildings, many of them multi-tile: walls, doors, beds, tables, workbenches, lighting, heating, power,
   defences, traps, turrets, mortars, graves and art.
 - Rooms are detected from walls and have temperature, beauty, cleanliness and impressiveness values.
 - Stockpile, growing and dumping zones with item filters, quality limits and priorities.
-- Workbench bills for cooking, butchery, tailoring, smithing, machining, stonecutting and medicine.
+- Workbench bills for cooking, tailoring, smithing, machining, stonecutting and medicine. Butchery is an automatic job at a butcher table.
 - Power grids with solar, wind, wood and battery storage. Fire spreads, rain puts it out, and lightning can start it.
 
 **World**
-- Six biomes, rivers, lakes, five rock types, six ores, caves, seasons, rain, fog, snow, thunderstorms,
+- Six biomes, rivers, lakes, five rock types, five ores, seasons, rain, fog, snow, thunderstorms,
   cold snaps and heat waves.
 - Crops that depend on temperature, light and soil; spoilage of food and corpses; items that wear outdoors.
 - Wildlife for hunting, taming, slaughter and breeding.
@@ -80,7 +80,7 @@ control of the outcome beyond drafting, moving and retreating.
 - Prisoners can be captured, recruited, or ransomed back to their faction.
 
 **Progress**
-- A research tree of 53 projects covering crafts, firearms, power and the ship.
+- A research tree of 57 projects covering crafts, firearms, power and the ship.
 - Four scenarios. Launch the ship to win.
 - Automatic and manual saves.
 
