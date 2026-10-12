@@ -7,7 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private fun game(seed: Long, scenario: Scenario = Scenario.LOST_TRIBE): Game {
+private fun game(seed: Long, scenario: Scenario = Scenario.QUIET_ENCLAVE): Game {
     val g = Game(seed)
     g.startNewColony(scenario)
     return g
@@ -188,7 +188,7 @@ class SaveRestoreTest {
 
     @Test fun aHospitalBedIsHeldOnlyByAPatientWhoStillHasAJob() {
         val g = game(411)
-        g.map.setBuilding(Building(BuildDef.HOSPITAL_BED, g.homeX - 4, g.homeY + 6, true))
+        g.map.setBuilding(Building(BuildDef.INFIRMARY_COT, g.homeX - 4, g.homeY + 6, true))
         val patient = g.colonists[0]
         val bed = g.findBedFor(patient, forceMedical = true)
         assertTrue(bed >= 0)

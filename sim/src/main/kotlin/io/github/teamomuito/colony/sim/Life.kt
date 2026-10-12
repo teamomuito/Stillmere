@@ -20,7 +20,7 @@ fun Pawn.ageIncapable(): Int {
 
 fun Pawn.workBlocked(w: WorkType): Boolean = (incapable or ageIncapable()) and (1 shl w.ordinal) != 0
 
-private val babyFoods = setOf(ItemType.MILK, ItemType.MEAL_SIMPLE, ItemType.MEAL_FINE, ItemType.PEMMICAN, ItemType.EGGS)
+private val babyFoods = setOf(ItemType.MILK, ItemType.MEAL_HEARTH_STEW, ItemType.MEAL_ROASTED_PLATTER, ItemType.TRAIL_CAKE, ItemType.EGGS)
 
 /** Once a day: birthdays, growth, pregnancy and animal breeding. */
 fun Game.lifeDaily() {
@@ -54,7 +54,7 @@ private fun Game.growthMoment(p: Pawn) {
     if (p.passion[s] < 2) { p.passion[s]++; if (p.colonist) say("$first discovered a passion for ${SkillType.entries[s].label.lowercase()}.", 1) }
     p.skill[s] = min(20, p.skill[s] + 2)
     if (p.age == 13) {
-        val t = if (rng.chance(0.16f)) rng.pick(listOf(Trait.GAY, Trait.BISEXUAL, Trait.ASEXUAL)) else Trait.entries[rng.int(Trait.entries.size)]
+        val t = if (rng.chance(0.16f)) rng.pick(listOf(Trait.SAME_SEX_DRAWN, Trait.BOTH_DRAWN, Trait.UNROMANTIC)) else Trait.entries[rng.int(Trait.entries.size)]
         if (p.traits.none { it == t || conflicts(it, t) } && p.traits.size < 4) { p.traits.add(t); if (p.colonist) say("$first became ${t.label.lowercase()}.", 1) }
         for (w in WorkType.entries) {
             val sk = w.skill()
@@ -73,11 +73,11 @@ private fun Game.agingConditions(p: Pawn) {
             if (p.colonist) say("${p.name} developed ${kind.label.lowercase()}.", 2)
         }
     }
-    roll(HediffKind.BAD_BACK, 0.12f, 40)
-    roll(HediffKind.ARTHRITIS, 0.10f, 45)
-    roll(HediffKind.CATARACT, 0.10f, 50)
-    roll(HediffKind.HEARING_LOSS, 0.08f, 50)
-    roll(HediffKind.DEMENTIA, 0.03f, 62)
+    roll(HediffKind.SPINE_STRAIN, 0.12f, 40)
+    roll(HediffKind.STIFF_JOINTS, 0.10f, 45)
+    roll(HediffKind.CLOUDED_LENS, 0.10f, 50)
+    roll(HediffKind.DULLED_HEARING, 0.08f, 50)
+    roll(HediffKind.MEMORY_FADE, 0.03f, 62)
 }
 
 // ---------------------------------------------------------------------- pregnancy
@@ -189,7 +189,7 @@ internal fun Game.driveFeedBaby(p: Pawn, j: Job) {
                 if (t != null && p.carryCount > 0) {
                     b.food = min(1f, b.food + t.nutrition * 1.2f + (if (t == ItemType.MILK) 0.35f else 0f))
                     p.carryCount = 0; p.carryType = null
-                    p.gainXp(SkillType.ANIMALS, 20f)
+                    p.gainXp(SkillType.HUSBANDRY, 20f)
                 }
                 endJob(p)
             }

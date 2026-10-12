@@ -55,20 +55,20 @@ private fun Game.targetCover(t: Pawn): Float {
 }
 
 internal fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float): Float {
-    val skill = p.level(if (w.ranged) SkillType.SHOOTING else SkillType.MELEE)
+    val skill = p.level(if (w.ranged) SkillType.MARKSMANSHIP else SkillType.CLOSE_COMBAT)
     var base = w.accuracy * (0.62f + 0.03f * skill) * p.weaponDamageMult().coerceIn(0.8f, 1.15f)
     if (w.ranged) {
         base *= (1.15f - d / (w.range * 1.35f)).coerceIn(0.2f, 1.1f)
         base *= p.cap[Cap.SIGHT.ordinal].coerceAtLeast(0.2f)
         base *= (1f - cover).coerceAtLeast(0.2f)
-        if (Trait.CAREFUL_SHOOTER in p.traits) base *= 1.12f
+        if (Trait.STEADY_AIM in p.traits) base *= 1.12f
         if (weather == Weather.FOG) base *= 0.85f
-        if (Trait.TRIGGER_HAPPY in p.traits) base *= 0.92f
+        if (Trait.QUICK_TRIGGER in p.traits) base *= 0.92f
         if (p.suppressedUntil > tick) base *= 0.7f
         base *= (0.55f + 0.45f * t.race.size.coerceIn(0.5f, 1.4f)) // small animals are harder to hit
     } else {
-        if (Trait.BRAWLER in p.traits) base *= 1.12f
-        base *= (1f - 0.04f * t.level(SkillType.MELEE)).coerceAtLeast(0.55f)
+        if (Trait.STREET_SCRAPPER in p.traits) base *= 1.12f
+        base *= (1f - 0.04f * t.level(SkillType.CLOSE_COMBAT)).coerceAtLeast(0.55f)
     }
     base *= p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.35f, 1f).let { if (p.isAnimal) 1f else it }
     return base.coerceIn(0.05f, 0.95f)
@@ -104,7 +104,7 @@ fun Game.fire(p: Pawn, t: Pawn) {
                 anyHit = true
                 // Each pellet is armored separately, which is why shotguns do little against armor.
                 val dmg = w.damage / w.pellets * (0.85f + rng.float() * 0.3f) * p.weaponDamageMult()
-                if (w.aoe > 0f) explode(target.x, target.y, w.aoe, dmg, p, w == Weapon.MOLOTOV)
+                if (w.aoe > 0f) explode(target.x, target.y, w.aoe, dmg, p, w == Weapon.FIRE_FLASK)
                 else dealDamage(target, w.kind, dmg, w.armorPen, p)
             }
             // A volley that hits nothing pins down whoever it was aimed at.
@@ -112,10 +112,10 @@ fun Game.fire(p: Pawn, t: Pawn) {
                 target.suppressedUntil = max(target.suppressedUntil, tick + TICKS_PER_HOUR)
                 target.addThought("Under fire", -0.04f, tick, TICKS_PER_HOUR)
             }
-            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + tk(5) + k * tk(2), anyHit, if (w == Weapon.BOW || w == Weapon.GREATBOW) 3 else 0))
+            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + tk(5) + k * tk(2), anyHit, if (w == Weapon.BOW || w == Weapon.LONGSTAVE) 3 else 0))
         }
-        p.attackCd = max(tk(8), (w.cooldownTicks * (if (Trait.TRIGGER_HAPPY in p.traits) 0.85f else if (Trait.CAREFUL_SHOOTER in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
-        p.gainXp(SkillType.SHOOTING, 4f * w.burst)
+        p.attackCd = max(tk(8), (w.cooldownTicks * (if (Trait.QUICK_TRIGGER in p.traits) 0.85f else if (Trait.STEADY_AIM in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.gainXp(SkillType.MARKSMANSHIP, 4f * w.burst)
     } else {
         if (d > 2.1f) return
         val hit = rng.chance(hitChance(p, t, w, d, cover = 0f))
@@ -126,7 +126,7 @@ fun Game.fire(p: Pawn, t: Pawn) {
             dealDamage(t, w.kind, dmg, w.armorPen, p)
         }
         p.attackCd = max(tk(10), (w.cooldownTicks / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
-        p.gainXp(SkillType.MELEE, 4f)
+        p.gainXp(SkillType.CLOSE_COMBAT, 4f)
     }
 }
 
@@ -218,7 +218,7 @@ private fun Game.digWall(p: Pawn, wall: Building) {
     if (p.attackCd == 0) {
         p.attackCd = p.weapon.cooldownTicks
         wall.hp -= 6f
-        if (wall.hp <= 0f) { map.removeBuilding(wall); map.roomDirty = true; say("Sappers broke through a ${wall.def.label.lowercase()}!", 3) }
+        if (wall.hp <= 0f) { map.removeBuilding(wall); map.roomDirty = true; say("Tunnelers broke through a ${wall.def.label.lowercase()}!", 3) }
     }
 }
 
@@ -234,12 +234,12 @@ private fun Game.pickTurretTarget(p: Pawn): Building? {
     return best
 }
 
-/** Dormant mechanoids lie still until someone gets close; the whole cluster wakes together. */
+/** Dormant iron swarms lie still until someone gets close; the whole cluster wakes together. */
 internal fun Game.dormantTick(p: Pawn) {
     if (tick % tk(20) != (p.id % tk(20)).toLong()) return
     if (pawns.any { it.alive && it.faction == Faction.PLAYER && !it.isAnimal && distance(p.x, p.y, it.x, it.y) < 11f }) {
         for (o in pawns) if (o.dormant && o.raidId == p.raidId) o.dormant = false
-        say("The mechanoid cluster has awoken!", 3)
+        say("The iron swarm has awoken!", 3)
     }
 }
 
@@ -258,7 +258,7 @@ internal fun Game.hostileAI(p: Pawn) {
     // A badly hurt raider may break and run, but not within the first hour of their wounds.
     if (!p.colonist && !p.retreating && p.healthFraction() < 0.45f && rng.chance(0.00005f / TIME_SCALE)) { p.retreating = true; endJob(p); return }
     j.timer++
-    // Siege: wait at the camp and lob mortar shells until the clock runs out.
+    // Shelling camp: wait at the camp and lob shells until the clock runs out.
     if (p.raidMode == 2 && p.campX >= 0 && day * TICKS_PER_DAY + 0 < tick) {
         val waitUntil = raidStartedAt + tk(9000)
         if (tick < waitUntil) {
@@ -273,7 +273,7 @@ internal fun Game.hostileAI(p: Pawn) {
         t = pickRaidTarget(p)
         j.targetPawn = t?.id ?: -1
     }
-    // Sappers dig in: with no one close, they break through the nearest wall.
+    // Tunnelers dig in: with no one close, they break through the nearest wall.
     if (p.raidMode == 1 && (t == null || distance(p.x, p.y, t.x, t.y) > 10f)) {
         nearestWall(p)?.let { digWall(p, it); return }
     }
@@ -451,7 +451,7 @@ internal fun Game.findHandle(p: Pawn): Job? {
         // Feed the hungry.
         if (a.food < 0.3f) {
             val carn = a.race.diet == Diet.CARNIVORE
-            val s = nearestItem(p) { (it.type == ItemType.KIBBLE || (!carn && it.type == ItemType.HAY) || (carn && it.type == ItemType.MEAT) || it.type == ItemType.HAY && a.race.diet != Diet.CARNIVORE) }
+            val s = nearestItem(p) { (it.type == ItemType.FEED_PELLETS || (!carn && it.type == ItemType.HAY) || (carn && it.type == ItemType.MEAT) || it.type == ItemType.HAY && a.race.diet != Diet.CARNIVORE) }
             if (s != null && reserveAll(p, k, key(map.idx(s.x, s.y), K_ITEM))) {
                 val j = Job(JobType.FEED_ANIMAL, s.x, s.y); j.targetPawn = a.id; j.dx = s.x; j.dy = s.y; j.key = k
                 return j
@@ -475,7 +475,7 @@ internal fun Game.findHandle(p: Pawn): Job? {
 }
 
 internal fun Game.findHunt(p: Pawn): Job? {
-    if (p.weaponItem == null && Trait.BRAWLER !in p.traits) return null
+    if (p.weaponItem == null && Trait.STREET_SCRAPPER !in p.traits) return null
     var best: Pawn? = null
     var bd = Int.MAX_VALUE
     for (a in pawns) {

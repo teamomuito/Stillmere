@@ -28,8 +28,8 @@ fun ItemType.mass(): Float = when {
     this == ItemType.SILVER || this == ItemType.GOLD -> 0.008f
     this == ItemType.STONE_CHUNK -> 25f
     this == ItemType.COMPONENT -> 0.6f
-    this == ItemType.STEEL || this == ItemType.PLASTEEL || this == ItemType.WOOD || this == ItemType.STONE -> 0.5f
-    this == ItemType.PEMMICAN -> 0.04f
+    this == ItemType.STEEL || this == ItemType.HARDALLOY || this == ItemType.WOOD || this == ItemType.STONE -> 0.5f
+    this == ItemType.TRAIL_CAKE -> 0.04f
     cat == ItemCat.FOOD_MEAL -> 0.44f
     cat == ItemCat.FOOD_PLANT -> 0.03f
     cat == ItemCat.FOOD_MEAT -> 0.05f
@@ -47,7 +47,7 @@ fun Pawn.carryCapacity(): Float = when {
     !alive -> 0f
     race == Race.HUMAN -> 35f
     isAnimal && faction == Faction.PLAYER -> when (race) {
-        Race.MUFFALO, Race.COW, Race.DROMEDARY -> 70f; Race.HORSE -> 80f; Race.DONKEY -> 55f; Race.ELEPHANT, Race.THRUMBO -> 140f; Race.RHINO -> 90f; Race.BISON -> 60f
+        Race.SHAGOX, Race.COW, Race.DROMEDARY -> 70f; Race.HORSE -> 80f; Race.DONKEY -> 55f; Race.ELEPHANT, Race.SKYHORN -> 140f; Race.RHINO -> 90f; Race.BISON -> 60f
         Race.DEER, Race.ELK, Race.CARIBOU -> 40f; Race.ALPACA, Race.GOAT, Race.PIG, Race.OSTRICH -> 30f; Race.HUSKY, Race.LABRADOR -> 25f; else -> 0f
     }
     else -> 0f
@@ -187,12 +187,12 @@ private fun Game.caravanStep(c: Caravan, dt: Int) {
     for (p in c.members.toList()) {
         if (!p.alive) continue
         val rate = if (p.isAnimal) 0.55f * StrictMath.pow(p.race.size.toDouble(), 0.5).toFloat() * 0.8f
-            else NeedRules.humanFoodPerDay(Trait.GOURMAND in p.traits, Trait.ASCETIC in p.traits, p.pregnantUntil > 0L, p.age)
+            else NeedRules.humanFoodPerDay(Trait.HEARTY_APPETITE in p.traits, Trait.PLAIN_LIVING in p.traits, p.pregnantUntil > 0L, p.age)
         p.food = max(0f, p.food - rate * days)
         if (!p.isAnimal) p.rest = if (c.resting) min(1f, p.rest + 2.4f * days) else max(0f, p.rest - 0.95f * days)
         if (p.food < 0.35f) caravanEat(c, p)
         if (p.food <= 0f) {
-            val h = addHediff(p, HediffKind.MALNUTRITION, 0f)
+            val h = addHediff(p, HediffKind.STARVED_FRAME, 0f)
             h.severity = min(1f, h.severity + 0.28f * days)
             p.healthDirty = true
             if (h.severity >= 1f) die(p, "starvation")
@@ -240,7 +240,7 @@ private fun Game.caravanStep(c: Caravan, dt: Int) {
 
 private fun Game.caravanEat(c: Caravan, p: Pawn) {
     if (p.isAnimal) {
-        val feed = listOf(ItemType.HAY, ItemType.KIBBLE).firstOrNull { c.inventory.count(it) > 0 && (p.race.diet != Diet.CARNIVORE || it == ItemType.KIBBLE) }
+        val feed = listOf(ItemType.HAY, ItemType.FEED_PELLETS).firstOrNull { c.inventory.count(it) > 0 && (p.race.diet != Diet.CARNIVORE || it == ItemType.FEED_PELLETS) }
         if (feed != null) {
             c.inventory.take(feed, 1); p.food = min(1f, p.food + feed.nutrition * 10f + 0.2f)
         } else if (p.race.diet != Diet.CARNIVORE && world.forageChance(c.tile) > 0.25f) p.food = min(1f, p.food + 0.35f)
@@ -251,28 +251,28 @@ private fun Game.caravanEat(c: Caravan, p: Pawn) {
         return
     }
     // Packaged and cooked food first, raw last.
-    val order = listOf(ItemType.MEAL_PACKAGED, ItemType.PEMMICAN, ItemType.MEAL_FINE, ItemType.MEAL_SIMPLE)
+    val order = listOf(ItemType.MEAL_RATION, ItemType.TRAIL_CAKE, ItemType.MEAL_ROASTED_PLATTER, ItemType.MEAL_HEARTH_STEW)
     var pick: ItemType? = order.firstOrNull { c.inventory.count(it) > 0 }
-    if (pick == null) pick = c.inventory.entries().firstOrNull { it.second > 0 && it.first.type.isFood && it.first.type.humanFood && it.first.type != ItemType.HUMAN_MEAT && it.first.type != ItemType.MILK }?.first?.type
+    if (pick == null) pick = c.inventory.entries().firstOrNull { it.second > 0 && it.first.type.isFood && it.first.type.humanFood && it.first.type != ItemType.MANFLESH && it.first.type != ItemType.MILK }?.first?.type
     if (pick != null) {
         c.inventory.take(pick, 1)
-        p.food = min(1f, p.food + pick.nutrition * (if (pick.cat == ItemCat.FOOD_MEAL || pick == ItemType.PEMMICAN) 1f else 0.9f))
+        p.food = min(1f, p.food + pick.nutrition * (if (pick.cat == ItemCat.FOOD_MEAL || pick == ItemType.TRAIL_CAKE) 1f else 0.9f))
         return
     }
     // Forage. Humans with Plants skill find more.
-    val chance = world.forageChance(c.tile) * (0.7f + 0.04f * c.humans.maxOf { it.level(SkillType.PLANTS) })
+    val chance = world.forageChance(c.tile) * (0.7f + 0.04f * c.humans.maxOf { it.level(SkillType.HORTICULTURE) })
     if (rng.chance(min(0.95f, chance))) {
         p.food = min(1f, p.food + 0.45f)
         if (!c.forageNote) { c.forageNote = true; say("${c.name} is out of food and foraging.", 2) }
-        if (rng.chance(0.02f)) { addHediff(p, HediffKind.FOOD_POISONING, 0.3f); say("${p.name} got food poisoning from foraged food.", 2) }
+        if (rng.chance(0.02f)) { addHediff(p, HediffKind.SPOILED_STOMACH, 0.3f); say("${p.name} got a spoiled stomach from foraged food.", 2) }
     }
 }
 
 private fun Game.caravanTend(c: Caravan, patient: Pawn) {
     val needs = patient.injuries.any { !it.tended && !it.scar && !(it.missing && it.bleed <= 0f) } || patient.hediffs.any { it.kind.needsTend && !it.tended }
     if (!needs) return
-    val doctor = c.humans.filter { !it.downed }.maxByOrNull { it.level(SkillType.MEDICINE) } ?: return
-    val med = listOf(ItemType.MEDS_INDUSTRIAL, ItemType.MEDS_HERBAL, ItemType.HEALROOT).firstOrNull { c.inventory.count(it) > 0 }
+    val doctor = c.humans.filter { !it.downed }.maxByOrNull { it.level(SkillType.HEALING) } ?: return
+    val med = listOf(ItemType.MEDS_STERILE_DRESSING, ItemType.MEDS_LEAF_POULTICE, ItemType.MIREWORT).firstOrNull { c.inventory.count(it) > 0 }
     if (med != null) c.inventory.take(med, 1)
     tendPawn(doctor, patient, med)
 }
@@ -371,7 +371,7 @@ fun Game.attackSettlement(c: Caravan, s: Settlement): String? {
 
 // ---------------------------------------------------------------------- settlements
 
-fun Game.negotiator(c: Caravan): Int = c.humans.maxOfOrNull { it.level(SkillType.SOCIAL) } ?: 0
+fun Game.negotiator(c: Caravan): Int = c.humans.maxOfOrNull { it.level(SkillType.RAPPORT) } ?: 0
 fun Game.caravanSellPrice(c: Caravan, t: ItemType) = t.value * (0.5f + negotiator(c) * 0.01f)
 fun Game.caravanBuyPrice(c: Caravan, t: ItemType) = t.value * (1.35f - negotiator(c) * 0.01f)
 
@@ -383,16 +383,16 @@ fun Game.refreshSettlement(s: Settlement) {
     s.silver = r.range(500, 2400)
     val goods: List<Pair<ItemType, Int>> = when (s.faction.kind) {
         0 -> listOf(ItemType.WOOD to 300, ItemType.LEATHER to 150, ItemType.WOOL to 120, ItemType.CLOTH to 150, ItemType.RICE to 200, ItemType.POTATOES to 150,
-            ItemType.CORN to 200, ItemType.PEMMICAN to 120, ItemType.MEDS_HERBAL to 20, ItemType.HEALROOT to 40, ItemType.SMOKELEAF to 60, ItemType.HAY to 120,
-            ItemType.W_CLUB to 3, ItemType.W_SPEAR to 3, ItemType.W_BOW to 3, ItemType.W_GREATBOW to 1, ItemType.A_TRIBAL to 3, ItemType.PSYCHOID to 30)
-        else -> listOf(ItemType.STEEL to 400, ItemType.COMPONENT to 25, ItemType.PLASTEEL to 80, ItemType.GOLD to 25, ItemType.MEDS_INDUSTRIAL to 18,
-            ItemType.MEAL_PACKAGED to 60, ItemType.MEAL_SIMPLE to 25, ItemType.KIBBLE to 100, ItemType.BEER to 20, ItemType.JOINT to 15, ItemType.CLOTH to 150,
-            ItemType.W_REVOLVER to 2, ItemType.W_AUTOPISTOL to 2, ItemType.W_BOLT to 2, ItemType.W_RIFLE to 1, ItemType.W_SHOTGUN to 1, ItemType.A_FLAK_VEST to 2,
-            ItemType.A_PARKA to 2, ItemType.A_DUSTER to 2, ItemType.A_HELMET to 2, ItemType.A_FLAK_PANTS to 2)
+            ItemType.CORN to 200, ItemType.TRAIL_CAKE to 120, ItemType.MEDS_LEAF_POULTICE to 20, ItemType.MIREWORT to 40, ItemType.HUSHMOSS to 60, ItemType.HAY to 120,
+            ItemType.W_CLUB to 3, ItemType.W_SPEAR to 3, ItemType.W_BOW to 3, ItemType.W_LONGSTAVE to 1, ItemType.A_TRIBAL to 3, ItemType.DREAMWEED to 30)
+        else -> listOf(ItemType.STEEL to 400, ItemType.COMPONENT to 25, ItemType.HARDALLOY to 80, ItemType.GOLD to 25, ItemType.MEDS_STERILE_DRESSING to 18,
+            ItemType.MEAL_RATION to 60, ItemType.MEAL_HEARTH_STEW to 25, ItemType.FEED_PELLETS to 100, ItemType.BEER to 20, ItemType.JOINT to 15, ItemType.CLOTH to 150,
+            ItemType.W_CYLINDER_GUN to 2, ItemType.W_SNAP_PISTOL to 2, ItemType.W_BOLT to 2, ItemType.W_RIFLE to 1, ItemType.W_SHOTGUN to 1, ItemType.A_RIBBED_VEST to 2,
+            ItemType.A_PADDED_COAT to 2, ItemType.A_LONG_COAT to 2, ItemType.A_RIVETED_HOOD to 2, ItemType.A_RIBBED_LEGGINGS to 2)
     }
     for ((t, n) in goods) if (r.chance(0.6f)) s.stock.add(t, max(1, r.range(n / 4, n)))
     // A request for a staple, with a juicy reward.
-    val want = listOf(ItemType.STEEL to 80, ItemType.WOOD to 120, ItemType.MEAL_SIMPLE to 12, ItemType.MEDS_HERBAL to 6, ItemType.LEATHER to 60, ItemType.COMPONENT to 4, ItemType.CLOTH to 80)
+    val want = listOf(ItemType.STEEL to 80, ItemType.WOOD to 120, ItemType.MEAL_HEARTH_STEW to 12, ItemType.MEDS_LEAF_POULTICE to 6, ItemType.LEATHER to 60, ItemType.COMPONENT to 4, ItemType.CLOTH to 80)
     val (rt, rn) = want[r.int(want.size)]
     val n = max(2, (rn * (0.6f + r.float() * 0.8f)).toInt())
     s.request = SettlementRequest(rt, n, (rt.value * n * 1.6f + 40f).toInt(), tick + 8L * TICKS_PER_DAY)
@@ -462,7 +462,7 @@ internal fun Game.caravanDeath(p: Pawn, cause: String): Boolean {
         graveyard.add("${p.name} - $cause (day ${day + 1})")
         if (p.spouse >= 0) pawnById(p.spouse)?.spouse = -1
         if (p.lover >= 0) pawnById(p.lover)?.lover = -1
-        for (o in colonists) if (Trait.PSYCHOPATH !in o.traits) o.addThought("Colonist died: ${p.name.substringBefore(' ')}", -0.1f, tick, 4 * TICKS_PER_DAY)
+        for (o in colonists) if (Trait.UNMOVED !in o.traits) o.addThought("Colonist died: ${p.name.substringBefore(' ')}", -0.1f, tick, 4 * TICKS_PER_DAY)
     } else say("${p.name} died on the road.", 1)
     // The dead keep their gear's quality and condition: it goes into the cargo as it was.
     p.weaponItem?.let { c.inventory.add(Lot(it, p.weaponQuality), 1) }

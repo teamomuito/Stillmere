@@ -9,7 +9,7 @@ import org.junit.Test
 /** A calm colony where only the timers a test sets can fire. */
 private fun quietGame(seed: Long, story: Storyteller = Storyteller.MARLOWE): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.storyteller = story
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
@@ -43,7 +43,7 @@ class IncidentTest {
         assertNotNull(wild)
         assertTrue("the test needs an animal that could join", g.incidentContext().wildTameable)
         g.raidLastEnded = g.tick
-        assertFalse("a manhunter pack waits out the quiet after a raid", g.elig(Incident.MANHUNTER_PACK))
+        assertFalse("a rogue pack waits out the quiet after a raid", g.elig(Incident.MANHUNTER_PACK))
         assertTrue("a friendly animal may still join", g.elig(Incident.ANIMAL_JOINS))
         g.tick += RAID_QUIET_DAYS * TICKS_PER_DAY.toLong()
         assertTrue("the quiet is over after $RAID_QUIET_DAYS day", g.elig(Incident.MANHUNTER_PACK))
@@ -64,7 +64,7 @@ class IncidentTest {
     @Test fun incidentsHaveAStartingDay() {
         val g = quietGame(704)
         g.atDay(10)
-        assertFalse("manhunter packs wait until day 11", g.elig(Incident.MANHUNTER_PACK))
+        assertFalse("rogue packs wait until day 11", g.elig(Incident.MANHUNTER_PACK))
         g.atDay(11)
         assertTrue(g.elig(Incident.MANHUNTER_PACK))
     }
@@ -218,8 +218,8 @@ class IncidentTest {
     @Test fun executingAnIncidentRecordsItWhenItHappened() {
         val g = quietGame(718)
         g.atDay(12)
-        g.executeIncident(IncidentRegistry.def(Incident.THRUMBO))
-        assertEquals(g.tick, g.incidentLast[Incident.THRUMBO])
+        g.executeIncident(IncidentRegistry.def(Incident.SKYHORN_VISIT))
+        assertEquals(g.tick, g.incidentLast[Incident.SKYHORN_VISIT])
     }
 
     @Test fun blightDestroysNearbyCropsAndLeavesTheRest() {
@@ -231,7 +231,7 @@ class IncidentTest {
         g.map.plant[near] = Plant(crop, g.homeX + 1, g.homeY + 1, 1f)
         g.map.plant[far] = Plant(crop, g.homeX + 30, g.homeY + 30, 1f)
         g.executeIncident(IncidentRegistry.def(Incident.BLIGHT))
-        // Blight strikes around one crop chosen at random; the other is out of its reach and survives.
+        // Crop mildew strikes around one crop chosen at random; the other is out of its reach and survives.
         assertTrue("exactly one of the two crops is blighted", (g.map.plant[near] == null) != (g.map.plant[far] == null))
     }
 
@@ -242,12 +242,12 @@ class IncidentTest {
         assertTrue("someone caught it", g.colonists.any { p -> p.hediffs.any { it.kind.category == 0 } })
     }
 
-    @Test fun malariaOnlyBreaksOutInTheTropics() {
+    @Test fun marshFeverOnlyBreaksOutInTheTropics() {
         val g = quietGame(721)
         g.atDay(20)
         assertEquals(Biome.TEMPERATE, g.map.biome)
         repeat(60) { g.outbreak() }
-        assertFalse("no malaria in a temperate colony", g.colonists.any { p -> p.hediffs.any { it.kind == HediffKind.MALARIA } })
+        assertFalse("no marsh fever in a temperate colony", g.colonists.any { p -> p.hediffs.any { it.kind == HediffKind.MARSH_FEVER } })
     }
 
     @Test fun shortCircuitDestroysTheBattery() {
@@ -260,7 +260,7 @@ class IncidentTest {
         assertTrue("the battery is gone", g.map.buildings().none { it != null && it.def == BuildDef.BATTERY })
     }
 
-    @Test fun aMeteoriteLeavesSteelBehind() {
+    @Test fun aFallingStoneLeavesSteelBehind() {
         val g = quietGame(723)
         g.atDay(12)
         val before = g.map.countItems { it == ItemType.STEEL }
@@ -276,7 +276,7 @@ class IncidentTest {
         assertTrue(g.map.items.values.sumOf { it.count } > before)
     }
 
-    @Test fun aWildfireStartsAFire() {
+    @Test fun aGrasslandBurnStartsAFire() {
         val g = quietGame(725)
         g.atDay(DAYS_PER_SEASON)
         g.executeIncident(IncidentRegistry.def(Incident.WILDFIRE))

@@ -7,8 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private fun newGame(seed: Long): Game {
-    val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    val g = Game(seed, GameMap.generateFor(100, 100, seed, Biome.TEMPERATE))
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE; g.nextWanderer = Long.MAX_VALUE; g.nextTrader = Long.MAX_VALUE
@@ -55,7 +55,7 @@ class JobAiTest {
         val g = newGame(202)
         g.removeItems { it.type.isFood }
         val c = g.colonists[0]
-        g.map.drop(ItemType.MEAL_SIMPLE, 5, c.x, c.y)
+        g.map.drop(ItemType.MEAL_HEARTH_STEW, 5, c.x, c.y)
         c.job = Job(JobType.IDLE).also { it.timer = 500 }
         c.food = 0.05f
         g.run(15)
@@ -77,7 +77,7 @@ class JobAiTest {
     @Test fun hospitalBedIsReleasedWhenThePatientLeavesIt() {
         val g = newGame(204)
         val bedX = g.homeX - 4; val bedY = g.homeY + 6
-        g.map.setBuilding(Building(BuildDef.HOSPITAL_BED, bedX, bedY, true))
+        g.map.setBuilding(Building(BuildDef.INFIRMARY_COT, bedX, bedY, true))
         val patient = g.colonists[0]
         val bed = g.findBedFor(patient, forceMedical = true)
         assertTrue(bed >= 0)
@@ -168,7 +168,7 @@ class JobAiTest {
         c.onlyHauling()
         assertTrue("pawn is carrying steel", g.runUntil { c.job?.type == JobType.HAUL && c.carryCount > 0 })
         val before = g.steelTotal()
-        g.map.drop(ItemType.MEAL_SIMPLE, 5, c.x, c.y)
+        g.map.drop(ItemType.MEAL_HEARTH_STEW, 5, c.x, c.y)
         c.food = 0.05f
         // Interrupted mid-haul: needs are checked every 10 ticks, so the eat job starts well before the walk ends.
         assertTrue("the pawn now eats within one interrupt cycle", g.runUntil(10) { c.job?.type == JobType.EAT })

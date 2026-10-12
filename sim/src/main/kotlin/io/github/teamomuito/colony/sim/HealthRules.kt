@@ -14,12 +14,12 @@ object HealthRules {
     /** A pawn at or below this moving is incapacitated and downed. */
     const val MOVING_MIN = 0.15f
     const val PAIN_SHOCK_DEFAULT = 0.80f
-    const val WIMP_SHOCK_OFFSET = -0.50f
+    const val TENDER_FRAME_SHOCK_OFFSET = -0.50f
     const val PAIN_SHOCK_FLOOR = 0.30f
     const val PAIN_SHOCK_CEIL = 0.95f
 
     fun painShockThreshold(wimp: Boolean): Float =
-        (PAIN_SHOCK_DEFAULT + if (wimp) WIMP_SHOCK_OFFSET else 0f).coerceIn(PAIN_SHOCK_FLOOR, PAIN_SHOCK_CEIL)
+        (PAIN_SHOCK_DEFAULT + if (wimp) TENDER_FRAME_SHOCK_OFFSET else 0f).coerceIn(PAIN_SHOCK_FLOOR, PAIN_SHOCK_CEIL)
 
     /** The one test for being downed; standing back up is its negation, so there is no hysteresis. */
     fun shouldBeDowned(consciousness: Float, moving: Float, pain: Float, shockThreshold: Float): Boolean =
@@ -158,7 +158,7 @@ object HealthRules {
     val TEND_SKILL_CURVE: List<Pair<Int, Float>> = listOf(0 to 0.20f, 6 to 0.80f, 10 to 1.10f, 18 to 1.50f, 20 to 1.55f)
     const val NO_MEDICINE_POTENCY = 0.3f
     const val NO_MEDICINE_MAX_QUALITY = 0.7f
-    const val HOSPITAL_BED_TEND_OFFSET = 0.10f
+    const val INFIRMARY_COT_TEND_OFFSET = 0.10f
     const val SELF_TEND_FACTOR = 0.7f
     const val TEND_RANDOM_SPREAD = 0.25f
     const val DEFAULT_DOCTOR_SKILL = 2
@@ -181,7 +181,7 @@ object HealthRules {
         skill: Int, manipulation: Float, potency: Float, maxQuality: Float, hospital: Boolean, self: Boolean, roll: Float,
     ): Float {
         var q = tendSkillStat(skill) * (0.6f + 0.4f * manipulation) * potency
-        if (hospital) q += HOSPITAL_BED_TEND_OFFSET
+        if (hospital) q += INFIRMARY_COT_TEND_OFFSET
         if (self) q *= SELF_TEND_FACTOR
         q *= 1f + (roll * 2f - 1f) * TEND_RANDOM_SPREAD
         return q.coerceIn(0f, maxQuality)

@@ -1,0 +1,72 @@
+id	since	kind	old	new
+T01	26	title	Vatgrown soldier	Cradle-line recruit
+T02	26	title	Urchin	Street kid
+T03	26	title	Tribal child	Camp foundling
+T04	26	title	Pit fighter	Ringside tyke
+T05	26	title	Space-born tinker	Hull scrapper
+T06	26	title	Cargo ship brat	Hold-born ward
+T07	27	title	Farm kid	Furrow-born
+T08	27	title	Medical student	Infirmary helper
+T09	27	title	Wasteland scavenger	Ruin picker
+T10	27	title	Herder's child	Pasture-born
+T11	27	title	Colonial guard	Palisade watch
+T12	27	title	colonial guard	palisade watch
+T13	27	title	Beast tamer	Stockman
+T14	27	title	Pirate deckhand	Sloop hand
+H01	26	thought	Psychite buzz	Lucid high
+H02	26	thought	Flake rush	Pale dust high
+H03	26	thought	Yayo rush	White rush high
+H04	27	thought	Ate a fine meal	Ate a roasted platter
+H05	27	thought	Ate kibble	Ate feed pellets
+H06	27	thought	Played horseshoes	Played quoits
+H07	27	thought	Psychic drone	Mind hum
+H08	27	thought	Psychic soothe	Mind balm
+H09	27	thought	Mellow	Hushed calm
+I01	26	incident	THRUMBO	SKYHORN_VISIT
+P01	26	backstory	Urchin, cook	Street kid, cook
+P02	27	backstory	Farm kid, colonial guard	Furrow-born, palisade watch
+P03	27	backstory	Colony child	Colony child
+U01	27	thought	Drug use	Drug use
+U02	27	incident	ANIMAL_JOINS	ANIMAL_JOINS
+H10	28	thought	Ate insect meat	Ate chitin cuts
+H11	28	thought	Ate human flesh	Ate manflesh
+H12	28	thought	Ate human flesh (loved it)	Ate manflesh (loved it)
+H13	28	thought	Gourmand's feast	Full belly
+H14	28	thought	Bionic upgrades	Refit pride
+H15	28	thought	Optimist	Sunny outlook
+H16	28	thought	Pessimist	Grey outlook
+S01	28	site	Rough-Knife gang camp	Rough-Blade gang camp
+S02	28	battle	the Rough-Knife gang camp	the Rough-Blade gang camp
+S03	28	battle	Rough-Knife gang bandits	Rough-Blade gang bandits
+H17	29	thought	Ate raw food	Gulped raw fare
+H18	29	thought	Ate without a table	Floor meal
+H19	29	thought	Kind words	Warm talk
+H20	29	thought	Beautiful aurora	Sky curtain glow
+H21	29	thought	Ugly surroundings	Drab rooms
+H22	29	thought	Tortured soul	Restless mind
+H23	29	thought	Drunk	Brew haze
+H24	29	thought	Withdrawal	Craving ache
+E01	29	temp	heat wave	scorching spell
+E02	29	temp	cold snap	deep chill
+E03	29	temp	volcanic winter	smoke pall
+H25	30	thought	Deep talk	Candid exchange
+H26	30	thought	Shared a joke	Friendly ribbing
+H27	30	thought	Hearty feast	Full belly
+H28	30	thought	Engineered upgrades	Refit pride
+E04	30	temp	ash-veil winter	smoke pall
+T15	31	title	Orphan	Unclaimed child
+T16	31	title	Field medic	Battlefield bandager
+T17	31	title	field medic	battlefield bandager
+T18	31	title	Drifter	Roadwalker
+T19	31	title	drifter	roadwalker
+T20	27	title	beast tamer	stockman
+T21	27	title	pirate deckhand	sloop hand
+G01	31	cause	hypothermia	exposure
+G02	31	cause	heatstroke	overheating
+G03	31	cause	blood loss	bleed-out
+G04	31	cause	flu	chest cough
+G05	31	cause	plague	boil sickness
+G06	31	cause	malaria	marsh fever
+G07	31	cause	sleeping sickness	heavy drowse
+G08	31	cause	malnutrition	starved frame
+G09	31	cause	toxic buildup	toxin load

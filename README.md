@@ -47,21 +47,21 @@ control of the outcome beyond drafting, moving and retreating.
 **Health**
 - Body-part health for 29 human parts, with organs, hit locations, armor, penetration, bleeding, pain,
   consciousness, infection, scarring and lost limbs. Capacities such as moving and manipulation follow the parts.
-- Doctors tend wounds with herbal or industrial medicine; hospital beds heal faster.
-- Illness and environmental hazards: flu, plague, malaria, sleeping sickness, parasites, hypothermia, heatstroke,
-  frostbite, malnutrition and food poisoning.
+- Doctors tend wounds with leaf poultices or sterile dressings; infirmary cots heal faster.
+- Illness and environmental hazards: chest cough, boil sickness, marsh fever, heavy drowse, parasites, cold core, sunstruck,
+  frostbite, starved frame and spoiled stomach.
 
 **Base building**
 - 72 buildings, many of them multi-tile: walls, doors, beds, tables, workbenches, lighting, heating, power,
-  defences, traps, turrets, mortars, graves and art.
+  defences, traps, turrets, lobbing tubes, graves and art.
 - Rooms are detected from walls and have temperature, beauty, cleanliness and impressiveness values.
 - Stockpile, growing and dumping zones with item filters, quality limits and priorities.
-- Workbench bills for cooking, tailoring, smithing, machining, stonecutting and medicine. Butchery is an automatic job at a butcher table.
+- Workbench bills for cooking, sewing, forging, shaping, stone cutting and medicine. Butchery is an automatic job at a carving slab.
 - Power grids with solar, wind, wood and battery storage. Fire spreads, rain puts it out, and lightning can start it.
 
 **World**
-- Six biomes, rivers, lakes, five rock types, five ores, seasons, rain, fog, snow, thunderstorms,
-  cold snaps and heat waves.
+- Six biomes, rivers, lakes, five rock types, five ores, seasons, rain, fog, snow, lightning squalls,
+  deep chills and scorching spells.
 - Crops that depend on temperature, light and soil; spoilage of food and corpses; items that wear outdoors.
 - Wildlife for hunting, taming, slaughter and breeding.
 
@@ -75,13 +75,13 @@ control of the outcome beyond drafting, moving and retreating.
 
 **Threats and events**
 - Three storytellers and five difficulty levels.
-- Raids that scale with colony wealth: assaults, sappers, sieges and drop pods.
-- Manhunter packs, insect infestations, disease, solar flares, eclipses, toxic fallout, short circuits, blight,
-  meteorites, volcanic winter, crashed mechanoid ships, wandering colonists and trade caravans.
+- Raids that scale with colony wealth: rushes, tunnelers, shelling camps and lander drops.
+- Rogue packs, pest blooms, disease, corona surges, shadow passages, fume clouds, grid faults, crop mildew,
+  falling stones, smoke pall events, crashed iron hulks, wandering colonists and peddler convoys.
 - Prisoners can be captured, recruited, or ransomed back to their faction.
 
 **Progress**
-- A research tree of 57 projects covering crafts, firearms, power and the ship.
+- A research tree of 57 projects covering crafts, powder arms, power and the ship.
 - Four scenarios. Launch the ship to win.
 - Automatic and manual saves.
 

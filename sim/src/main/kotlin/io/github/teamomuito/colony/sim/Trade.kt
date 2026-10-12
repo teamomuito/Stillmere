@@ -16,7 +16,7 @@ fun Game.spawnTrader(from: WorldFaction? = null, orbitalAt: Pair<Int, Int>? = nu
     val trader = newHuman(e.first, e.second, Faction.VISITOR)
     trader.name = "Trader " + trader.name.substringBefore(' ')
     trader.wfaction = fac?.id ?: -1
-    trader.apparel.clear(); trader.apparel.add(Worn(ItemType.A_DUSTER, Quality.GOOD, 150f)); trader.weaponItem = ItemType.W_REVOLVER
+    trader.apparel.clear(); trader.apparel.add(Worn(ItemType.A_LONG_COAT, Quality.GOOD, 150f)); trader.weaponItem = ItemType.W_CYLINDER_GUN
     trader.escapeTick = tick + ((if (orbitalAt != null) 1.5f else 2.0f) * TICKS_PER_DAY).toInt()
     trader.homeTile = map.idx(homeX, homeY)
     val info = TraderInfo(trader.id, trader.name, tick, trader.escapeTick)
@@ -24,19 +24,19 @@ fun Game.spawnTrader(from: WorldFaction? = null, orbitalAt: Pair<Int, Int>? = nu
     // Stock: bulk goods and a few specialities.
     val goods = listOf(
         ItemType.STEEL to 250, ItemType.WOOD to 300, ItemType.CLOTH to 200, ItemType.LEATHER to 120, ItemType.COMPONENT to 20,
-        ItemType.MEAL_SIMPLE to 40, ItemType.MEAL_FINE to 20, ItemType.MEAL_PACKAGED to 30, ItemType.RICE to 150, ItemType.CORN to 150, ItemType.POTATOES to 100,
-        ItemType.MEDS_HERBAL to 20, ItemType.MEDS_INDUSTRIAL to 10, ItemType.BEER to 20, ItemType.JOINT to 15, ItemType.PSYCHITE_TEA to 10,
-        ItemType.PLASTEEL to 60, ItemType.GOLD to 30, ItemType.KIBBLE to 100, ItemType.HAY to 100,
+        ItemType.MEAL_HEARTH_STEW to 40, ItemType.MEAL_ROASTED_PLATTER to 20, ItemType.MEAL_RATION to 30, ItemType.RICE to 150, ItemType.CORN to 150, ItemType.POTATOES to 100,
+        ItemType.MEDS_LEAF_POULTICE to 20, ItemType.MEDS_STERILE_DRESSING to 10, ItemType.BEER to 20, ItemType.JOINT to 15, ItemType.LUCID_DRAUGHT to 10,
+        ItemType.HARDALLOY to 60, ItemType.GOLD to 30, ItemType.FEED_PELLETS to 100, ItemType.HAY to 100,
     )
-    for ((t, n) in goods) if (t !in BaseContent.hiddenItems && rng.chance(if (orbitalAt != null) 0.8f else 0.55f)) info.stock.add(t, rng.range(n / 4, n) * (if (orbitalAt != null && (t == ItemType.COMPONENT || t == ItemType.PLASTEEL || t == ItemType.GOLD)) 2 else 1))
-    if (fac != null && fac.kind == 0) info.stock.removeKinds { it in setOf(ItemType.COMPONENT, ItemType.PLASTEEL, ItemType.MEAL_PACKAGED, ItemType.MEDS_INDUSTRIAL) }
-    val gear = ItemType.entries.filter { it.isGear && it !in BaseContent.hiddenItems && (fac == null || fac.kind != 0 || it.weapon?.ranged != true || it.weapon == Weapon.BOW || it.weapon == Weapon.GREATBOW) && (fac == null || fac.kind != 0 || (it.apparel != null && it.value < 80f) || it.weapon != null) }
+    for ((t, n) in goods) if (t !in BaseContent.hiddenItems && rng.chance(if (orbitalAt != null) 0.8f else 0.55f)) info.stock.add(t, rng.range(n / 4, n) * (if (orbitalAt != null && (t == ItemType.COMPONENT || t == ItemType.HARDALLOY || t == ItemType.GOLD)) 2 else 1))
+    if (fac != null && fac.kind == 0) info.stock.removeKinds { it in setOf(ItemType.COMPONENT, ItemType.HARDALLOY, ItemType.MEAL_RATION, ItemType.MEDS_STERILE_DRESSING) }
+    val gear = ItemType.entries.filter { it.isGear && it !in BaseContent.hiddenItems && (fac == null || fac.kind != 0 || it.weapon?.ranged != true || it.weapon == Weapon.BOW || it.weapon == Weapon.LONGSTAVE) && (fac == null || fac.kind != 0 || (it.apparel != null && it.value < 80f) || it.weapon != null) }
     repeat(rng.range(2, 6)) { info.stock.add(rng.pick(gear), 1) }
     traders.add(info)
-    say(if (orbitalAt != null) "An orbital trade ship lands at your beacon! ${trader.name} is waiting." else "A trade caravan ${if (fac != null) "from ${fac.name} " else ""}arrives! ${trader.name} is waiting in your colony.", 1)
+    say(if (orbitalAt != null) "An orbital trade ship lands at your beacon! ${trader.name} is waiting." else "A peddler convoy ${if (fac != null) "from ${fac.name} " else ""}arrives! ${trader.name} is waiting in your colony.", 1)
     if (rng.chance(0.4f)) {
         val guard = newHuman(e.first, e.second, Faction.VISITOR)
-        guard.weaponItem = ItemType.W_AUTOPISTOL; guard.escapeTick = trader.escapeTick; guard.homeTile = trader.homeTile
+        guard.weaponItem = ItemType.W_SNAP_PISTOL; guard.escapeTick = trader.escapeTick; guard.homeTile = trader.homeTile
     }
 }
 
@@ -57,12 +57,12 @@ fun Game.tradersHourly() {
 }
 
 fun Game.sellPrice(t: ItemType, q: Quality = Quality.NORMAL): Float {
-    val social = colonists.maxOfOrNull { it.level(SkillType.SOCIAL) } ?: 0
+    val social = colonists.maxOfOrNull { it.level(SkillType.RAPPORT) } ?: 0
     return t.value * (if (t.isGear) q.mult else 1f) * (0.5f + social * 0.01f)
 }
 
 fun Game.buyPrice(t: ItemType): Float {
-    val social = colonists.maxOfOrNull { it.level(SkillType.SOCIAL) } ?: 0
+    val social = colonists.maxOfOrNull { it.level(SkillType.RAPPORT) } ?: 0
     return t.value * (1.35f - social * 0.01f)
 }
 

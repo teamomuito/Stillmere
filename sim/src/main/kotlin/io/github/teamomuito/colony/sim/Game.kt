@@ -10,7 +10,7 @@ class LogEntry(val tick: Long, val text: String, val level: Int) // level: 0 inf
 class Shot(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val expires: Long, val hit: Boolean, val kind: Int = 0)
 class Blast(val x: Int, val y: Int, val radius: Float, val expires: Long)
 
-enum class Weather(val label: String) { CLEAR("Clear"), CLOUDY("Overcast"), RAIN("Rain"), FOG("Fog"), SNOW("Snow"), THUNDER("Thunderstorm") }
+enum class Weather(val label: String) { CLEAR("Clear"), CLOUDY("Overcast"), RAIN("Rain"), FOG("Fog"), SNOW("Snow"), THUNDER("Lightning squall") }
 
 enum class Storyteller(val label: String, val desc: String, val threat: Float, val chaos: Float) {
     MARLOWE("Marlowe", "Steadily rising threats with rest between. The classic arc.", 1f, 0.2f),
@@ -19,14 +19,14 @@ enum class Storyteller(val label: String, val desc: String, val threat: Float, v
 }
 
 enum class Difficulty(val label: String, val threat: Float, val colonistDamage: Float, val loseOnDeath: Boolean) {
-    PEACEFUL("Peaceful", 0.0f, 0.5f, false), EASY("Easy", 0.6f, 0.8f, false), RANDY("Normal", 0.9f, 1f, false), HARD("Challenge", 1.5f, 1.1f, false), EXTREME("Losing is fun", 2.2f, 1.25f, false)
+    PEACEFUL("Peaceful", 0.0f, 0.5f, false), EASY("Easy", 0.6f, 0.8f, false), NORMAL("Normal", 0.9f, 1f, false), HARD("Challenge", 1.5f, 1.1f, false), EXTREME("Relentless", 2.2f, 1.25f, false)
 }
 
 enum class Scenario(val label: String, val desc: String) {
-    CRASHLANDED("Crashlanded", "Three survivors with a few supplies from the wreck."),
-    LOST_TRIBE("The lost tribe", "Five tribals with spears, hides and none of the old science."),
-    RICH_EXPLORER("Rich explorer", "A lone explorer with a fortune and a good rifle."),
-    SOLO("Naked brutality", "One person, nothing but their clothes."),
+    SALVAGE_CREW("Salvage crew", "Three castaways pulled from a downed transport, with a small pile of supplies."),
+    QUIET_ENCLAVE("Quiet enclave", "Five people raised far from the old world, armed with hand-made spears and hide clothing."),
+    SURPLUS_START("Surplus start", "One traveller with a large purse and a reliable long gun."),
+    SOLO("Bare start", "One person with only the clothes they are wearing."),
 }
 
 class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_SIZE, seed, Biome.TEMPERATE)) {
@@ -50,9 +50,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var nextPawnId = 1
 
     // Settings
-    var scenario = Scenario.CRASHLANDED
+    var scenario = Scenario.SALVAGE_CREW
     var storyteller = Storyteller.MARLOWE
-    var difficulty = Difficulty.RANDY
+    var difficulty = Difficulty.NORMAL
     var colonyName = "New Arrivals"
 
     // Research
@@ -92,8 +92,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var raidCounter = 0
     var gameOver = false
     var won = false
-    var homeX = MAP_SIZE / 2
-    var homeY = MAP_SIZE / 2
+    var homeX = map.w / 2
+    var homeY = map.h / 2
     var shipLaunching = 0L
     var windFactor = 0.8f
     var statsKilled = 0
@@ -203,9 +203,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             val clash = p.traits.any { o -> conflicts(o, t) || o == t }
             if (!clash) p.traits.add(t)
         }
-        if (p.traits.none { it == Trait.GAY || it == Trait.BISEXUAL || it == Trait.ASEXUAL } && rng.chance(0.16f)) p.traits.add(rng.pick(listOf(Trait.GAY, Trait.BISEXUAL, Trait.ASEXUAL, Trait.BISEXUAL)))
-        if (Trait.BRAWLER in p.traits) p.passion[SkillType.MELEE.ordinal] = 2
-        if (Trait.NUDIST in p.traits) { /* will undress when the schedule allows */ }
+        if (p.traits.none { it == Trait.SAME_SEX_DRAWN || it == Trait.BOTH_DRAWN || it == Trait.UNROMANTIC } && rng.chance(0.16f)) p.traits.add(rng.pick(listOf(Trait.SAME_SEX_DRAWN, Trait.BOTH_DRAWN, Trait.UNROMANTIC, Trait.BOTH_DRAWN)))
+        if (Trait.STREET_SCRAPPER in p.traits) p.passion[SkillType.CLOSE_COMBAT.ordinal] = 2
+        if (Trait.BARE_SKINNED in p.traits) { /* will undress when the schedule allows */ }
         p.x = x; p.y = y; p.fromX = x; p.fromY = y
         for (w in WorkType.entries) {
             val sk = w.skill()
@@ -214,12 +214,12 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             val pas = p.passion[sk.ordinal]
             p.priority[w.ordinal] = if (pas == 2) 1 else if (pas == 1 || sv >= 9) 2 else 3
             if (p.incapable and (1 shl w.ordinal) != 0) p.priority[w.ordinal] = 0
-            if (Trait.BRAWLER in p.traits && w == WorkType.HUNT) p.priority[w.ordinal] = 0
+            if (Trait.STREET_SCRAPPER in p.traits && w == WorkType.HUNT) p.priority[w.ordinal] = 0
         }
         p.priority[WorkType.HAUL.ordinal] = 4
         p.priority[WorkType.CLEAN.ordinal] = 4
         p.priority[WorkType.HUNT.ordinal] = if (p.priority[WorkType.HUNT.ordinal] == 0) 0 else 4
-        p.priority[WorkType.WARDEN.ordinal] = if (p.skill[SkillType.SOCIAL.ordinal] >= 5) 3 else 4
+        p.priority[WorkType.WARDEN.ordinal] = if (p.skill[SkillType.RAPPORT.ordinal] >= 5) 3 else 4
         if (tribal) {
             p.weaponItem = rng.pick(listOf(ItemType.W_SPEAR, ItemType.W_CLUB, ItemType.W_BOW))
             p.apparel.add(Worn(ItemType.A_TRIBAL, Quality.NORMAL, 90f))
@@ -235,12 +235,12 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     fun conflicts(a: Trait, b: Trait): Boolean {
         val pairs = listOf(
-            Trait.HARD_WORKER to Trait.LAZY, Trait.OPTIMIST to Trait.PESSIMIST, Trait.NIMBLE to Trait.SLOW_WALKER,
-            Trait.TOUGH to Trait.WIMP, Trait.FAST_LEARNER to Trait.SLOW_LEARNER, Trait.KIND to Trait.ABRASIVE,
-            Trait.SANGUINE to Trait.DEPRESSIVE, Trait.BEAUTIFUL to Trait.UGLY, Trait.TOO_SMART to Trait.SLOW_LEARNER,
-            Trait.BRAWLER to Trait.TRIGGER_HAPPY, Trait.PSYCHOPATH to Trait.KIND,
-            Trait.GAY to Trait.BISEXUAL, Trait.GAY to Trait.ASEXUAL, Trait.BISEXUAL to Trait.ASEXUAL, Trait.IRON_WILLED to Trait.VOLATILE,
-            Trait.JOGGER to Trait.SLOW_WALKER, Trait.GREEDY to Trait.ASCETIC, Trait.CAREFUL_SHOOTER to Trait.TRIGGER_HAPPY,
+            Trait.BRISK_HANDS to Trait.IDLE_STREAK, Trait.SUNNY_OUTLOOK to Trait.GREY_OUTLOOK, Trait.LIGHT_STEPPED to Trait.SLOW_WALKER,
+            Trait.THICK_HIDE to Trait.TENDER_FRAME, Trait.EAGER_PUPIL to Trait.SLOW_STUDY, Trait.WARM_HEART to Trait.SHARP_TONGUE,
+            Trait.BUOYANT to Trait.HEAVY_HEARTED, Trait.STRIKING_LOOKS to Trait.PLAIN_LOOKS, Trait.KEEN_MIND to Trait.SLOW_STUDY,
+            Trait.STREET_SCRAPPER to Trait.QUICK_TRIGGER, Trait.UNMOVED to Trait.WARM_HEART,
+            Trait.SAME_SEX_DRAWN to Trait.BOTH_DRAWN, Trait.SAME_SEX_DRAWN to Trait.UNROMANTIC, Trait.BOTH_DRAWN to Trait.UNROMANTIC, Trait.STEEL_NERVES to Trait.SHORT_FUSE,
+            Trait.LONG_STRIDER to Trait.SLOW_WALKER, Trait.ACQUISITIVE to Trait.PLAIN_LIVING, Trait.STEADY_AIM to Trait.QUICK_TRIGGER,
         )
         return pairs.any { (x, y) -> (a == x && b == y) || (a == y && b == x) }
     }
@@ -261,8 +261,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     fun newMech(race: Race, x: Int, y: Int, raidId: Int): Pawn {
         val p = Pawn(nextPawnId++, race.label, race, Faction.ENEMY)
         p.raidId = raidId
-        p.skill[SkillType.SHOOTING.ordinal] = 8
-        p.skill[SkillType.MELEE.ordinal] = 10
+        p.skill[SkillType.MARKSMANSHIP.ordinal] = 8
+        p.skill[SkillType.CLOSE_COMBAT.ordinal] = 10
         p.x = x; p.y = y; p.fromX = x; p.fromY = y
         recomputeHealth(p)
         pawns.add(p)
@@ -274,8 +274,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         p.weaponItem = weaponItem
         p.weaponQuality = rng.pick(listOf(Quality.POOR, Quality.NORMAL, Quality.NORMAL, Quality.GOOD))
         p.raidId = raidId
-        p.skill[SkillType.SHOOTING.ordinal] = rng.range(2, 9)
-        p.skill[SkillType.MELEE.ordinal] = rng.range(3, 10)
+        p.skill[SkillType.MARKSMANSHIP.ordinal] = rng.range(2, 9)
+        p.skill[SkillType.CLOSE_COMBAT.ordinal] = rng.range(3, 10)
         p.apparel.add(Worn(ItemType.A_TRIBAL, Quality.NORMAL, 70f))
         for (a in armor) p.apparel.add(Worn(a, Quality.NORMAL, 120f))
         p.x = x; p.y = y; p.fromX = x; p.fromY = y
@@ -297,7 +297,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         homeX = sx; homeY = sy
         for (yy in sy - 4..sy + 4) for (xx in sx - 4..sx + 4) if (map.inB(xx, yy)) map.plant[map.idx(xx, yy)] = null
 
-        val count = when (sc) { Scenario.CRASHLANDED -> 3; Scenario.LOST_TRIBE -> 5; Scenario.RICH_EXPLORER -> 1; Scenario.SOLO -> 1 }
+        val count = when (sc) { Scenario.SALVAGE_CREW -> 3; Scenario.QUIET_ENCLAVE -> 5; Scenario.SURPLUS_START -> 1; Scenario.SOLO -> 1 }
         val crew = ArrayList<Pawn>()
         if (supplied != null) {
             for ((k, p) in supplied.withIndex()) {
@@ -305,15 +305,15 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
                 if (!pawns.contains(p)) pawns.add(p)
                 crew.add(p)
             }
-        } else for (k in 0 until count) crew.add(newHuman(sx - 1 + k, sy + 2, Faction.PLAYER, sc == Scenario.LOST_TRIBE))
+        } else for (k in 0 until count) crew.add(newHuman(sx - 1 + k, sy + 2, Faction.PLAYER, sc == Scenario.QUIET_ENCLAVE))
         for ((k, p) in crew.withIndex()) {
             p.food = 0.8f; p.rest = 0.85f
             when (sc) {
-                Scenario.CRASHLANDED -> {
-                    p.weaponItem = listOf(ItemType.W_RIFLE, ItemType.W_REVOLVER, ItemType.W_KNIFE).getOrElse(k) { ItemType.W_CLUB }
+                Scenario.SALVAGE_CREW -> {
+                    p.weaponItem = listOf(ItemType.W_RIFLE, ItemType.W_CYLINDER_GUN, ItemType.W_POCKET_BLADE).getOrElse(k) { ItemType.W_CLUB }
                 }
-                Scenario.LOST_TRIBE -> {}
-                Scenario.RICH_EXPLORER -> { p.weaponItem = ItemType.W_RIFLE; p.apparel.add(Worn(ItemType.A_FLAK_VEST, Quality.GOOD, 160f)); p.apparel.add(Worn(ItemType.A_HELMET, Quality.GOOD, 150f)) }
+                Scenario.QUIET_ENCLAVE -> {}
+                Scenario.SURPLUS_START -> { p.weaponItem = ItemType.W_RIFLE; p.apparel.add(Worn(ItemType.A_RIBBED_VEST, Quality.GOOD, 160f)); p.apparel.add(Worn(ItemType.A_RIVETED_HOOD, Quality.GOOD, 150f)) }
                 Scenario.SOLO -> { p.weaponItem = null }
             }
             recomputeHealth(p)
@@ -327,22 +327,22 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         // lasts as long as it did before, counting the colonists' starting food bars. See docs/fidelity/needs-mood.md.
         val sup = ArrayList<Pair<ItemType, Int>>()
         when (sc) {
-            Scenario.CRASHLANDED -> {
-                researchDone.addAll(listOf(Research.COMPLEX_FURNITURE))
-                sup += ItemType.MEAL_PACKAGED to 72; sup += ItemType.WOOD to 150; sup += ItemType.STEEL to 250; sup += ItemType.COMPONENT to 12
-                sup += ItemType.MEDS_HERBAL to 8; sup += ItemType.MEDS_INDUSTRIAL to 4; sup += ItemType.SILVER to 200; sup += ItemType.CLOTH to 60
+            Scenario.SALVAGE_CREW -> {
+                researchDone.addAll(listOf(Research.JOINERY_DETAIL))
+                sup += ItemType.MEAL_RATION to 72; sup += ItemType.WOOD to 150; sup += ItemType.STEEL to 250; sup += ItemType.COMPONENT to 12
+                sup += ItemType.MEDS_LEAF_POULTICE to 8; sup += ItemType.MEDS_STERILE_DRESSING to 4; sup += ItemType.SILVER to 200; sup += ItemType.CLOTH to 60
             }
-            Scenario.LOST_TRIBE -> {
-                sup += ItemType.PEMMICAN to 199; sup += ItemType.WOOD to 160; sup += ItemType.STEEL to 60; sup += ItemType.LEATHER to 60
-                sup += ItemType.MEDS_HERBAL to 6; sup += ItemType.CLOTH to 80; sup += ItemType.RICE to 132
-                researchDone.add(Research.BASIC_MELEE); researchDone.add(Research.SMITHING); researchDone.add(Research.BOWS)
+            Scenario.QUIET_ENCLAVE -> {
+                sup += ItemType.TRAIL_CAKE to 199; sup += ItemType.WOOD to 160; sup += ItemType.STEEL to 60; sup += ItemType.LEATHER to 60
+                sup += ItemType.MEDS_LEAF_POULTICE to 6; sup += ItemType.CLOTH to 80; sup += ItemType.RICE to 132
+                researchDone.add(Research.BASIC_MELEE); researchDone.add(Research.FORGEWORK); researchDone.add(Research.STAVE_AND_STRING)
             }
-            Scenario.RICH_EXPLORER -> {
-                researchDone.addAll(listOf(Research.COMPLEX_FURNITURE, Research.SMITHING, Research.STONECUTTING, Research.TAILORING))
-                sup += ItemType.MEAL_PACKAGED to 47; sup += ItemType.SILVER to 1800; sup += ItemType.STEEL to 400; sup += ItemType.WOOD to 200
-                sup += ItemType.MEDS_INDUSTRIAL to 10; sup += ItemType.COMPONENT to 20; sup += ItemType.GOLD to 60
+            Scenario.SURPLUS_START -> {
+                researchDone.addAll(listOf(Research.JOINERY_DETAIL, Research.FORGEWORK, Research.ROCK_SPLITTING, Research.STITCHWORK))
+                sup += ItemType.MEAL_RATION to 47; sup += ItemType.SILVER to 1800; sup += ItemType.STEEL to 400; sup += ItemType.WOOD to 200
+                sup += ItemType.MEDS_STERILE_DRESSING to 10; sup += ItemType.COMPONENT to 20; sup += ItemType.GOLD to 60
             }
-            Scenario.SOLO -> { sup += ItemType.MEAL_PACKAGED to 15 }
+            Scenario.SOLO -> { sup += ItemType.MEAL_RATION to 15 }
         }
         var k = 0
         for ((t, n) in sup) {
@@ -350,10 +350,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             map.drop(t, n, sx - 2 + cell % 4, sy - 2 + cell / 4)
             k++
         }
-        if (sc == Scenario.LOST_TRIBE) {
+        if (sc == Scenario.QUIET_ENCLAVE) {
             map.drop(ItemType.W_SPEAR, 1, sx - 2, sy); map.drop(ItemType.W_BOW, 1, sx - 1, sy)
         }
-        if (sc == Scenario.CRASHLANDED || sc == Scenario.RICH_EXPLORER) {
+        if (sc == Scenario.SALVAGE_CREW || sc == Scenario.SURPLUS_START) {
             // Pets.
             if (rng.chance(0.5f)) { val a = newAnimal(Race.HUSKY, sx + 2, sy + 2, Faction.PLAYER); a.tame = true }
         }
@@ -451,9 +451,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             return map.floor[i] != def && (under == null || !under.def.isWall && !under.def.isDoor)
         }
         if (map.building[i] != null) return false
-        if (def == BuildDef.HYDROPONICS && map.plant[i] != null) return false
-        if (def.isShip && def == BuildDef.SHIP_COMPUTER && map.buildings().any { it != null && it.def == BuildDef.SHIP_COMPUTER }) return false
-        if (def.workbench && def != BuildDef.CAMPFIRE && def != BuildDef.CRAFTING_SPOT && map.plant[i]?.type?.isTree == true) return false
+        if (def == BuildDef.GROW_TRAY && map.plant[i] != null) return false
+        if (def.isShip && def == BuildDef.NAVIGATION_BRAIN && map.buildings().any { it != null && it.def == BuildDef.NAVIGATION_BRAIN }) return false
+        if (def.workbench && def != BuildDef.CAMPFIRE && def != BuildDef.WORKSHOP_MAT && map.plant[i]?.type?.isTree == true) return false
         return true
     }
 
@@ -491,8 +491,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val t = map.terrain[i]
         if (!t.passable || t == Terrain.WATER_SHALLOW) return null
         val b = map.building[i]
-        if (b != null && b.def.blocksMove && !(b.def == BuildDef.HYDROPONICS)) return null
-        if (kind == ZoneKind.GROWING && t.fertility <= 0f && b?.def != BuildDef.HYDROPONICS) return null
+        if (b != null && b.def.blocksMove && !(b.def == BuildDef.GROW_TRAY)) return null
+        if (kind == ZoneKind.GROWING && t.fertility <= 0f && b?.def != BuildDef.GROW_TRAY) return null
         val old = map.zoneAt(i)
         if (old != null) { if (old === zone) return zone; old.cells--; if (old.cells <= 0) map.zones.remove(old.id) }
         val z = zone ?: map.newZone(kind).also {
@@ -568,10 +568,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         for (b in map.buildings()) {
             if (b == null || !b.built) continue
             when (b.def) {
-                BuildDef.SHIP_COMPUTER -> core++
-                BuildDef.SHIP_ENGINE -> engines++
-                BuildDef.SHIP_REACTOR -> reactor++
-                BuildDef.SHIP_CASKET -> casket++
+                BuildDef.NAVIGATION_BRAIN -> core++
+                BuildDef.THRUST_DRIVE -> engines++
+                BuildDef.CORE_FURNACE -> reactor++
+                BuildDef.COLD_POD -> casket++
                 else -> {}
             }
         }
@@ -617,7 +617,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val sleeping = p.job?.type == JobType.SLEEP && p.job?.stage == 1
         if (p.race.mech) { p.food = 1f; p.rest = 1f }
         // Needs.
-        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { StrictMath.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else NeedRules.humanFoodPerDay(Trait.GOURMAND in p.traits, Trait.ASCETIC in p.traits, p.pregnantUntil > 0L, p.age)
+        val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { StrictMath.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else NeedRules.humanFoodPerDay(Trait.HEARTY_APPETITE in p.traits, Trait.PLAIN_LIVING in p.traits, p.pregnantUntil > 0L, p.age)
         p.food = max(0f, p.food - foodRate / TICKS_PER_DAY * (if (sleeping) 0.7f else 1f))
         if (!p.isAnimal) {
             if (!sleeping) p.rest = max(0f, p.rest - 0.95f / TICKS_PER_DAY)
@@ -659,7 +659,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
 
     private fun starvationTick(p: Pawn) {
         if (tick % HEALTH_STRIDE != (p.id % HEALTH_STRIDE).toLong()) return
-        val h = addHediff(p, HediffKind.MALNUTRITION, 0f)
+        val h = addHediff(p, HediffKind.STARVED_FRAME, 0f)
         h.severity = min(1f, h.severity + HEALTH_STRIDE * 0.28f / TICKS_PER_DAY)
         p.healthDirty = true
         if (h.severity >= 1f) { die(p, "starvation") }
@@ -692,7 +692,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     }
 
     companion object {
-        const val MAP_SIZE = 100
+        /** Side length of a new colony's map. Saves store their own size and keep it when read (100 by 100 for older saves). */
+        const val MAP_SIZE = 250
         /** Ticks between slow updates (weather, power, climate, plants, spoilage, mood). */
         val SLOW_TICK = tk(250).toLong()
         /** Ticks between a pawn's health and need-interrupt checks; also the elapsed time each health update covers. */

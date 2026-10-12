@@ -6,7 +6,7 @@ import org.junit.Test
 
 private fun openGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     val never = Long.MAX_VALUE
@@ -25,7 +25,7 @@ class SuppressionTest {
     @Test fun aVolleyThatHitsNothingSuppressesTheTarget() {
         val g = openGame(2301)
         val shooter = g.colonists.first()
-        shooter.weaponItem = ItemType.W_REVOLVER
+        shooter.weaponItem = ItemType.W_CYLINDER_GUN
         shooter.x = g.homeX; shooter.y = g.homeY
         val target = g.newHuman(g.homeX + 14, g.homeY, Faction.ENEMY)
         target.x = g.homeX + 14; target.y = g.homeY

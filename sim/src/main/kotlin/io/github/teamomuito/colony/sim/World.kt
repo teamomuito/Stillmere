@@ -38,13 +38,13 @@ fun Game.igniteCell(i: Int, intensity: Float = 0.3f) {
 
 fun Game.fireTick() {
     if (map.fires.isEmpty()) return
-    // Firefoam poppers burst when flames reach them.
+    // Quench vents burst when flames reach them.
     for (b in map.buildings()) {
-        if (!b.built || b.def != BuildDef.FOAM_POPPER) continue
+        if (!b.built || b.def != BuildDef.QUENCH_VENT) continue
         if (map.fires.keys.any { val fx = it % map.w; val fy = it / map.w; Math.abs(fx - b.x) <= 3 && Math.abs(fy - b.y) <= 3 }) {
             for (dy in -6..6) for (dx in -6..6) { val x = b.x + dx; val y = b.y + dy; if (map.inB(x, y)) map.fires.remove(map.idx(x, y)) }
             map.removeBuilding(b)
-            say("A firefoam popper smothers the flames.", 1)
+            say("A quench vent smothers the flames.", 1)
             break
         }
     }
@@ -124,8 +124,8 @@ fun Game.explode(x: Int, y: Int, radius: Float, damage: Float, source: Pawn? = n
 // ----------------------------------------------------------------------------------- power
 
 fun Game.powerTick() {
-    // Autodoors open or close with the power, which changes what can be walked through.
-    if (map.buildings().any { it.def == BuildDef.AUTODOOR }) map.markWalkChanged()
+    // Slide hatches open or close with the power, which changes what can be walked through.
+    if (map.buildings().any { it.def == BuildDef.SHUTTER_DOOR }) map.markWalkChanged()
     val m = map
     val ps = power
     ps.produced = 0f; ps.consumed = 0f; ps.stored = 0f; ps.capacity = 0f
@@ -186,7 +186,7 @@ fun Game.powerTick() {
             var out = 0f
             when (d) {
                 BuildDef.SOLAR_PANEL -> out = d.power * daylight() * (if (ps.flare) 0f else 1f)
-                BuildDef.WIND_TURBINE -> out = d.power * windFactor
+                BuildDef.BREEZE_MILL -> out = d.power * windFactor
                 BuildDef.WOOD_GENERATOR -> if (b.fuel > 0f) { out = d.power; b.fuel = max(0f, b.fuel - Game.SLOW_TICK.toFloat() / TICKS_PER_HOUR * 0.8f) }
                 else -> {}
             }
@@ -241,10 +241,10 @@ fun Game.worldSlowTick() {
         if (weather == Weather.SNOW && out < 1f) m.snow[i] = min(1f, m.snow[i] + 0.02f)
         else if (out > 0f && m.snow[i] > 0f) m.snow[i] = max(0f, m.snow[i] - 0.01f * (1f + out / 10f))
     }
-    // Toxic fallout hurts everybody outside and kills plants.
+    // A fume cloud hurts everybody outside and kills plants.
     if (toxicFalloutUntil > tick) {
         for (p in pawns) if (p.alive && !p.isAnimal && !m.roofed(m.idx(p.x, p.y))) {
-            val h = addHediff(p, HediffKind.TOXIC_BUILDUP, 0f)
+            val h = addHediff(p, HediffKind.TOXIN_LOAD, 0f)
             h.severity = min(1f, h.severity + 0.0035f)
         }
         for (i in 0 until m.size) { val pl = m.plant[i]; if (pl != null && !m.roofed(i) && rng.chance(0.002f)) m.plant[i] = null }
@@ -256,7 +256,7 @@ fun Game.worldSlowTick() {
     }
     // Windblown fire starts.
     windFactor = (windFactor + (rng.float() - 0.5f) * 0.12f).coerceIn(0.15f, 1.35f)
-    // Hunger of tamed animals: hay and kibble are consumed in animalTick.
+    // Hunger of tamed animals: fodder and feed pellets are consumed in animalTick.
 }
 
 private fun Game.updateWeather() {
@@ -338,7 +338,7 @@ internal fun Game.roomClimate(out: Float) {
         when {
             d.fuelCap > 0f -> {
                 if (b.fuel > 0f) {
-                    val use = d == BuildDef.CAMPFIRE || d == BuildDef.TORCH_LAMP || b.inUse > 0 || d == BuildDef.WOOD_GENERATOR
+                    val use = d == BuildDef.CAMPFIRE || d == BuildDef.PITCH_POST || b.inUse > 0 || d == BuildDef.WOOD_GENERATOR
                     if (use) { b.fuel = max(0f, b.fuel - 0.25f); active = true }
                     if (b.inUse > 0) b.inUse = max(0, b.inUse - Game.SLOW_TICK.toInt())
                 }
@@ -359,7 +359,7 @@ private fun Game.plantsTick(out: Float) {
     for (i in 0 until m.size) {
         val pl = m.plant[i] ?: continue
         val t = m.tempAt(i, out)
-        val fert = m.terrain[i].fertility.let { f -> if (m.building[i]?.def == BuildDef.HYDROPONICS && m.building[i]?.powered == true) 2.0f else f }
+        val fert = m.terrain[i].fertility.let { f -> if (m.building[i]?.def == BuildDef.GROW_TRAY && m.building[i]?.powered == true) 2.0f else f }
         if (pl.type.crop || pl.type.isTree || pl.type.regrows) {
             pl.age += Game.SLOW_TICK.toInt()
             if (pl.growth >= 1f) {
@@ -378,7 +378,7 @@ private fun Game.plantsTick(out: Float) {
             val days = if (pl.type.growDays <= 0f) 1f else pl.type.growDays
             var rate = 1f / (days * TICKS_PER_DAY * 0.55f) * Game.SLOW_TICK * max(0.2f, fert)
             if (weather == Weather.RAIN) rate *= 1.1f
-            if (Trait.GREEN_THUMB in pawns.firstOrNull { it.colonist }?.traits.orEmpty()) rate *= 1.25f
+            if (Trait.GARDEN_SENSE in pawns.firstOrNull { it.colonist }?.traits.orEmpty()) rate *= 1.25f
             pl.growth = min(1f, pl.growth + rate)
         }
     }
@@ -403,8 +403,8 @@ private fun Game.plantsTick(out: Float) {
 }
 
 /** Manufactured goods left out in the open wear away; roofs, and especially rain, matter. */
-private fun deteriorates(t: ItemType) = t.isGear || t == ItemType.CLOTH || t == ItemType.LEATHER || t == ItemType.WOOL || t == ItemType.DEVILSTRAND ||
-    t == ItemType.MEDS_HERBAL || t == ItemType.MEDS_INDUSTRIAL || t == ItemType.KIBBLE || t.cat == ItemCat.ART
+private fun deteriorates(t: ItemType) = t.isGear || t == ItemType.CLOTH || t == ItemType.LEATHER || t == ItemType.WOOL || t == ItemType.WISPSILK ||
+    t == ItemType.MEDS_LEAF_POULTICE || t == ItemType.MEDS_STERILE_DRESSING || t == ItemType.FEED_PELLETS || t.cat == ItemCat.ART
 
 private fun Game.deteriorationTick() {
     val m = map
@@ -477,9 +477,9 @@ fun impressMood(score: Float): Float = when {
 
 /** The weapon a turret building fires, from the weapon table. Null for buildings that do not shoot. */
 internal fun turretWeapon(d: BuildDef): Weapon? = when (d) {
-    BuildDef.TURRET -> Weapon.TURRET_GUN
-    BuildDef.MINI_TURRET -> Weapon.MINI_TURRET_GUN
-    BuildDef.MORTAR -> Weapon.MORTAR_SHELL
+    BuildDef.TURRET -> Weapon.PIVOT_CANNON
+    BuildDef.SENTRY_POD -> Weapon.SENTRY_POD_GUN
+    BuildDef.LOBBING_TUBE -> Weapon.LOBBED_CHARGE
     else -> null
 }
 
@@ -488,7 +488,7 @@ fun Game.turretsTick() {
         if (b == null || !b.built) continue
         val w = turretWeapon(b.def) ?: continue
         if (b.cooldown > 0) { b.cooldown -= tk(10); continue }
-        if (b.def == BuildDef.MORTAR) { mortarFire(b); continue }
+        if (b.def == BuildDef.LOBBING_TUBE) { mortarFire(b); continue }
         var best: Pawn? = null
         var bd = w.range * w.range
         for (h in pawns) {
@@ -517,7 +517,7 @@ private fun Game.mortarFire(b: Building) {
         if (d < bd && d > 64f) { best = h; bd = d }
     }
     if (best == null) return
-    val w = Weapon.MORTAR_SHELL
+    val w = Weapon.LOBBED_CHARGE
     b.shells--
     b.cooldown = w.cooldownTicks
     // A shell lands close to where it was aimed when it hits, and wide when it misses.
@@ -549,25 +549,25 @@ fun Game.trapsTick() {
 }
 
 /**
- * Powered production that happens without a colonist: a deep drill brings up whatever ore lies under it (stone chunks
- * when there is none), and a crematorium burns the nearest corpse within reach.
+ * Powered production that happens without a colonist: a subsoil auger brings up whatever ore lies under it (rough rocks
+ * when there is none), and a pyre house burns the nearest corpse within reach.
  */
 internal fun Game.productionTick() {
     for (b in map.buildings()) {
         if (b == null || !b.built || !b.powered) continue
-        if (b.def == BuildDef.DEEP_DRILL) {
+        if (b.def == BuildDef.SUBSOIL_AUGER) {
             if (b.cooldown > 0) { b.cooldown -= Game.SLOW_TICK.toInt(); continue }
             b.cooldown = 2 * TICKS_PER_DAY
             val ore = map.ore[map.idx(b.x, b.y)]
             val item = ore.item
             if (ore != Ore.NONE && item != null) map.drop(item, max(1, rng.range(ore.yieldMin, ore.yieldMax) / 2), b.x, b.y)
             else map.drop(ItemType.STONE_CHUNK, rng.range(1, 2), b.x, b.y)
-        } else if (b.def == BuildDef.CREMATORIUM) {
+        } else if (b.def == BuildDef.PYRE_HOUSE) {
             val body = map.items.entries.firstOrNull { (i, s) ->
                 s.corpseOf != null && distance(map.xOf(i), map.yOf(i), b.x, b.y) <= 5f
             } ?: continue
             map.items.remove(body.key)
-            say("The crematorium burned the body of ${body.value.corpseOf}.", 0)
+            say("The pyre house burned the body of ${body.value.corpseOf}.", 0)
         }
     }
 }

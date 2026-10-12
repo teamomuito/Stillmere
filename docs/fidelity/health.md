@@ -118,7 +118,7 @@ A body with no part in a role is not limited by it (value 1).
 
 | Capacity | Formula in the sim (`HealthRules`) | Vanilla reference | Status |
 |---|---|---|---|
-| **Consciousness** | `brain × (1 − 0.55·pain) × bloodLoss(>0.3: 1 − 1.4·(bloodLoss−0.3)) × (1 − 0.2·(1−pumping)) × (1 − 0.2·(1−breathing)) × (1 − 0.1·(1−filtration))`, then hediff multipliers; anesthetic forces 0 | Brain-driven; blood pumping has 20% importance with no allowed defect and 100% max | pumping weight 0.2 `SECONDARY` ✔; breathing 0.2 and filtration 0.1 weights `UNVERIFIED`; the pain and blood-loss terms `UNVERIFIED` |
+| **Consciousness** | `brain × (1 − 0.55·pain) × bloodLoss(>0.3: 1 − 1.4·(bloodLoss−0.3)) × (1 − 0.2·(1−pumping)) × (1 − 0.2·(1−breathing)) × (1 − 0.1·(1−filtration))`, then hediff multipliers; numbing forces 0 | Brain-driven; blood pumping has 20% importance with no allowed defect and 100% max | pumping weight 0.2 `SECONDARY` ✔; breathing 0.2 and filtration 0.1 weights `UNVERIFIED`; the pain and blood-loss terms `UNVERIFIED` |
 | **Moving** | `legs × (0.75 + 0.25·feet) × (0.9 + 0.1·toes)`, × hediffs, × (1 − 0.2·pain); forced to 0 with no working legs | One missing of two legs: half | structure `UNVERIFIED`. Consciousness, breathing and pumping also feed Moving in vanilla (`SECONDARY`); the sim does not apply them directly, only through the downed rule ✘ |
 | **Manipulation** | `hands × (0.6 + 0.4·fingers) × 0.7 + arms × 0.3`, × hediffs, × (1 − 0.2·pain); 1 if the body has no hands | Depends on arms, hands, fingers (and consciousness) | roles `SECONDARY`, weights `UNVERIFIED`; consciousness factor not applied ✘ |
 | **Sight** | mean of eyes, × hediffs | One eye lost: −50% | `SECONDARY` ✔ |
@@ -152,21 +152,21 @@ neither is wired. Consciousness should multiply Moving and Manipulation directly
 | Illness and drug pain | `hediff.kind.pain × severity` | n/a | `UNVERIFIED` |
 | Pain → consciousness | linear, `1 − 0.55·pain` | stepped by pain stage | `UNVERIFIED`: the stage thresholds were not found |
 | Pain shock threshold | **0.80** (changed from 0.85) | default 80%; effective bounds 30%–95% | `SECONDARY` ✔ |
-| Wimp | threshold **−0.50** (changed from a ×1.4 pain multiplier) → 0.30 | Wimp −50% | `SECONDARY`; I read it as percentage points, in line with the other listed offsets. If vanilla means relative, the answer is 0.40 |
-| Tough | pain ×0.7, damage ×0.75 | n/a | `UNVERIFIED`, unchanged |
+| Tender frame | threshold **−0.50** (changed from a ×1.4 pain multiplier) → 0.30 | Tender frame −50% | `SECONDARY`; I read it as percentage points, in line with the other listed offsets. If vanilla means relative, the answer is 0.40 |
+| Thick hide | pain ×0.7, damage ×0.75 | n/a | `UNVERIFIED`, unchanged |
 | Pain-shock modifiers from masks and veils | not modelled | War mask +10%, veil +5%, ritual mask +15% | `SECONDARY`; excluded as DLC-sourced items |
 
-### Bleeding, clotting and blood loss
+### Bleeding, clotting and bleed-out
 
 | Rule | Sim | Status |
 |---|---|---|
 | Bleed rate of a wound | `kind.bleed × severity × 1.35e-6` per tick (×1.7 inside organs; bruise and crush ×0.1) | `UNVERIFIED` |
 | Tended wounds | `bleed × (1 − tendQuality) × 0.06` (`HealthRules.bleedRate`) | `UNVERIFIED`; I recall tended wounds not bleeding at all |
 | Clotting | wound bleed shrinks per step by `dt/34000` untended, `dt/12000` tended, never more than half per step | `UNVERIFIED` |
-| Blood loss accrues | `bloodLoss += Σbleed × dt` | `UNVERIFIED` |
+| Bleed-out builds | `bloodLoss += Σbleed × dt` | `UNVERIFIED` |
 | Blood recovery | 0.36/day if food > 0.2, else 0.10/day, when nothing bleeds | `UNVERIFIED` |
-| Death from blood loss | at 1.0 | `SECONDARY` ✔ (lethal severity 100%) |
-| Blood loss stages | labels minor, moderate, severe, extreme; thresholds not found | labels `SECONDARY`, thresholds `UNVERIFIED`; the sim has no staged hediff, only the consciousness term above 0.3 |
+| Death from bleed-out | at 1.0 | `SECONDARY` ✔ (lethal severity 100%) |
+| Bleed-out stages | labels minor, moderate, severe, extreme; thresholds not found | labels `SECONDARY`, thresholds `UNVERIFIED`; the sim has no staged hediff, only the consciousness term above 0.3 |
 
 Tests: `bleedingIsStoppedByTendingAndFadesByClotting`, `lostBloodComesBackSlowerWhenHungry`,
 `woundsMakeBlood_OneHundredPercentBloodLossKills`.
@@ -175,27 +175,27 @@ Tests: `bleedingIsStoppedByTendingAndFadesByClotting`, `lostBloodComesBackSlower
 
 | Rule | Sim | Status |
 |---|---|---|
-| Start | each tick, for an untended (or poorly tended, quality < 0.3) wound of severity > 2 whose damage type can infect: chance `kind.infect × 1.54 / day`, ×1.5 outdoors, ×0.3 in a hospital bed, ×`(1 − q) × 0.5` if tended; initial infection 0.04 | `UNVERIFIED` |
+| Start | each tick, for an untended (or poorly tended, quality < 0.3) wound of severity > 2 whose damage type can infect: chance `kind.infect × 1.54 / day`, ×1.5 outdoors, ×0.3 in an infirmary cot, ×`(1 − q) × 0.5` if tended; initial infection 0.04 | `UNVERIFIED` |
 | Progression | infection grows `1.1/day × (1 − 0.8·q)`; immunity grows `0.9/day × (1 + 0.6·q + 0.3 if resting)`; when immunity exceeds 1.1× infection the infection is pushed down | `UNVERIFIED` |
 | Treatment | tending subtracts `0.35 × q` from the infection and raises `q`-dependent growth suppression and immunity | `UNVERIFIED` |
 | Death | infection ≥ 1.0 | `UNVERIFIED` |
-| Qualitative checks | herbal-quality tending (0.4–0.5) with a normal bed usually beats an infection; excellent care wins by more than 2:1; hunger slows immunity | `SECONDARY` (anecdotes on the wiki; the sim agrees in direction. A hungry pawn heals slower but its immunity is not slowed ✘) |
-| Illnesses | flu `0.9/day` severity, `0.8/day` immunity | the wiki figure is ≈0.249/day severity and ≈0.239/day immunity at 100% quality (`SECONDARY`); the sim is roughly 3.5× faster ✘, left alone because illness tuning is outside this task's wound scope |
+| Qualitative checks | leaf-poultice-quality tending (0.4–0.5) with a normal bed usually beats an infection; excellent care wins by more than 2:1; hunger slows immunity | `SECONDARY` (anecdotes on the wiki; the sim agrees in direction. A hungry pawn heals slower but its immunity is not slowed ✘) |
+| Illnesses | the first illness (`CHEST_COUGH`, the section 6.3 name) `0.9/day` severity, `0.8/day` immunity | the wiki figure is ≈0.249/day severity and ≈0.239/day immunity at 100% quality (`SECONDARY`); the sim is roughly 3.5× faster ✘, left alone because illness tuning is outside this task's wound scope |
 
 Tests: `infectionStartsRarerWithCareAndInTheHospital`, `infectionGrowthFightsImmunityAndGoodCareTipsTheBalance`,
 `tendingAnInfectedWoundKnocksItBack`, `infectionKillsAt100Percent`.
 
-### Scars, lost limbs and prosthetics
+### Scars, lost limbs and implants
 
 | Rule | Sim | Status |
 |---|---|---|
 | Healed sharp wounds can leave a scar | 18% chance for sharp damage kinds; bruises never scar | `UNVERIFIED` |
 | A scar's effect | permanent, no pain, no damage to the part | `UNVERIFIED`; I recall vanilla scars keeping a little severity |
 | Destroyed part | becomes a "missing" record, permanent; stump bleeds, tended stumps bleed little | rule `UNVERIFIED` |
-| Prosthetics | `Implant`: peg leg 0.55, hook hand 0.5, bionic arm/leg 1.3, bionic eye 1.25, bionic ear 1.2, bionic heart 1.3 | efficiencies `UNVERIFIED`; whether "hook hand" is a base-game item is `UNVERIFIED` |
+| Limb crafting | `Implant`: wooden shank 0.55, gaff grip 0.5, servo limb and strider 1.3, optic lens 1.25, coil listener 1.2, pump core 1.3 | efficiencies `UNVERIFIED`; whether "gaff grip" is a base-game item is `UNVERIFIED` |
 
 Tests: `sharpWoundsSometimesLeaveAScarThatDoesNotWeakenThePart`, `bruisesNeverScar`, `amputatingALimbRemovesItAndLeavesATendedStump`,
-`aPegLegRestoresPartOfWhatAmputationTook`, `bionicPartsBeatNaturalOnes`.
+`aReplacementLegRestoresPartOfWhatAmputationTook`, `augmentedPartsBeatNaturalOnes`.
 
 ### Downed, dying and death
 
@@ -208,7 +208,7 @@ Tests: `sharpWoundsSometimesLeaveAScarThatDoesNotWeakenThePart`, `bruisesNeverSc
 | Death: vital part destroyed | torso, neck, head, heart, brain | torso/heart/brain `SECONDARY`; neck and head `UNVERIFIED` |
 | Death: lungs | both lost | `SECONDARY` ✔ |
 | Death: filtration | liver lost, or both kidneys lost. **New** (cause "organ failure") | `SECONDARY` ✔ |
-| Death: blood loss | ≥ 1.0 | `SECONDARY` ✔ |
+| Death: bleed-out | ≥ 1.0 | `SECONDARY` ✔ |
 | Death: infection or lethal illness | severity ≥ 1.0 | `UNVERIFIED` |
 | Death at consciousness 0% | not a separate rule | `SECONDARY` ✘; reachable only through the causes above |
 | Downed enemies may die at once from pain shock | not modelled | `SECONDARY` ✘ |
@@ -217,8 +217,8 @@ Tests: `downedWhenUnconsciousIncapacitatedOrInShock`, `aPawnGetsBackUpAsSoonAsNo
 `painShockThresholdIs80PercentAndAWimpGoesDownAt30`, `losingTheLiverIsFatal`, and the arc test below.
 
 **Arc test** (`InjuryToRecoveryTest`, fixed seed 5801): a colonist's legs are crushed to 88% and the torso cut. They
-are downed on the next health tick (moving ≤ 15%); a doctor of skill 8 tends them with industrial medicine; they stand
-up on their own, never go back down, and after 15 days every wound is healed, blood loss is zero and moving exceeds
+are downed on the next health tick (moving ≤ 15%); a doctor of skill 8 tends them with sterile dressings; they stand
+up on their own, never go back down, and after 15 days every wound is healed, bleed-out is zero and moving exceeds
 0.95. `theSameSeedGivesTheSameRecovery` reruns it and requires identical results.
 
 ---
@@ -229,10 +229,10 @@ up on their own, never go back down, and after 15 days every wound is healed, bl
 
 | Item | Potency | Max tend quality | Status |
 |---|---|---|---|
-| Industrial medicine (`MEDS_INDUSTRIAL`) | 1.0 | 1.0 | `SECONDARY` ✔ |
-| Herbal medicine (`MEDS_HERBAL`) | 0.6 | 0.7 | `UNVERIFIED` (potency was the sim's existing value; the cap is new) |
+| Sterile dressing (`MEDS_INDUSTRIAL`) | 1.0 | 1.0 | `SECONDARY` ✔ |
+| Leaf poultice (`MEDS_HERBAL`) | 0.6 | 0.7 | `UNVERIFIED` (potency was the sim's existing value; the cap is new) |
 | No medicine | 0.3 | 0.7 | `UNVERIFIED` (new; was a 0.45 factor) |
-| Raw healroot | not a medicine (potency 0); a caravan doctor that carries it is treated as using no medicine | | `UNVERIFIED` |
+| Raw mirewort | not a medicine (potency 0); a caravan doctor that carries it is treated as using no medicine | | `UNVERIFIED` |
 | Glitterworld (ultratech) medicine | not in the sim | 1.6 / 1.3 | `SECONDARY`; base-game item, recorded as a gap |
 
 ### Tend quality
@@ -241,7 +241,7 @@ up on their own, never go back down, and after 15 days every wound is healed, bl
 
 ```
 q = skillStat(level) × (0.6 + 0.4·manipulation) × potency
-if hospital bed: q += 0.10
+if infirmary cot: q += 0.10
 if self-tending: q *= 0.7
 q *= 1 + (2·roll − 1) × 0.25        // roll is the game's seeded rng.float()
 q = clamp(q, 0, maxTendQuality of the medicine)
@@ -253,12 +253,12 @@ q = clamp(q, 0, maxTendQuality of the medicine)
 | Doctor skill stat | level 0 → 0.20, 6 → 0.80, 10 → 1.10, 18 → 1.50, 20 → 1.55 | `SECONDARY`; levels between anchors are linearly interpolated, which is `UNVERIFIED` |
 | Self-tend factor | 0.7 | `SECONDARY` ✔ |
 | Random spread | ±25% | `SECONDARY` ✔ |
-| Hospital bed offset | +0.10 | only hospital beds have an offset: `SECONDARY`; the 0.10 magnitude is `UNVERIFIED` |
+| Infirmary cot offset | +0.10 | only infirmary cots have an offset: `SECONDARY`; the 0.10 magnitude is `UNVERIFIED` |
 | Manipulation factor `0.6 + 0.4·manip` | | `UNVERIFIED`, kept from the old code |
 | Doctor skill also affects tend speed and surgery success | | `SECONDARY`; the sim applies skill to tend quality and surgery success, not tend speed |
 | Default doctor (nobody tending) | skill 2 | `UNVERIFIED` |
 
-Because the old formula was the author's tuning (about 0.37 for a skill-6 doctor with industrial medicine), this
+Because the old formula was the author's tuning (about 0.37 for a skill-6 doctor with sterile dressings), this
 change roughly doubles tend quality for skilled doctors. That is a deliberate gameplay shift toward the wiki's
 table; no existing test depended on the old values.
 
@@ -275,7 +275,7 @@ Tests: `doctorSkillFollowsTheDocumentedCurve`, `tendQualityIsSkillTimesPotency`,
 | Untended wound | 3.2 HP/day | `UNVERIFIED` (I recall a single natural rate that tending does not change) |
 | Tended wound | `8 × (0.55 + q)` HP/day | `UNVERIFIED` |
 | Resting in a bed | ×1.35 | `UNVERIFIED` |
-| Hospital bed | ×1.15 (stacks with bed rest), infection start ×0.3, tend offset +0.10 | `UNVERIFIED` |
+| Infirmary cot | ×1.15 (stacks with bed rest), infection start ×0.3, tend offset +0.10 | `UNVERIFIED` |
 | Bruises | ×1.5 | `UNVERIFIED` |
 | Burns | ×0.7 | `UNVERIFIED` |
 | Starving (food < 0.05) | ×0.3 | `UNVERIFIED` |
@@ -288,18 +288,18 @@ Tests, one per rule: `untendedWoundsHealAtTheBaseRate`, `tendedWoundsHealFasterW
 ### Surgery
 
 Operations in the sim: **amputate** a limb, hand, foot, ear, nose, finger or toe; **install** a prosthetic on a missing
-part (non-bionic), or a bionic on any matching part. Prosthetics are gated by research (`Prosthetics`, `Bionics`).
+part (non-engineered), or an engineered part on any matching part. Artificial parts are gated by research (`Limb crafting`, `Augmentation`).
 
 | Rule | Sim | Status |
 |---|---|---|
-| Success chance | `0.5 + 0.03·skill (+0.1 hospital, +0.3 amputation)`, clamped 0.30–0.98; needs skill ≥ 3 | `UNVERIFIED`. The wiki says medicine potency and doctor skill both scale surgery success (`SECONDARY`); the sim ignores potency ✘ |
+| Success chance | `0.5 + 0.03·skill (+0.1 infirmary cot, +0.3 amputation)`, clamped 0.30–0.98; needs skill ≥ 3 | `UNVERIFIED`. The wiki says medicine potency and doctor skill both scale surgery success (`SECONDARY`); the sim ignores potency ✘ |
 | Medicine consumed | none | `UNVERIFIED`; I recall surgery consuming a medicine item ✘ |
 | Failure | two cuts of 6 on the part | `UNVERIFIED` |
 | Operations on injuries (treating or removing a wound) | none | `UNVERIFIED`; recorded as a gap |
 | Organ removal, transplant, and similar | none | out of the requested scope |
 
-Tests: `SurgeryRuleTest` (`amputatingALimbRemovesItAndLeavesATendedStump`, `aPegLegRestoresPartOfWhatAmputationTook`,
-`bionicPartsBeatNaturalOnes`, `surgeryOffersOnlyBaseGameOperationsAndNeedsResearchForImplants`,
+Tests: `SurgeryRuleTest` (`amputatingALimbRemovesItAndLeavesATendedStump`, `aReplacementLegRestoresPartOfWhatAmputationTook`,
+`augmentedPartsBeatNaturalOnes`, `surgeryOffersOnlyBaseGameOperationsAndNeedsResearchForImplants`,
 `noOperationIsOfferedForAnimalsOrMachines`).
 
 ---
@@ -308,11 +308,11 @@ Tests: `SurgeryRuleTest` (`amputatingALimbRemovesItAndLeavesATendedStump`, `aPeg
 
 Checked from memory, so `UNVERIFIED` as a whole, but every item below is a base-game condition as far as I know.
 
-- Illnesses: flu, plague, malaria, sleeping sickness, food poisoning, gut worms, muscle parasites.
-- Environment: hypothermia, heatstroke, malnutrition, toxic buildup, blood loss, frostbite.
-- Chronic: bad back, arthritis, cataract, hearing loss, dementia.
-- Drugs and withdrawals: alcohol, smokeleaf, psychite family (flake, yayo, go-juice, wake-up).
-- Operations: amputation, peg leg, hook hand (**base-game status unconfirmed**), bionic arm, leg, eye, ear and heart.
+- Illnesses: chest cough (vanilla flu), boil sickness, marsh fever, heavy drowse, spoiled stomach, gut flukes, tissue larvae.
+- Environment: cold core, sunstruck, starved frame, toxin load, bleed-out, frostbite.
+- Chronic: spine strain, stiff joints, clouded lens, dulled hearing, memory fade.
+- Drugs and withdrawals: brew haze and craving ache (alcohol and withdrawal), hushmoss, lucid family (pale dust, white rush, surge tonic, dawn tablet).
+- Operations: amputation, wooden shank, gaff grip (**base-game status unconfirmed**), servo limb, servo strider, optic lens, coil listener and pump core.
 - Excluded and absent from the sim: pain-shock modifiers from masks and veils (Ideology and Royalty items),
   and everything from Biotech, Anomaly and Royalty (psylink, genes, xenogerms, bioferrite, and the like).
 
@@ -324,4 +324,4 @@ Checked from memory, so `UNVERIFIED` as a whole, but every item below is a base-
 | One test per healing rule | `HealingRuleTest`, `TendingRuleTest`, `InfectionRuleTest`, `InjuryConditionTest` (bleeding) |
 | Injured → downed → recovered, fixed seed | `InjuryToRecoveryTest.anInjuredPawnIsDownedThenTendedThenRecovers`, `theSameSeedGivesTheSameRecovery` |
 | Body hierarchy, vital parts, hit locations | `BodyModelTest` |
-| Surgery, prosthetics | `SurgeryRuleTest` |
+| Surgery, implants | `SurgeryRuleTest` |

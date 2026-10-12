@@ -39,7 +39,7 @@ fun Pawn.filtrationEff(): Float = HealthRules.bloodFiltration(
 )
 
 /** The pain level at which this pawn goes into shock. */
-fun Pawn.painShockThreshold(): Float = HealthRules.painShockThreshold(Trait.WIMP in traits)
+fun Pawn.painShockThreshold(): Float = HealthRules.painShockThreshold(Trait.TENDER_FRAME in traits)
 
 /** Whether this pawn's current capacities and pain put them on the ground. */
 fun Pawn.shouldBeDowned(): Boolean = HealthRules.shouldBeDowned(cap[Cap.CONSCIOUSNESS.ordinal], cap[Cap.MOVING.ordinal], pain, painShockThreshold())
@@ -54,9 +54,9 @@ fun Game.recomputeHealth(p: Pawn) {
         pain += HealthRules.woundPain(inj.kind.pain, inj.severity, p.race.hpScale)
     }
     for (h in p.hediffs) pain += h.kind.pain * h.severity
-    // A wimp's low pain shock threshold is applied in painShockThreshold().
-    if (Trait.TOUGH in p.traits) pain *= 0.7f
-    // Painkilling drugs (yayo, go-juice) already lower pain through their hediff values above.
+    // A tender-frame colonist's low pain shock threshold is applied in painShockThreshold().
+    if (Trait.THICK_HIDE in p.traits) pain *= 0.7f
+    // Painkilling drugs (white rush, surge tonic) already lower pain through their hediff values above.
     p.pain = pain.coerceIn(0f, 1f)
 
     val legs = p.avgEff(PartTag.LEG)
@@ -81,7 +81,7 @@ fun Game.recomputeHealth(p: Pawn) {
         eating *= (1f - h.kind.eat * s)
         sight *= (1f - h.kind.sight * s)
         hearing *= (1f - h.kind.hearing * s)
-        if (h.kind == HediffKind.ANESTHESIA) cons = 0f
+        if (h.kind == HediffKind.NUMB_SLEEP) cons = 0f
     }
     if (p.pregnantUntil > 0L && p.race == Race.HUMAN) moving *= 0.88f
     // Pain and sickness slow people down a bit.
@@ -150,7 +150,7 @@ fun Game.dealDamage(
     // Harder or softer colonists on the difficulty setting: applies to the people the player commands.
     if (target.faction == Faction.PLAYER && !target.isAnimal) dmg *= difficulty.colonistDamage
     if (dmg < 0.3f) return
-    if (Trait.TOUGH in target.traits) dmg *= 0.75f
+    if (Trait.THICK_HIDE in target.traits) dmg *= 0.75f
     applyWound(target, part, kind, dmg, source)
     // Penetration into organs.
     if (!def.inner && (kind.sharp || kind == DamageKind.BLAST) && dmg >= def.hp * target.race.hpScale * 0.35f && rng.chance(0.55f)) {
@@ -225,7 +225,7 @@ internal fun Game.checkDeath(p: Pawn, source: Pawn?) {
     val lungs = body.indices.filter { body[it].tag == PartTag.LUNG }
     if (cause == null && lungs.isNotEmpty() && lungs.all { p.partEff(it) <= 0.001f }) cause = "suffocation"
     if (cause == null && (body.any { it.tag == PartTag.LIVER || it.tag == PartTag.KIDNEY }) && p.filtrationEff() <= 0.001f) cause = "organ failure"
-    if (cause == null && p.bloodLoss >= 1f) cause = "blood loss"
+    if (cause == null && p.bloodLoss >= 1f) cause = "bleed-out"
     if (cause == null && p.injuries.any { it.infection >= 1f }) cause = "infection"
     if (cause == null) for (h in p.hediffs) if (h.kind.lethal && h.severity >= 1f) { cause = h.kind.label.lowercase(); break }
     if (cause != null) die(p, cause, source)
@@ -315,7 +315,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
             0 -> {
                 if (h.tended && h.age % tk(15000) < dt) h.tended = false
                 val per = dt / TICKS_PER_DAY.toFloat()
-                var imm = h.kind.immunityPerDay * per * (if (Trait.SUPER_IMMUNE in p.traits) 1.4f else 1f)
+                var imm = h.kind.immunityPerDay * per * (if (Trait.HARDY_BODY in p.traits) 1.4f else 1f)
                 if (h.tended) imm *= 1f + 0.5f * h.tendQuality
                 if (resting) imm *= 1.25f
                 h.immunity += imm
@@ -375,7 +375,7 @@ fun Game.tendQuality(doctor: Pawn?, med: ItemType?, hospital: Boolean, self: Boo
     val potency = med?.potency?.takeIf { it > 0f } ?: HealthRules.NO_MEDICINE_POTENCY
     val maxQuality = if (med != null && med.potency > 0f) med.maxTendQuality else HealthRules.NO_MEDICINE_MAX_QUALITY
     return HealthRules.tendQuality(
-        doctor?.level(SkillType.MEDICINE) ?: HealthRules.DEFAULT_DOCTOR_SKILL,
+        doctor?.level(SkillType.HEALING) ?: HealthRules.DEFAULT_DOCTOR_SKILL,
         doctor?.cap?.get(Cap.MANIPULATION.ordinal) ?: 1f,
         potency, maxQuality, hospital, self, rng.float(),
     )
@@ -396,7 +396,7 @@ fun Game.tendPawn(doctor: Pawn?, patient: Pawn, med: ItemType?) {
     }
     for (h in patient.hediffs) if (h.kind.needsTend) { h.tended = true; h.tendQuality = q; h.age = 0; any = true }
     if (any) patient.healthDirty = true
-    doctor?.gainXp(SkillType.MEDICINE, 220f)
+    doctor?.gainXp(SkillType.HEALING, 220f)
 }
 
 fun Game.die(p: Pawn, cause: String, source: Pawn? = null) {

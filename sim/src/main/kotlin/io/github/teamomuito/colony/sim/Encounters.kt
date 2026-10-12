@@ -81,8 +81,8 @@ internal fun Game.createBattleGame(c: Caravan, plan: BattlePlan): Game {
         while ((left > 0f || count == 0) && count < 16) {
             val (w, cost) = tier[rng.int(tier.size)]
             val armor = ArrayList<ItemType>()
-            if (day >= 18 && rng.chance(0.4f)) armor += ItemType.A_FLAK_VEST
-            if (day >= 24 && rng.chance(0.3f)) armor += ItemType.A_HELMET
+            if (day >= 18 && rng.chance(0.4f)) armor += ItemType.A_RIBBED_VEST
+            if (day >= 24 && rng.chance(0.3f)) armor += ItemType.A_RIVETED_HOOD
             val r = bg.newRaider(fx, 22, w, 1, armor)
             r.raidMode = 0
             r.wfaction = plan.enemyFaction

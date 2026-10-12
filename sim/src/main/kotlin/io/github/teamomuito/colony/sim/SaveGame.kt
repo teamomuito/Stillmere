@@ -7,8 +7,17 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 25
+    /**
+     * 15 added building materials. 14 is still read (its buildings simply have the default material).
+     *
+     * 26 to 31 renamed some text that is saved: backstory titles inside [Pawn.backstory], thought labels, one incident name, the
+     * temporary event name, and (version 28) the pirate camp texts: site names in [World.sites] and the labels of pending fights in
+     * [BattlePlan.label]. Saves before each rename are translated when read (see [LegacyNames]). Three kinds of saved text are never
+     * translated, because each one is a record of a past event: graveyard entries in [Game.graveyard], which keep the death cause they
+     * were written with (only new deaths write the current causes), log lines in [Game.log], and caravan last-event notes in
+     * [Caravan.lastEvent]. The layout did not change. Decision recorded in docs/fidelity/names.md (section 2).
+     */
+    private const val VERSION = 31
 
     /** Saves older than this count ticks in the old base of 1,000 ticks per hour. Their times are converted when read. */
     private const val TIME_BASE_VERSION = 25
@@ -57,7 +66,8 @@ object SaveGame {
     }
 
     private fun DataInputStream.readPlan(version: Int): BattlePlan {
-        val p = BattlePlan(readInt(), readUTF(), readInt(), readFloat(), readBoolean(), BattleAftermath.entries[readInt()], readInt(), readInt(), readBoolean(), tickAt(version))
+        // The label is live text (the foe's name in the fight prompt), so a pirate label is translated below version 28 (names.md section 2).
+        val p = BattlePlan(readInt(), readUTF().let { if (version < 28) LegacyNames.battleLabel(it, version) else it }, readInt(), readFloat(), readBoolean(), BattleAftermath.entries[readInt()], readInt(), readInt(), readBoolean(), tickAt(version))
         p.retreating = readBoolean()
         val oc = readInt(); p.outcome = if (oc >= 0) BattleOutcome.entries[oc] else null
         p.lostOnRetreat = readInt()
@@ -344,6 +354,9 @@ object SaveGame {
         val flare = i.tickAt(version); val toxic = i.tickAt(version); val eclipse = i.tickAt(version)
         val hx = i.readInt(); val hy = i.readInt(); val wind = i.readFloat()
         val killed = i.readInt(); val earned = i.readInt(); val hints = i.readInt()
+        // Graveyard entries are read exactly as they were saved, in every version. Each one is a record of a past death, so the
+        // causes that earlier versions wrote stay as they were. Only new deaths write the current causes. Decision recorded in
+        // docs/fidelity/names.md (section 2). LegacyNames does not translate graveyard entries.
         val grave = List(i.readInt()) { i.readUTF() }
         val cur = i.readInt()
         val done = List(i.readInt()) { Research.entries[i.readInt()] }
@@ -358,7 +371,7 @@ object SaveGame {
         val incidents: MutableMap<Incident, Long> = java.util.EnumMap(Incident::class.java)
         if (version >= 20) {
             raidEnded = i.tickAt(version)
-            repeat(i.readInt()) { val name = i.readUTF(); val at = i.tickAt(version); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
+            repeat(i.readInt()) { val name = i.readUTF().let { if (version < 28) LegacyNames.incidentName(it, version) else it }; val at = i.tickAt(version); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
         }
 
         val w = i.readInt(); val h = i.readInt()
@@ -429,7 +442,7 @@ object SaveGame {
         g.nextRaid = nr; g.nextWanderer = nw; g.nextPod = np; g.nextTempEvent = nt; g.nextMisc = nm; g.nextTrader = ntr
         g.raidActive = raidActive; g.raidStartCount = raidStart; g.raidEnds = raidEnds; g.raidStartedAt = rsa
         g.weather = weather; g.weatherUntil = weatherUntil
-        g.tempOffset = tempOffset; g.tempEventUntil = tempUntil; g.tempEventName = tempName
+        g.tempOffset = tempOffset; g.tempEventUntil = tempUntil; g.tempEventName = LegacyNames.tempEventName(tempName, version)
         g.solarFlareUntil = flare; g.toxicFalloutUntil = toxic; g.eclipseUntil = eclipse
         g.homeX = hx; g.homeY = hy; g.windFactor = wind
         g.statsKilled = killed; g.silverEarned = earned; g.hintBits = hints
@@ -455,7 +468,8 @@ object SaveGame {
                 if (st != null) { st.silver = silver; st.stockTick = stockTick; st.destroyedUntil = destroyed; st.stock.addAll(stock); st.request = req }
             }
             g.world.nextSiteId = i.readInt()
-            repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.tickAt(version), i.readFloat(), i.readUTF())) }
+            // A site name is live text. A pirate camp was renamed in version 28, so a save below 28 is translated (names.md section 2).
+            repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.tickAt(version), i.readFloat(), i.readUTF().let { if (version < 28) LegacyNames.siteName(it, version) else it })) }
             if (version >= 21) {
                 g.world.nextQuestId = i.readInt()
                 repeat(i.readInt()) {
@@ -469,6 +483,7 @@ object SaveGame {
             repeat(i.readInt()) {
                 val c = Caravan(i.readInt(), i.readUTF(), i.readInt())
                 c.destination = i.readInt(); c.progress = i.readFloat().fromOldBase(version); c.resting = i.readBoolean(); c.goingHome = i.readBoolean()
+                // lastEvent is a record of a past battle, so it is read as saved and not translated (names.md section 2).
                 c.lastEvent = i.readUTF(); c.forageNote = i.readBoolean()
                 repeat(i.readInt()) { c.route.add(i.readInt()) }
                 c.inventory.addAll(i.readStock(version))
@@ -477,6 +492,8 @@ object SaveGame {
                 g.caravans.add(c)
             }
         }
+        // Log lines are read exactly as they were saved, in every version, like graveyard entries: each one records a past event.
+        // LegacyNames does not translate them. Decision recorded in docs/fidelity/names.md (section 2).
         g.log.clear()
         repeat(i.readInt()) { g.log.add(LogEntry(i.tickAt(version), i.readUTF(), i.readInt())) }
         if (version >= 16) {
@@ -533,7 +550,7 @@ object SaveGame {
         for (s in p.passion.indices) p.passion[s] = i.readInt()
         for (s in p.priority.indices) p.priority[s] = i.readInt()
         repeat(i.readInt()) { p.traits.add(Trait.entries[i.readInt()]) }
-        p.backstory = i.readUTF(); p.incapable = i.readInt()
+        p.backstory = i.readUTF().let { if (version < 31) LegacyNames.backstory(it, version) else it }; p.incapable = i.readInt()
         val wi = i.readInt(); p.weaponItem = if (wi >= 0) ItemType.entries[wi] else null; p.weaponQuality = Quality.entries[i.readInt()]
         repeat(i.readInt()) { p.apparel.add(Worn(ItemType.entries[i.readInt()], Quality.entries[i.readInt()], i.readFloat())) }
         repeat(i.readInt()) {
@@ -547,7 +564,7 @@ object SaveGame {
             h.tended = i.readBoolean(); h.tendQuality = i.readFloat(); h.age = i.readInt().fromOldBase(version); h.part = i.readInt(); h.duration = i.readInt().fromOldBase(version)
             p.hediffs.add(h)
         }
-        repeat(i.readInt()) { p.thoughts.add(Thought(i.readUTF(), i.readFloat(), i.tickAt(version) + now)) }
+        repeat(i.readInt()) { p.thoughts.add(Thought(i.readUTF().let { if (version < 30) LegacyNames.thoughtLabel(it, version) else it }, i.readFloat(), i.tickAt(version) + now)) }
         repeat(i.readInt()) { p.opinion[i.readInt()] = i.readInt() }
         p.spouse = i.readInt(); p.lover = i.readInt()
         for (s in p.schedule.indices) p.schedule[s] = i.readInt()

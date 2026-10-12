@@ -8,7 +8,7 @@ import org.junit.Test
 /** A calm colony where only the timers a test sets can fire. */
 private fun calmGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     val never = Long.MAX_VALUE
@@ -45,13 +45,13 @@ class MoodSocialTest {
         val g = calmGame(2203)
         val quiet = g.colonists.first()
         val social = g.colonists.last()
-        social.traits += Trait.SOCIABLE
+        social.traits += Trait.EASY_COMPANY
         g.tick = 5L * TICKS_PER_DAY
         quiet.lastSocial = 0L; social.lastSocial = 0L
         g.moodUpdate(quiet); g.moodUpdate(social)
         val q = quiet.situ.first { it.label == "Lonely" }.mood
         val s = social.situ.first { it.label == "Lonely" }.mood
-        assertTrue("sociable pawns take a bigger hit", s < q)
+        assertTrue("gregarious pawns take a bigger hit", s < q)
     }
 
     @Test fun aNewColonyIsNotLonelyInItsFirstTwoDays() {
@@ -77,7 +77,7 @@ class MoodSocialTest {
     @Test fun aBeautifulSpeakerSometimesComplimentsTheListener() {
         val g = calmGame(2206)
         val a = g.colonists[0]; val b = g.colonists[1]
-        a.traits += Trait.BEAUTIFUL
+        a.traits += Trait.STRIKING_LOOKS
         var complimented = false
         repeat(400) {
             g.tick += (TICKS_PER_DAY / 4).toLong()
@@ -87,21 +87,21 @@ class MoodSocialTest {
         assertTrue("a compliment happens over many chats", complimented)
     }
 
-    // ----------------------------------------------------------------------------------- tortured artist
+    // ----------------------------------------------------------------------------------- brooding muse
 
     @Test fun aTorturedArtistCarriesAMoodPenalty() {
         val g = calmGame(2207)
         val p = g.colonists.first()
-        assertFalse(p.feels("Tortured soul", g))
-        p.traits += Trait.TORTURED_ARTIST
-        assertTrue(p.feels("Tortured soul", g))
+        assertFalse(p.feels("Restless mind", g))
+        p.traits += Trait.BROODING_MUSE
+        assertTrue(p.feels("Restless mind", g))
     }
 
     @Test fun looksAffectMood() {
         val g = calmGame(2208)
         val pretty = g.colonists[0]; val plain = g.colonists[1]
-        pretty.traits += Trait.BEAUTIFUL
-        plain.traits += Trait.UGLY
+        pretty.traits += Trait.STRIKING_LOOKS
+        plain.traits += Trait.PLAIN_LOOKS
         assertTrue(pretty.feels("Pleasant looks", g))
         assertTrue(plain.feels("Looks bad", g))
         assertFalse(pretty.feels("Looks bad", g))
@@ -137,17 +137,17 @@ class MoodSocialTest {
 
     // ----------------------------------------------------------------------------------- conversations
 
-    @Test fun aSociableColonistSometimesSharesAJoke() {
+    @Test fun aSociableColonistSometimesGivesFriendlyRibbing() {
         val g = calmGame(2211)
         val a = g.colonists[0]; val b = g.colonists[1]
-        a.traits += Trait.SOCIABLE
-        var joked = false
+        a.traits += Trait.EASY_COMPANY
+        var ribbed = false
         repeat(400) {
             g.tick += (TICKS_PER_DAY / 4).toLong()
             g.socialInteract(a, b)
-            if (b.thoughts.any { it.label == "Shared a joke" }) joked = true
+            if (b.thoughts.any { it.label == "Friendly ribbing" }) ribbed = true
         }
-        assertTrue(joked)
+        assertTrue(ribbed)
     }
 
     @Test fun pawnsWhoDislikeEachOtherCanArgue() {
@@ -167,15 +167,15 @@ class MoodSocialTest {
     // ----------------------------------------------------------------------------------- furniture
 
     @Test fun newFurnitureIsAppendedSoSavedOrdinalsStillMatch() {
-        assertEquals(BuildDef.MINI_TURRET.ordinal + 1, BuildDef.SOFA.ordinal)
-        assertEquals(BuildDef.SOFA.ordinal + 1, BuildDef.BOOKSHELF.ordinal)
+        assertEquals(BuildDef.SENTRY_POD.ordinal + 1, BuildDef.LOUNGE_SEAT.ordinal)
+        assertEquals(BuildDef.LOUNGE_SEAT.ordinal + 1, BuildDef.BOOKSHELF.ordinal)
         assertEquals(BuildDef.BOOKSHELF.ordinal + 1, BuildDef.WARDROBE.ordinal)
         assertEquals(BuildDef.WARDROBE.ordinal + 1, BuildDef.COFFEE_TABLE.ordinal)
     }
 
     @Test fun aSofaIsComfortableAndNeedsComplexFurniture() {
-        assertTrue(BuildDef.SOFA.comfort > BuildDef.ARMCHAIR.comfort)
-        assertEquals(Research.COMPLEX_FURNITURE, BuildDef.SOFA.research)
-        assertEquals(Research.COMPLEX_FURNITURE, BuildDef.BOOKSHELF.research)
+        assertTrue(BuildDef.LOUNGE_SEAT.comfort > BuildDef.ARMCHAIR.comfort)
+        assertEquals(Research.JOINERY_DETAIL, BuildDef.LOUNGE_SEAT.research)
+        assertEquals(Research.JOINERY_DETAIL, BuildDef.BOOKSHELF.research)
     }
 }

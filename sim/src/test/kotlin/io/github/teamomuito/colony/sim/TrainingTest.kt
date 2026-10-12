@@ -7,7 +7,7 @@ import org.junit.Test
 
 private fun trainingGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     val never = Long.MAX_VALUE

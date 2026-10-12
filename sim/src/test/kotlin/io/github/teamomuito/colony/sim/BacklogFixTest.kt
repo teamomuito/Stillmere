@@ -11,7 +11,7 @@ class BacklogFixTest {
 
     private fun calm(seed: Long): Game {
         val g = Game(seed)
-        g.startNewColony(Scenario.LOST_TRIBE)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
         g.mentalBreaksEnabled = false
         g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
         val never = Long.MAX_VALUE
@@ -24,7 +24,7 @@ class BacklogFixTest {
     @Test fun aCaravanOfAnimalsAloneBreaksUpInsteadOfFreezing() {
         val g = calm(1301)
         val c = Caravan(g.nextCaravanId++, "Herd", g.world.homeTile)
-        val horse = g.newAnimal(Race.MUFFALO, g.homeX, g.homeY, Faction.PLAYER)
+        val horse = g.newAnimal(Race.SHAGOX, g.homeX, g.homeY, Faction.PLAYER)
         g.pawns.remove(horse)
         c.members.add(horse)
         g.caravans.add(c)

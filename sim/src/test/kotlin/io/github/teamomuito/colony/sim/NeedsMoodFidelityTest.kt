@@ -59,8 +59,8 @@ class NeedsMoodFidelityTest {
     }
 
     @Test fun aColonistNeedsAboutTwoSimpleMealsADay() {
-        // Defs.kt gives a simple meal 0.9 nutrition. At 1.6 per day that is about 1.8 meals, so about two a day.
-        val mealsPerDay = NeedRules.HUMAN_NUTRITION_PER_DAY / ItemType.MEAL_SIMPLE.nutrition
+        // Defs.kt gives a hearth stew 0.9 nutrition. At 1.6 per day that is about 1.8 meals, so about two a day.
+        val mealsPerDay = NeedRules.HUMAN_NUTRITION_PER_DAY / ItemType.MEAL_HEARTH_STEW.nutrition
         assertTrue(mealsPerDay > 1.5f && mealsPerDay < 2f)
     }
 }

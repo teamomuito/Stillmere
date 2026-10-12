@@ -12,7 +12,7 @@ Code: `NeedRules.kt` (`NeedRules`, `BreakRules`), `Mood.kt` (`breaksTick`), `Gam
 
 Neither the wiki nor any RimWorld data was readable from this environment (`rimworldwiki.com` does not resolve here). The
 values below come from search summaries of wiki pages and their mirrors, read on 2026-10-10. Those are **secondary**
-sources, so they are tagged **V**. The game version is not pinned (`CLAUDE.md` still says `<VERSION>`), so these figures
+sources. A figure is tagged **V** only where its row gives a URL; otherwise it is **M, UNVERIFIED**. The game version is not pinned (`CLAUDE.md` still says `<VERSION>`), so these figures
 are for the current release.
 
 * **[S1]** Mental break thresholds, from the RimWorld Wiki "Mental break" article and its mirrors. At the base break
@@ -20,23 +20,26 @@ are for the current release.
 * **[S2]** Hunger, from the RimWorld Wiki "Saturation" and "Overeating" pages and their mirrors. An adult at a 100%
   hunger rate uses 1.6 nutrition per day, and the food bar's maximum is 1.0.
 
+[S1] and [S2] name the "Mental break" and "Saturation" / "Overeating" articles. No URL for any of them is recorded in this file, so the
+rows that cite them are M, UNVERIFIED. The gap report gives other URLs for the same figures; they were not checked against these articles.
+
 ## Constants
 
 | Constant | Before | Now | Source | Confidence |
 |---|---|---|---|---|
-| Minor-break mood threshold | 0.30 | **0.35** | S1 | V |
-| Major-break mood threshold | 0.20 | 0.20 | S1 | V (unchanged) |
-| Extreme-break mood threshold | 0.10 | **0.05** | S1 | V |
+| Minor-break mood threshold | 0.30 | **0.35** | S1 | M, UNVERIFIED (search summary, no URL recorded) |
+| Major-break mood threshold | 0.20 | 0.20 | S1 | M, UNVERIFIED (search summary, no URL recorded; unchanged) |
+| Extreme-break mood threshold | 0.10 | **0.05** | S1 | M, UNVERIFIED (search summary, no URL recorded) |
 | Per-check break chance, minor / major / extreme | 0.45% / 1.2% / 3% | unchanged | Stillmere's own | UNVERIFIED |
-| Human food use, per day | 0.7 | **1.6** | S2 | V |
-| Gourmand / ascetic / pregnant / under 13 multipliers | 1.3 / 0.9 / 1.25 / 0.6 | unchanged | Stillmere's own | UNVERIFIED |
+| Human food use, per day | 0.7 | **1.6** | S2 | M, UNVERIFIED (search summary, no URL recorded) |
+| Hearty appetite / plain living / pregnant / under 13 multipliers | 1.3 / 0.9 / 1.25 / 0.6 | unchanged | Stillmere's own | UNVERIFIED |
 | Sleeping food multiplier | 0.7 | unchanged | Stillmere's own | UNVERIFIED |
 | Caravan human food use | flat 0.7 | same as the colony (traits, pregnancy, age) | consistency | C |
 | Animal food use | unchanged | unchanged | Stillmere's own | UNVERIFIED |
-| Simple meal nutrition | 0.9 | 0.9 | gap report (V) | V (not re-checked) |
+| Hearth stew nutrition | 0.9 | 0.9 | gap report | V (`https://rimworldwiki.com/wiki/Simple_meal`, a search result read in round 9; the page itself was not read) |
 
 Break chances are attached to severity, not to mood bands. Severity follows the thresholds: below 0.05 is extreme,
-below 0.20 is major, below 0.35 is minor. Trait modifiers (psychopath, iron-willed, volatile) are unchanged.
+below 0.20 is major, below 0.35 is minor. Trait modifiers (unmoved, steel nerves, short fuse) are unchanged.
 
 ## Starting food
 
@@ -46,12 +49,12 @@ is the one that keeps `(starting bars + stock) / (colonists × rate)` the same b
 
 | Scenario | Colonists | Stock before (nutrition) | Stock now (nutrition) | Factor |
 |---|---|---|---|---|
-| Crashlanded | 3 | 30 packaged meals (27) | 72 packaged meals (64.8) | 2.40 |
-| The lost tribe | 5 | 60 pemmican (3.0), 40 rice (2.0) | 199 pemmican (10.0), 132 rice (6.6) | 3.31 |
-| Rich explorer | 1 | 20 packaged meals (18) | 47 packaged meals (42.3) | 2.34 |
-| Solo | 1 | 6 packaged meals (5.4) | 15 packaged meals (13.5) | 2.48 |
+| Salvage crew | 3 | 30 sealed rations (27) | 72 sealed rations (64.8) | 2.40 |
+| Quiet enclave | 5 | 60 trail cake (3.0), 40 rice (2.0) | 199 trail cake (10.0), 132 rice (6.6) | 3.31 |
+| Surplus start | 1 | 20 sealed rations (18) | 47 sealed rations (42.3) | 2.34 |
+| Bare start | 1 | 6 sealed rations (5.4) | 15 sealed rations (13.5) | 2.48 |
 
-**Checked in the simulation.** On the lost-tribe start (seeds 113 and 61, 5 colonists), food ran out on day 3 both
+**Checked in the simulation.** On the five-colonist start (seeds 113 and 61), food ran out on day 3 both
 before and after scaling. With seed 61, the first death came on day 6 both before and after. With seed 113 nobody died
 by day 6 either way. Before scaling, the new rate alone ran food out on day 2 and killed a colonist on day 5 (seed 113).
 Those numbers come from a temporary diagnostic test, since removed.

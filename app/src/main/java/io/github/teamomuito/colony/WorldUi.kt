@@ -422,7 +422,7 @@ fun Dialogs.formCaravanDialog(dest: Int) {
             }
         }
         body.addView(ui.label("Name", 12f, ui.dim)); body.addView(nameEdit)
-        body.addView(ui.label("Travellers (35 kg each; muffalo and cows carry 70)", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 10, 0, 2))
+        body.addView(ui.label("Travellers (35 kg each; shagox and cows carry 70)", 13f, ui.accent, true), ui.lin(-2, -2, 0f, 0, 10, 0, 2))
         val folks = game.pawns.filter { game.canJoinCaravan(it) }
         if (folks.isEmpty()) body.addView(ui.label("Nobody is free to leave.", 11.5f, ui.dim))
         for (p in folks) {
@@ -568,7 +568,7 @@ fun Dialogs.factionsDialog() {
         fun render() {
             body.removeAllViews()
             val w = game.world
-            body.addView(ui.label("Silver in stockpiles: ${game.silverInStockpiles()}${if (!game.hasComms()) " · no powered comms console" else ""}", 12f, ui.accent, true))
+            body.addView(ui.label("Silver in stockpiles: ${game.silverInStockpiles()}${if (!game.hasComms()) " · no powered signal desk" else ""}", 12f, ui.accent, true))
             if (game.hasComms() && game.hasBeacon()) body.addView(ui.button("Call an orbital trade ship (120 silver)", 12f) { val e = game.requestOrbitalTrader(); a.toast(e ?: "A ship is landing at your beacon."); render() }, ui.lin(-2, -2, 0f, 0, 6, 0, 0))
             for (f in w.factions) {
                 val st = game.standing(f)
@@ -582,7 +582,7 @@ fun Dialogs.factionsDialog() {
                     if (st == io.github.teamomuito.colony.sim.Standing.HOSTILE || st == io.github.teamomuito.colony.sim.Standing.WARY)
                         row.addView(ui.button("Peace talks (${game.peaceCost(f)} silver)", 11f) { val e = game.peaceTalks(f); a.toast(e ?: "Relations improved."); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
                     if (f.trades && st != io.github.teamomuito.colony.sim.Standing.HOSTILE)
-                        row.addView(ui.button("Request traders (150)", 11f) { val e = game.requestTraders(f); a.toast(e ?: "A trade caravan is on its way."); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
+                        row.addView(ui.button("Request traders (150)", 11f) { val e = game.requestTraders(f); a.toast(e ?: "A peddler convoy is on its way."); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
                     if (st == io.github.teamomuito.colony.sim.Standing.ALLY)
                         row.addView(ui.button("Military aid", 11f) { val e = game.requestAid(f); a.toast(e ?: "Soldiers are coming."); render() }, ui.lin(-2, -2, 0f, 0, 4, 4, 0))
                     body.addView(ui.hscroll(row))

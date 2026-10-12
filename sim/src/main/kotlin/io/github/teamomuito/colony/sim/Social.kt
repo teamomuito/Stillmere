@@ -6,27 +6,27 @@ import kotlin.math.min
 fun Game.opinionOf(a: Pawn, b: Pawn): Int = a.opinion[b.id] ?: 0
 
 fun attractedTo(a: Pawn, b: Pawn): Boolean = when {
-    Trait.ASEXUAL in a.traits -> false
-    Trait.BISEXUAL in a.traits -> true
-    Trait.GAY in a.traits -> a.female == b.female
+    Trait.UNROMANTIC in a.traits -> false
+    Trait.BOTH_DRAWN in a.traits -> true
+    Trait.SAME_SEX_DRAWN in a.traits -> a.female == b.female
     else -> a.female != b.female
 }
 
 fun Game.socialInteract(a: Pawn, b: Pawn) {
     if (!a.alive || !b.alive) return
-    val soc = a.level(SkillType.SOCIAL) + (if (Trait.SOCIABLE in a.traits) 3 else 0)
+    val soc = a.level(SkillType.RAPPORT) + (if (Trait.EASY_COMPANY in a.traits) 3 else 0)
     val op = opinionOf(b, a)
     val roll = rng.float()
     var kind = "chitchat"
     when {
         // Rude people pick fights, and unhappy people snap.
-        (Trait.ABRASIVE in a.traits && roll < 0.35f) || (a.mood < 0.3f && roll < 0.35f) || (op < -20 && roll < 0.25f) -> kind = "insult"
+        (Trait.SHARP_TONGUE in a.traits && roll < 0.35f) || (a.mood < 0.3f && roll < 0.35f) || (op < -20 && roll < 0.25f) -> kind = "insult"
         roll < 0.15f + soc * 0.01f && opinionOf(b, a) > 25 -> kind = "deep"
         roll < 0.25f && a.spouse < 0 && a.lover < 0 && b.spouse < 0 && b.lover < 0 && attractedTo(a, b) && attractedTo(b, a) && opinionOf(b, a) > 35 && opinionOf(a, b) > 35 && a.age >= 18 && b.age >= 18 -> kind = "romance"
         roll < 0.3f -> kind = "kind"
     }
-    if (kind == "kind" && Trait.BEAUTIFUL in a.traits) kind = "compliment"
-    else if (kind == "kind" && Trait.SOCIABLE in a.traits && rng.chance(0.4f)) kind = "joke"
+    if (kind == "kind" && Trait.STRIKING_LOOKS in a.traits) kind = "compliment"
+    else if (kind == "kind" && Trait.EASY_COMPANY in a.traits && rng.chance(0.4f)) kind = "joke"
     else if (kind == "chitchat" && op < -10 && opinionOf(a, b) < -10 && rng.chance(0.3f)) kind = "argument"
     when (kind) {
         "insult" -> {
@@ -38,17 +38,17 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
         "deep" -> {
             val v = (6 + soc / 2)
             a.opinion[b.id] = opinionOf(a, b) + v / 2; b.opinion[a.id] = op + v
-            a.addThought("Deep talk", 0.05f, tick, TICKS_PER_DAY)
-            b.addThought("Deep talk", 0.05f, tick, TICKS_PER_DAY)
+            a.addThought("Candid exchange", 0.05f, tick, TICKS_PER_DAY)
+            b.addThought("Candid exchange", 0.05f, tick, TICKS_PER_DAY)
         }
         "kind" -> {
-            b.opinion[a.id] = op + 4 + (if (Trait.KIND in a.traits) 4 else 0)
-            b.addThought("Kind words", 0.03f, tick, TICKS_PER_DAY)
+            b.opinion[a.id] = op + 4 + (if (Trait.WARM_HEART in a.traits) 4 else 0)
+            b.addThought("Warm talk", 0.03f, tick, TICKS_PER_DAY)
         }
         "joke" -> {
             a.opinion[b.id] = opinionOf(a, b) + 5; b.opinion[a.id] = op + 5
-            a.addThought("Shared a joke", 0.05f, tick, TICKS_PER_DAY)
-            b.addThought("Shared a joke", 0.05f, tick, TICKS_PER_DAY)
+            a.addThought("Friendly ribbing", 0.05f, tick, TICKS_PER_DAY)
+            b.addThought("Friendly ribbing", 0.05f, tick, TICKS_PER_DAY)
         }
         "argument" -> {
             a.opinion[b.id] = opinionOf(a, b) - 3; b.opinion[a.id] = op - 3
@@ -56,7 +56,7 @@ fun Game.socialInteract(a: Pawn, b: Pawn) {
             b.addThought("Argued with ${a.name.substringBefore(' ')}", -0.04f, tick, TICKS_PER_DAY)
         }
         "compliment" -> {
-            b.opinion[a.id] = op + 6 + (if (Trait.KIND in a.traits) 4 else 0)
+            b.opinion[a.id] = op + 6 + (if (Trait.WARM_HEART in a.traits) 4 else 0)
             b.addThought("Complimented", 0.05f, tick, 2 * TICKS_PER_DAY)
         }
         "romance" -> {

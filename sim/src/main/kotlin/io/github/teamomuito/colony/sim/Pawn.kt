@@ -90,7 +90,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var retreating = false
     var homeTile = -1
     var escapeTick = 0L
-    var raidMode = 0 // 0 assault, 1 sapper, 2 siege, 3 pod
+    var raidMode = 0 // 0 rush, 1 tunnel, 2 shelling camp, 3 lander drop
     var campX = -1
     var campY = -1
     var escaping = false
@@ -213,8 +213,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     fun workSpeed(s: SkillType?): Float {
         var f = if (s == null) 1f else 0.4f + 0.075f * skill[s.ordinal]
         if (!isAnimal && age < 18) f *= if (age < 13) 0.6f else 0.85f
-        if (Trait.HARD_WORKER in traits) f *= 1.25f
-        if (Trait.LAZY in traits) f *= 0.75f
+        if (Trait.BRISK_HANDS in traits) f *= 1.25f
+        if (Trait.IDLE_STREAK in traits) f *= 0.75f
         if (rest < 0.2f) f *= 0.85f
         if (dark) f *= 0.85f
         f *= max(0.1f, cap[Cap.CONSCIOUSNESS.ordinal])
@@ -224,8 +224,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
 
     fun moveSpeedTicks(): Int {
         var t = race.moveTicks.toFloat()
-        if (Trait.NIMBLE in traits) t -= 2f
-        if (Trait.JOGGER in traits) t -= 3f
+        if (Trait.LIGHT_STEPPED in traits) t -= 2f
+        if (Trait.LONG_STRIDER in traits) t -= 3f
         if (Trait.SLOW_WALKER in traits) t += 2f
         t /= max(0.2f, cap[Cap.MOVING.ordinal])
         if (carryCount > 0) t += 1f
@@ -236,8 +236,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     fun gainXp(s: SkillType, amount: Float) {
         val i = s.ordinal
         var mult = when (passion[i]) { 2 -> 2.0f; 1 -> 1.4f; else -> 1.0f }
-        if (Trait.FAST_LEARNER in traits) mult *= 1.4f
-        if (Trait.SLOW_LEARNER in traits) mult *= 0.6f
+        if (Trait.EAGER_PUPIL in traits) mult *= 1.4f
+        if (Trait.SLOW_STUDY in traits) mult *= 0.6f
         xp[i] += amount * mult
         val need = 2500f + skill[i] * 400f
         if (xp[i] >= need && skill[i] < 20) { xp[i] -= need; skill[i]++ }
@@ -321,40 +321,40 @@ object Names {
 object Backstories {
     class Story(val title: String, val skills: Map<SkillType, Int>, val disabled: List<WorkType> = emptyList(), val traits: List<Trait> = emptyList())
     val childhood = listOf(
-        Story("Vatgrown soldier", mapOf(SkillType.SHOOTING to 5, SkillType.MELEE to 3)),
-        Story("Farm kid", mapOf(SkillType.PLANTS to 5, SkillType.ANIMALS to 3)),
-        Story("Urchin", mapOf(SkillType.SOCIAL to 3, SkillType.CRAFTING to 2)),
-        Story("Medical student", mapOf(SkillType.MEDICINE to 5, SkillType.INTELLECTUAL to 3)),
-        Story("Tribal child", mapOf(SkillType.ANIMALS to 4, SkillType.CRAFTING to 4, SkillType.MELEE to 2)),
-        Story("Orphan", mapOf(SkillType.SOCIAL to 2, SkillType.COOKING to 3, SkillType.SHOOTING to 2)),
-        Story("Wasteland scavenger", mapOf(SkillType.MINING to 3, SkillType.CONSTRUCTION to 3, SkillType.SHOOTING to 3)),
-        Story("Pit fighter", mapOf(SkillType.MELEE to 6, SkillType.MEDICINE to 2)),
-        Story("Cargo ship brat", mapOf(SkillType.CONSTRUCTION to 3, SkillType.INTELLECTUAL to 3, SkillType.SOCIAL to 3)),
-        Story("Herder's child", mapOf(SkillType.ANIMALS to 6, SkillType.PLANTS to 3)),
-        Story("Space-born tinker", mapOf(SkillType.CONSTRUCTION to 4, SkillType.INTELLECTUAL to 4)),
+        Story("Cradle-line recruit", mapOf(SkillType.MARKSMANSHIP to 5, SkillType.CLOSE_COMBAT to 3)),
+        Story("Furrow-born", mapOf(SkillType.HORTICULTURE to 5, SkillType.HUSBANDRY to 3)),
+        Story("Street kid", mapOf(SkillType.RAPPORT to 3, SkillType.WORKMANSHIP to 2)),
+        Story("Infirmary helper", mapOf(SkillType.HEALING to 5, SkillType.SCHOLARSHIP to 3)),
+        Story("Camp foundling", mapOf(SkillType.HUSBANDRY to 4, SkillType.WORKMANSHIP to 4, SkillType.CLOSE_COMBAT to 2)),
+        Story("Unclaimed child", mapOf(SkillType.RAPPORT to 2, SkillType.GALLEY to 3, SkillType.MARKSMANSHIP to 2)),
+        Story("Ruin picker", mapOf(SkillType.QUARRYING to 3, SkillType.ARCHITECTURE to 3, SkillType.MARKSMANSHIP to 3)),
+        Story("Ringside tyke", mapOf(SkillType.CLOSE_COMBAT to 6, SkillType.HEALING to 2)),
+        Story("Hold-born ward", mapOf(SkillType.ARCHITECTURE to 3, SkillType.SCHOLARSHIP to 3, SkillType.RAPPORT to 3)),
+        Story("Pasture-born", mapOf(SkillType.HUSBANDRY to 6, SkillType.HORTICULTURE to 3)),
+        Story("Hull scrapper", mapOf(SkillType.ARCHITECTURE to 4, SkillType.SCHOLARSHIP to 4)),
     )
     val adulthood = listOf(
-        Story("Colonial guard", mapOf(SkillType.SHOOTING to 8, SkillType.MELEE to 4), listOf(WorkType.ART)),
-        Story("Field medic", mapOf(SkillType.MEDICINE to 8, SkillType.SHOOTING to 2)),
-        Story("Farmhand", mapOf(SkillType.PLANTS to 8, SkillType.CONSTRUCTION to 3), listOf(WorkType.RESEARCH)),
-        Story("Cook", mapOf(SkillType.COOKING to 9, SkillType.SOCIAL to 2)),
-        Story("Miner", mapOf(SkillType.MINING to 9, SkillType.CONSTRUCTION to 4)),
-        Story("Artist", mapOf(SkillType.ARTISTIC to 10, SkillType.SOCIAL to 4), listOf(WorkType.MINE)),
-        Story("Engineer", mapOf(SkillType.INTELLECTUAL to 8, SkillType.CRAFTING to 6, SkillType.CONSTRUCTION to 6)),
-        Story("Hunter", mapOf(SkillType.SHOOTING to 7, SkillType.ANIMALS to 5, SkillType.COOKING to 3)),
-        Story("Scholar", mapOf(SkillType.INTELLECTUAL to 11, SkillType.SOCIAL to 3), listOf(WorkType.MINE)),
-        Story("Smith", mapOf(SkillType.CRAFTING to 9, SkillType.MELEE to 4)),
-        Story("Drifter", mapOf(SkillType.SHOOTING to 3, SkillType.SOCIAL to 3, SkillType.COOKING to 3)),
-        Story("Beast tamer", mapOf(SkillType.ANIMALS to 10, SkillType.MELEE to 3)),
-        Story("Pirate deckhand", mapOf(SkillType.SHOOTING to 6, SkillType.MELEE to 6, SkillType.SOCIAL to 2), listOf(WorkType.RESEARCH)),
-        Story("Trader", mapOf(SkillType.SOCIAL to 10, SkillType.INTELLECTUAL to 4), listOf(WorkType.MINE)),
-        Story("Surgeon", mapOf(SkillType.MEDICINE to 11, SkillType.INTELLECTUAL to 5)),
-        Story("Bartender", mapOf(SkillType.COOKING to 6, SkillType.SOCIAL to 8, SkillType.CRAFTING to 2)),
-        Story("Carpenter", mapOf(SkillType.CONSTRUCTION to 10, SkillType.CRAFTING to 6), listOf(WorkType.ART)),
-        Story("Mercenary", mapOf(SkillType.SHOOTING to 9, SkillType.MELEE to 7)),
-        Story("Prospector", mapOf(SkillType.MINING to 8, SkillType.SHOOTING to 3, SkillType.CONSTRUCTION to 3)),
-        Story("Gardener", mapOf(SkillType.PLANTS to 10, SkillType.ARTISTIC to 4)),
-        Story("Tailor", mapOf(SkillType.CRAFTING to 9, SkillType.ARTISTIC to 4)),
-        Story("Warden", mapOf(SkillType.SOCIAL to 8, SkillType.MELEE to 5)),
+        Story("Palisade watch", mapOf(SkillType.MARKSMANSHIP to 8, SkillType.CLOSE_COMBAT to 4), listOf(WorkType.ART)),
+        Story("Battlefield bandager", mapOf(SkillType.HEALING to 8, SkillType.MARKSMANSHIP to 2)),
+        Story("Farmhand", mapOf(SkillType.HORTICULTURE to 8, SkillType.ARCHITECTURE to 3), listOf(WorkType.RESEARCH)),
+        Story("Cook", mapOf(SkillType.GALLEY to 9, SkillType.RAPPORT to 2)),
+        Story("Miner", mapOf(SkillType.QUARRYING to 9, SkillType.ARCHITECTURE to 4)),
+        Story("Artist", mapOf(SkillType.ARTISTRY to 10, SkillType.RAPPORT to 4), listOf(WorkType.MINE)),
+        Story("Engineer", mapOf(SkillType.SCHOLARSHIP to 8, SkillType.WORKMANSHIP to 6, SkillType.ARCHITECTURE to 6)),
+        Story("Hunter", mapOf(SkillType.MARKSMANSHIP to 7, SkillType.HUSBANDRY to 5, SkillType.GALLEY to 3)),
+        Story("Scholar", mapOf(SkillType.SCHOLARSHIP to 11, SkillType.RAPPORT to 3), listOf(WorkType.MINE)),
+        Story("Smith", mapOf(SkillType.WORKMANSHIP to 9, SkillType.CLOSE_COMBAT to 4)),
+        Story("Roadwalker", mapOf(SkillType.MARKSMANSHIP to 3, SkillType.RAPPORT to 3, SkillType.GALLEY to 3)),
+        Story("Stockman", mapOf(SkillType.HUSBANDRY to 10, SkillType.CLOSE_COMBAT to 3)),
+        Story("Sloop hand", mapOf(SkillType.MARKSMANSHIP to 6, SkillType.CLOSE_COMBAT to 6, SkillType.RAPPORT to 2), listOf(WorkType.RESEARCH)),
+        Story("Trader", mapOf(SkillType.RAPPORT to 10, SkillType.SCHOLARSHIP to 4), listOf(WorkType.MINE)),
+        Story("Surgeon", mapOf(SkillType.HEALING to 11, SkillType.SCHOLARSHIP to 5)),
+        Story("Bartender", mapOf(SkillType.GALLEY to 6, SkillType.RAPPORT to 8, SkillType.WORKMANSHIP to 2)),
+        Story("Carpenter", mapOf(SkillType.ARCHITECTURE to 10, SkillType.WORKMANSHIP to 6), listOf(WorkType.ART)),
+        Story("Mercenary", mapOf(SkillType.MARKSMANSHIP to 9, SkillType.CLOSE_COMBAT to 7)),
+        Story("Prospector", mapOf(SkillType.QUARRYING to 8, SkillType.MARKSMANSHIP to 3, SkillType.ARCHITECTURE to 3)),
+        Story("Gardener", mapOf(SkillType.HORTICULTURE to 10, SkillType.ARTISTRY to 4)),
+        Story("Tailor", mapOf(SkillType.WORKMANSHIP to 9, SkillType.ARTISTRY to 4)),
+        Story("Warden", mapOf(SkillType.RAPPORT to 8, SkillType.CLOSE_COMBAT to 5)),
     )
 }

@@ -128,7 +128,7 @@ class World(val w: Int, val h: Int) {
         private val names2 = listOf("ford", "haven", "wick", "stead", "ridge", "mere", "fall", "gate", "holm", "camp", "post", "reach", "hold", "bury", "field", "crest")
         private val tribeNames = listOf("Wild-Vale tribe", "Ash-Mother clans", "Stonefist tribe", "River-Hawk tribe", "Deep-Moss people", "Sun-Spear tribe")
         private val outlanderNames = listOf("Cross-Harbor union", "Free Settlers' league", "New Haven co-op", "Iron Road company", "Greenfield union", "Quarry Guild")
-        private val pirateNames = listOf("Rough-Knife gang", "Black Dune pirates", "Red Fang raiders", "Salt Wolves", "Grim Flag band", "Dust Vultures")
+        private val pirateNames = listOf("Rough-Blade gang", "Black Dune pirates", "Red Fang raiders", "Salt Wolves", "Grim Flag band", "Dust Vultures")
 
         /**
          * The planet for [seed]. The home tile is the land tile nearest the middle, of [homeBiome] when one is given. Given no

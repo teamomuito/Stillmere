@@ -6,7 +6,7 @@ import org.junit.Test
 
 private fun bodyGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     return g

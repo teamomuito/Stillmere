@@ -11,7 +11,7 @@ import org.junit.Test
 /** A calm colony on a world map where only the quest code under test happens. */
 private fun questGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     val never = Long.MAX_VALUE
@@ -207,7 +207,7 @@ class QuestTest {
     @Test fun animalsLeftBehindWanderOffInsteadOfBeingCaptured() {
         val g = questGame(812)
         val c = g.caravan(0)     // nobody is free to carry a downed animal
-        val horse = g.newAnimal(Race.MUFFALO, g.homeX, g.homeY, Faction.PLAYER)
+        val horse = g.newAnimal(Race.SHAGOX, g.homeX, g.homeY, Faction.PLAYER)
         g.pawns.remove(horse)
         c.members.add(horse)
         val (_, s) = g.campQuest()

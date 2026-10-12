@@ -25,7 +25,7 @@ private fun GameMap.roomAt(x: Int, y: Int) = roomId[idx(x, y)]
 /** A game with one closed 3x3 room (outer 5x5) with a door in the south wall, on cleared ground. */
 private fun heatedRoomGame(seed: Long, withDoor: Boolean = true): Pair<Game, IntArray> {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     val m = g.map
     val x0 = g.homeX; val y0 = g.homeY - 2
     for (y in y0 - 1..y0 + 5) for (x in x0 - 1..x0 + 5) {
@@ -75,7 +75,7 @@ class TemperatureRoomsTest {
     }
 
     @Test fun theGameUsesTheClimateModel() {
-        val g = Game(4); g.startNewColony(Scenario.LOST_TRIBE)
+        val g = Game(4); g.startNewColony(Scenario.QUIET_ENCLAVE)
         repeat(3 * TICKS_PER_HOUR) { g.step() }
         assertEquals(Climate.outdoorTemp(g.map.biome, g.tick, g.tempOffset, g.weather), g.outdoorTemp(), 0f)
     }

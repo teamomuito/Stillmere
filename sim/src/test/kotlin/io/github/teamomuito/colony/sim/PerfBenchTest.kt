@@ -54,11 +54,11 @@ class PerfBenchTest {
     /** A colony of [pawns] colonists, [animals] wild animals, [items] loose stacks, [fires] fires and some plants. */
     private fun loaded(seed: Long, pawns: Int, animals: Int, items: Int, fires: Int): Game {
         val g = Game(seed)
-        g.startNewColony(Scenario.LOST_TRIBE)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
         g.mentalBreaksEnabled = true
         val r = java.util.Random(seed)
         while (g.colonists.size < pawns) g.newHuman(g.homeX + r.nextInt(12) - 6, g.homeY + r.nextInt(12) - 6)
-        val races = listOf(Race.DEER, Race.BOAR, Race.HARE, Race.WOLF, Race.TURKEY, Race.MUFFALO)
+        val races = listOf(Race.DEER, Race.BOAR, Race.HARE, Race.WOLF, Race.TURKEY, Race.SHAGOX)
         repeat(animals) {
             val x = r.nextInt(g.map.w - 2) + 1; val y = r.nextInt(g.map.h - 2) + 1
             if (g.map.walkable(g.map.idx(x, y))) g.newAnimal(races[r.nextInt(races.size)], x, y)

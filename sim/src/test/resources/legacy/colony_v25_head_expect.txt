@@ -1,0 +1,16 @@
+version=25
+colonyName=New Arrivals
+colonists=5
+tick=15000
+incident.THRUMBO=14900
+incident.ANIMAL_JOINS=14800
+backstory.0=Cargo ship brat, carpenter
+thoughts.0=Psychite buzz
+backstory.1=Pit fighter, surgeon
+thoughts.1=Flake rush|Yayo rush
+backstory.2=Pit fighter, warden
+thoughts.2=Yayo rush|Drug use
+backstory.3=Cargo ship brat, drifter
+thoughts.3=Psychic drone|Ate insect meat
+backstory.4=Vatgrown soldier, colonial guard
+thoughts.4=Optimist|Ate a fine meal

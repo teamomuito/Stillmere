@@ -133,7 +133,7 @@ class Panels(private val a: MainActivity) {
                 "Zones" -> {
                     add("Stockpile", null) { a.setTool(Tool.Stockpile) }
                     add("Dumping", null) { a.setTool(Tool.Dumping) }
-                    for (c in listOf(PlantType.RICE, PlantType.POTATO, PlantType.CORN, PlantType.STRAWBERRY, PlantType.COTTON, PlantType.HEALROOT, PlantType.SMOKELEAF, PlantType.PSYCHOID, PlantType.HAYGRASS, PlantType.DEVILSTRAND_CROP).filter { it.research == null || it.research in game.researchDone })
+                    for (c in listOf(PlantType.RICE, PlantType.POTATO, PlantType.CORN, PlantType.STRAWBERRY, PlantType.COTTON, PlantType.MIREWORT, PlantType.HUSHMOSS, PlantType.DREAMWEED, PlantType.MEADOW_GRASS, PlantType.WISPSILK_CROP).filter { it.research == null || it.research in game.researchDone })
                         add("Grow ${c.label.lowercase()}", null) { a.setTool(Tool.Growing(c)) }
                     add("Remove zone", null) { a.setTool(Tool.ClearZone) }
                     for (k in 0 until 3) {
@@ -161,7 +161,7 @@ class Panels(private val a: MainActivity) {
     }
 
     private fun shortName(t: ItemType) = when (t) {
-        ItemType.COMPONENT -> "comp"; ItemType.STONE -> "stone"; ItemType.STONE_CHUNK -> "chunk"; ItemType.PLASTEEL -> "plasteel"; else -> t.label.lowercase()
+        ItemType.COMPONENT -> "comp"; ItemType.STONE -> "stone"; ItemType.STONE_CHUNK -> "chunk"; ItemType.HARDALLOY -> "hardalloy"; else -> t.label.lowercase()
     }
 
     // ------------------------------------------------------------------ work
@@ -252,8 +252,8 @@ class Panels(private val a: MainActivity) {
         if (!force && s == sig) return
         sig = s
         rebuild(body) { host ->
-            val benches = g.map.buildings().filter { it.built && (it.def == BuildDef.RESEARCH_BENCH || it.def == BuildDef.HI_TECH_BENCH) }
-            host.addView(ui.label(if (benches.isEmpty()) "Build a research bench to start researching" else "Research · ${g.researchDone.size}/${Research.entries.size} complete", 12f, ui.accent, true))
+            val benches = g.map.buildings().filter { it.built && (it.def == BuildDef.STUDY_DESK || it.def == BuildDef.PRECISION_BENCH) }
+            host.addView(ui.label(if (benches.isEmpty()) "Build a study desk to start researching" else "Research · ${g.researchDone.size}/${Research.entries.size} complete", 12f, ui.accent, true))
             val order = Research.entries.sortedWith(compareBy({ it.tier }, { it.cost }))
             for (r in order) {
                 val done = r in g.researchDone
@@ -264,7 +264,7 @@ class Panels(private val a: MainActivity) {
                     done -> "Done"
                     !avail -> "Needs " + r.needs.filter { it !in g.researchDone }.joinToString { it.label }
                     g.researchCurrent == r -> "In progress ${(prog * 100).toInt()}%"
-                    else -> "${(prog * 100).toInt()}% · ${r.cost.toInt()} points" + if (needsHi) " · hi-tech bench" else ""
+                    else -> "${(prog * 100).toInt()}% · ${r.cost.toInt()} points" + if (needsHi) " · needs a precision lab" else ""
                 }
                 val col = ui.column()
                 col.addView(ui.label(r.label, 13f, if (done) ui.good else if (avail) ui.text else ui.dim, true))
@@ -333,7 +333,7 @@ class Panels(private val a: MainActivity) {
         for (p in wild) {
             val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; background = ui.bg(0xFF26221C.toInt(), 8); setPadding(ui.dp(8), ui.dp(4), ui.dp(8), ui.dp(4)) }
             val info = ui.column()
-            info.addView(ui.label(p.race.label + if (p.manhunter) "  (manhunter!)" else "", 12.5f, if (p.manhunter) ui.bad else ui.text, true))
+            info.addView(ui.label(p.race.label + if (p.manhunter) "  (rogue!)" else "", 12.5f, if (p.manhunter) ui.bad else ui.text, true))
             info.addView(ui.label("${p.race.meat} meat · tame difficulty ${String.format("%.1f", p.race.tameDifficulty)}${if (p.race.predator) " · predator" else ""}", 10.5f, ui.dim))
             row.addView(info, ui.lin(0, -2, 1f))
             row.addView(ui.button("Hunt", 11f, selected = p.huntMark) { p.huntMark = !p.huntMark; if (p.huntMark) p.tameMark = false; build(true) }, ui.lin(-2, -2, 0f, 4, 0, 0, 0))

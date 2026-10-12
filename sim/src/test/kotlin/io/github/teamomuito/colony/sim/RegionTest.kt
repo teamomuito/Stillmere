@@ -89,21 +89,21 @@ class RegionTest {
         assertNotNull("removing the wall reopens the gap", f.find(2, 10, 17, 10))
     }
 
-    @Test fun anAutodoorBlocksOnlyWhileUnpowered() {
+    @Test fun aShutterDoorBlocksOnlyWhileUnpowered() {
         val m = GameMap(12, 5)
         for (y in 0 until 5) if (y != 2) m.setBuilding(Building(BuildDef.WOOD_WALL, 6, y, true))
-        val door = Building(BuildDef.AUTODOOR, 6, 2, true).also { it.powered = false }
+        val door = Building(BuildDef.SHUTTER_DOOR, 6, 2, true).also { it.powered = false }
         m.setBuilding(door)
         val f = Pathfinder(m)
-        assertNull("an unpowered autodoor is shut", f.find(2, 2, 9, 2))
+        assertNull("an unpowered slide hatch is shut", f.find(2, 2, 9, 2))
         door.powered = true
         m.markWalkChanged()   // what the power tick does for doors
-        assertNotNull("a powered autodoor opens", f.find(2, 2, 9, 2))
+        assertNotNull("a powered slide hatch opens", f.find(2, 2, 9, 2))
     }
 
     @Test fun unreachableItemsAreNotChosenOverReachableOnes() {
         val g = Game(501)
-        g.startNewColony(Scenario.LOST_TRIBE)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
         g.mentalBreaksEnabled = false
         val p = g.colonists[0]
         val near = 4

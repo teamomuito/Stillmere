@@ -1,0 +1,9 @@
+colonists=5
+thoughts.0=Hearty feast|Brew haze
+thoughts.1=Engineered upgrades|Deep talk
+thoughts.2=Shared a joke|Restless mind
+thoughts.3=Gulped raw fare|Ate chitin cuts
+thoughts.4=Sunny outlook
+temp=ash-veil winter
+incident.SKYHORN_VISIT=14700
+incident.ANIMAL_JOINS=14600

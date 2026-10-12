@@ -7,8 +7,8 @@ import org.junit.Test
 
 /** A calm seeded colony with a clear strip of open ground, so combat tests see only what they place. */
 private fun arena(seed: Long): Game {
-    val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    val g = Game(seed, GameMap.generateFor(100, 100, seed, Biome.TEMPERATE))
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE; g.nextWanderer = Long.MAX_VALUE; g.nextTrader = Long.MAX_VALUE
@@ -45,7 +45,7 @@ class CombatPipelineTest {
     @Test fun meleeReachesOnlyAdjacentTargets() {
         val g = arena(601)
         val me = g.place(g.colonists[0], g.homeX, g.homeY)
-        me.weaponItem = ItemType.W_KNIFE
+        me.weaponItem = ItemType.W_POCKET_BLADE
         val far = g.enemy(g.homeX + 3, g.homeY)
         repeat(10) { g.shoot(me, far) }
         assertTrue("three tiles away is out of melee reach", far.injuries.isEmpty())
@@ -133,7 +133,7 @@ class CombatPipelineTest {
             val g = arena(608)
             val me = g.place(g.colonists[0], g.homeX, g.homeY)
             me.weaponItem = ItemType.W_RIFLE
-            me.skill[SkillType.SHOOTING.ordinal] = level
+            me.skill[SkillType.MARKSMANSHIP.ordinal] = level
             val target = g.enemy(g.homeX + 10, g.homeY)
             repeat(200) { g.shoot(me, target) }
             return g.shots.count { it.hit }
@@ -147,7 +147,7 @@ class CombatPipelineTest {
         fun severityOf(vest: Boolean, pen: Float): Float {
             val g = arena(609)
             val t = g.place(g.colonists[0], g.homeX, g.homeY)
-            if (vest) t.apparel.add(Worn(ItemType.A_FLAK_VEST, Quality.NORMAL, ItemType.A_FLAK_VEST.apparel!!.hp))
+            if (vest) t.apparel.add(Worn(ItemType.A_RIBBED_VEST, Quality.NORMAL, ItemType.A_RIBBED_VEST.apparel!!.hp))
             val torso = t.race.body.indexOfFirst { it.tag == PartTag.TORSO }
             g.dealDamage(t, DamageKind.BULLET, 20f, pen, null, partHint = torso)
             return t.injuries.sumOf { it.severity.toDouble() }.toFloat()
@@ -155,7 +155,7 @@ class CombatPipelineTest {
         val bare = severityOf(vest = false, pen = 0f)
         val armored = severityOf(vest = true, pen = 0f)
         val piercing = severityOf(vest = true, pen = 0.5f)
-        assertTrue("a flak vest reduces the damage ($bare -> $armored)", armored < bare)
+        assertTrue("a quilted tabard reduces the damage ($bare -> $armored)", armored < bare)
         assertTrue("penetration gets past the vest ($armored -> $piercing)", piercing > armored)
     }
 
@@ -180,11 +180,11 @@ class CombatPipelineTest {
     @Test fun anesthesiaWearsOffAfterItsDuration() {
         val g = arena(612)
         val t = g.place(g.colonists[0], g.homeX, g.homeY)
-        g.addHediff(t, HediffKind.ANESTHESIA, 0.5f).duration = 3000
+        g.addHediff(t, HediffKind.NUMB_SLEEP, 0.5f).duration = 3000
         g.run(200)
-        assertTrue("still under anesthesia", t.hediff(HediffKind.ANESTHESIA) != null)
+        assertTrue("still under anesthesia", t.hediff(HediffKind.NUMB_SLEEP) != null)
         g.run(3000)
-        assertFalse("the anesthetic has worn off", t.hediff(HediffKind.ANESTHESIA) != null)
+        assertFalse("the numbing has worn off", t.hediff(HediffKind.NUMB_SLEEP) != null)
     }
 
     @Test fun explosionsHurtAlliesToo() {

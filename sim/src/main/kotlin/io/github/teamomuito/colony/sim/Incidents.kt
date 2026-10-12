@@ -40,7 +40,7 @@ enum class IncidentChannel(val minDays: Int, val maxDays: Int, val fireChance: F
 enum class Incident {
     RAID_ATTACK, WANDERER, CARGO_POD, TRADE_CARAVAN, HEAT_WAVE, COLD_SNAP,
     MANHUNTER_PACK, INFESTATION, DISEASE_OUTBREAK, SOLAR_FLARE, ECLIPSE, TOXIC_FALLOUT, SHORT_CIRCUIT, BLIGHT,
-    ANIMAL_JOINS, THRUMBO, REFUGEES, METEORITE, AURORA, PSYCHIC_WAVE, MECH_CRASH, VOLCANIC_WINTER, THUNDERSTORM, WILDFIRE,
+    ANIMAL_JOINS, SKYHORN_VISIT, REFUGEES, METEORITE, AURORA, PSYCHIC_WAVE, MECH_CRASH, VOLCANIC_WINTER, THUNDERSTORM, WILDFIRE,
 }
 
 /** Days after a raid ends during which no new threat incident may start. */
@@ -145,8 +145,8 @@ internal object IncidentRegistry {
             eligible = { it.cropCount > 0 }, run = { blight() }),
         IncidentDef(Incident.ANIMAL_JOINS, IncidentCategory.ANIMAL, IncidentChannel.MISC, friendly = true, weight = { 1.2f },
             eligible = { it.wildTameable }, run = { animalJoins() }),
-        IncidentDef(Incident.THRUMBO, IncidentCategory.ANIMAL, IncidentChannel.MISC, friendly = true, minDay = 9, weight = { 0.5f },
-            run = { thrumboPasses() }),
+        IncidentDef(Incident.SKYHORN_VISIT, IncidentCategory.ANIMAL, IncidentChannel.MISC, friendly = true, minDay = 9, weight = { 0.5f },
+            run = { skyhornPasses() }),
         IncidentDef(Incident.REFUGEES, IncidentCategory.VISITOR, IncidentChannel.MISC, minDay = 10, weight = { 1.2f },
             eligible = { !it.raidActive }, run = { refugees() }),
         IncidentDef(Incident.METEORITE, IncidentCategory.RESOURCE, IncidentChannel.MISC, friendly = true, run = { meteorite() }),

@@ -223,7 +223,7 @@ class GameMap(val w: Int, val h: Int) {
     fun walkable(i: Int): Boolean {
         if (!terrain[i].passable) return false
         val b = building[i]
-        if (b != null && b.built && b.def == BuildDef.AUTODOOR && !b.powered) return false
+        if (b != null && b.built && b.def == BuildDef.SHUTTER_DOOR && !b.powered) return false
         return !(b != null && b.built && b.def.blocksMove)
     }
 
@@ -726,7 +726,7 @@ class GameMap(val w: Int, val h: Int) {
             m.connectSides(sx, sy)
             // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. Lump sizes
             // keep the ore per map where the old scattered veins left it.
-            val ores = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.PLASTEEL to 2, Ore.COMPONENTS to 3)
+            val ores = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.HARDALLOY to 2, Ore.COMPONENTS to 3)
             for ((ore, veins) in ores) {
                 val lump = if (ore == Ore.STEEL) 7 else if (ore == Ore.COMPONENTS) 3 else 4
                 repeat(veins) {
@@ -773,7 +773,7 @@ class GameMap(val w: Int, val h: Int) {
                 } else if (fertile && rng.chance(0.006f * biome.treeDensity)) {
                     m.plant[i] = Plant(PlantType.BERRY, x, y, 1f)
                 } else if (fertile && rng.chance(0.004f)) {
-                    m.plant[i] = Plant(PlantType.WILD_HEALROOT, x, y, 1f)
+                    m.plant[i] = Plant(PlantType.FERAL_MIREWORT, x, y, 1f)
                 } else if (rng.chance(0.004f)) {
                     m.plant[i] = Plant(PlantType.BRAMBLE, x, y, 1f)
                 }

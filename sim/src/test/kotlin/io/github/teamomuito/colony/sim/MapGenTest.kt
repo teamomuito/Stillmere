@@ -30,8 +30,8 @@ class MapGenTest {
             for (b in Biome.entries) assertSameMap(GameMap.generateFor(100, 100, seed, b), GameMap.generateFor(100, 100, seed, b), "$b seed $seed")
             assertSameMap(GameMap.generateFor(100, 100, seed), GameMap.generateFor(100, 100, seed), "planet seed $seed")
         }
-        val a = Game(9); a.startNewColony(Scenario.CRASHLANDED)
-        val b = Game(9); b.startNewColony(Scenario.CRASHLANDED)
+        val a = Game(9); a.startNewColony(Scenario.SALVAGE_CREW)
+        val b = Game(9); b.startNewColony(Scenario.SALVAGE_CREW)
         assertSameMap(a.map, b.map, "game seed 9")
         assertEquals("same colony spot", a.homeX to a.homeY, b.homeX to b.homeY)
     }
@@ -39,7 +39,7 @@ class MapGenTest {
     @Test fun startingAreaIsOpenAndEverySpawnPointIsReachableFromIt() {
         for (seed in SEEDS) for (b in Biome.entries) {
             val g = Game(seed, GameMap.generateFor(100, 100, seed, b))
-            g.startNewColony(Scenario.CRASHLANDED)
+            g.startNewColony(Scenario.SALVAGE_CREW)
             val m = g.map
             val where = "$b seed $seed"
             assertEquals("$where: the colony starts where the map chose", m.spawnX to m.spawnY, g.homeX to g.homeY)
@@ -76,7 +76,7 @@ class MapGenTest {
         for ((n, lt) in cuts.withIndex()) for (seed in SEEDS) {
             val m = GameMap.generate(100, 100, seed, Biome.TEMPERATE, lt)
             val g = Game(seed, m)
-            g.startNewColony(Scenario.CRASHLANDED)
+            g.startNewColony(Scenario.SALVAGE_CREW)
             val pathfinder = Pathfinder(m)
             for (side in 0 until 4) {
                 val cells = g.spawnCells(side)
@@ -89,7 +89,7 @@ class MapGenTest {
 
     @Test fun rockTypesOreAndVeinsStayInTheirRanges() {
         var rock = 0; var ore = 0; var oreIsolated = 0; var rockFractionSum = 0.0; var maps = 0
-        // The veins planned per map: 8 steel of 7, 3 silver, 2 gold, 2 plasteel of 4, and 3 components of 3.
+        // The veins planned per map: 8 steel of 7, 3 silver, 2 gold, 2 hardalloy of 4, and 3 components of 3.
         val planned = 8 * 7 + (3 + 2 + 2) * 4 + 3 * 3
         val missing = HashMap<Ore, Int>()
         for (seed in SEEDS) for (b in Biome.entries) {

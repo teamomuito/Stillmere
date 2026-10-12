@@ -3,7 +3,7 @@ package io.github.teamomuito.colony.sim
 /**
  * Ransom: a faction offers silver for one of its people held as a prisoner. It is an offer on the colony's side, like a
  * settlement request: it has a price and an expiry, the player accepts or declines, and it can be withdrawn when the
- * prisoner or the relationship no longer allows it. It needs the comms console, the same as other diplomacy.
+ * prisoner or the relationship no longer allows it. It needs the signal desk, the same as other diplomacy.
  */
 class RansomOffer(val id: Int, val prisonerId: Int, val prisonerName: String, val factionId: Int, val price: Int, val expires: Long)
 
@@ -75,7 +75,7 @@ internal fun Game.ransomTick() {
  */
 fun Game.acceptRansom(offerId: Int): String? {
     val o = ransomOffers.firstOrNull { it.id == offerId } ?: return "That offer is no longer open."
-    if (!hasComms()) return "The comms console has to be powered to finish a ransom."
+    if (!hasComms()) return "The signal desk has to be powered to finish a ransom."
     val p = pawnById(o.prisonerId)
     ransomBlocker(p, o.prisonerName, o.factionId)?.let { reason ->
         ransomOffers.remove(o)

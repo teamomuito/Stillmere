@@ -6,22 +6,23 @@ Plan and reference for room detection, room temperature, outdoor temperature and
 record was in the repository, so the values below are the first record. Direct access to the RimWorld Wiki was not available
 (`rimworldwiki.com` does not resolve from this environment), so the only vanilla evidence is a secondary summary from web searches on
 2026-10-09 of the wiki's Temperature, Heat, Vent, Room, Impressiveness and Cleanliness pages. Anything those summaries did not state is
-`UNVERIFIED`. No vanilla number below was confirmed against the game or a primary source.
+`UNVERIFIED`. No vanilla number below was confirmed against the game or a primary source. A row is tagged V only where it gives a
+URL; a row from a summary with no recorded URL is M, UNVERIFIED.
 
 ## Vanilla reference
 
 | Fact | Value | Conf |
 |---|---|---|
-| Temperature is stored per room, not per cell: every cell of a room shares one temperature | yes | V |
-| A room's temperature is shaped by its roof and by the temperature of tiles next to its walls | yes | V |
-| Doors, vents and missing roof tiles make heat exchange faster | yes | V |
-| A room that is 75% roofed or less stays at the outdoor temperature (counts as outdoors) | 75% | V |
-| Removing a wall or door that borders the outside turns the room into outdoor space | yes | V |
-| Vents move heat between rooms but are not fully efficient; each extra vent loses efficiency | qualitative | V |
-| Outdoor temperature depends on latitude, time of day, day of year and biome; cold snaps, volcanic winters and heat waves shift it | yes | V |
-| Temperate forest seasonal range: about 35 C in summer to -25 C in winter (extremes, not means) | | V |
-| Room stats: Impressiveness is built from Wealth, Beauty, Space and Cleanliness; mood effects depend on the impressiveness *stage*, not the exact value | | V |
-| Cleanliness affects medical treatment quality, research speed and food-poisoning chance | | V |
+| Temperature is stored per room, not per cell: every cell of a room shares one temperature | yes | M, UNVERIFIED (search summary, no URL recorded) |
+| A room's temperature is shaped by its roof and by the temperature of tiles next to its walls | yes | M, UNVERIFIED (search summary, no URL recorded) |
+| Doors, vents and missing roof tiles make heat exchange faster | yes | M, UNVERIFIED (search summary, no URL recorded) |
+| A room that is 75% roofed or less stays at the outdoor temperature (counts as outdoors) | 75% | M, UNVERIFIED (search summary, no URL recorded) |
+| Removing a wall or door that borders the outside turns the room into outdoor space | yes | M, UNVERIFIED (search summary, no URL recorded) |
+| Vents move heat between rooms but are not fully efficient; each extra vent loses efficiency | qualitative | M, UNVERIFIED (search summary, no URL recorded) |
+| Outdoor temperature depends on latitude, time of day, day of year and biome; the temperature events deep chill, smoke pall and scorching spell shift it (names in names.md section 6.3) | yes | V (`https://rimworldwiki.com/wiki/Temperature`, a search result read in round 9; the page itself was not read) |
+| Temperate forest seasonal range: about 35 C in summer to -25 C in winter (extremes, not means) | | M, UNVERIFIED (search summary, no URL recorded) |
+| Room stats: Impressiveness is built from Wealth, Beauty, Space and Cleanliness; mood effects depend on the impressiveness *stage*, not the exact value | | M, UNVERIFIED (search summary, no URL recorded) |
+| Cleanliness affects medical treatment quality, research speed and food-poisoning chance | | M, UNVERIFIED (search summary, no URL recorded) |
 | Standard heater and cooler output (heat per second, target temperature) | ? | UNVERIFIED |
 | Exact heat-exchange rates through walls, doors and vents | ? | UNVERIFIED |
 | Any per-material wall insulation for room heat | I recall none; **UNVERIFIED** | M |
@@ -31,7 +32,7 @@ record was in the repository, so the values below are the first record. Direct a
 
 ### Where the task's assumptions differ from what was found
 
-* **"Per-cell temperature simulation."** Vanilla keeps one temperature per room (V). Stillmere already does this, and a per-cell grid
+* **"Per-cell temperature simulation."** Vanilla keeps one temperature per room (M, UNVERIFIED; row 15). Stillmere already does this, and a per-cell grid
   would be *less* faithful, so it was not built. Heat is exchanged between **neighbouring rooms** and between rooms and the outdoors,
   through each wall, door and rock edge. `GameMap.tempAt(cell)` still answers per cell (the room's value, or the outdoor value).
 * **"Insulation from wall and building materials."** No per-material wall insulation was found for vanilla. `Thermal.wallConductance`
@@ -51,8 +52,8 @@ record was in the repository, so the values below are the first record. Direct a
 | Day/night swing | +/-7 C (+/-10 C desert and arid) | C |
 | Coldest / warmest hour | 03:00 / 15:00 (sine, 24 h period) | C |
 | Weather offsets | rain -2, snow -3, thunder -3, overcast -1 | C |
-| Heat wave / cold snap / volcanic winter | +16 / -17 / -13 (set in `Events.kt`) | C (gap-report 3.3) |
-| Time base | 2,500 ticks per hour, 60,000 per day, 15 days per season (`docs/fidelity/time.md`) | V |
+| Scorching spell / deep chill / smoke pall | +16 / -17 / -13 (set in `Events.kt`; unchanged by the renames) | C (gap-report 3.3) |
+| Time base | 2,500 ticks per hour, 60,000 per day, 15 days per season (`docs/fidelity/time.md`) | V (https://rimworldwiki.com/wiki/Ticks, https://rimworldwiki.com/wiki/Time) |
 
 Sine uses `StrictMath` so the result is bit-identical on any JVM and on Android (gap-report finding R3).
 
@@ -63,7 +64,7 @@ Sine uses `StrictMath` so the result is bit-identical on any JVM and on Android 
   exit is a door stays indoor. A missing wall segment (no building) joins the room to whatever is behind it.
 * A region is outdoor if it touches the map edge. Otherwise it is indoor when it has at most 700 cells, or when more than half its
   cells are under natural (mountain) roof. Player roofs do not exist; the 700-cell limit stands in for "the player roofed it".
-  Divergent from the 75% rule (V).
+  Divergent from the 75% rule (M, UNVERIFIED; row 18).
 * **Room size** (`roomSize`) is the number of floor cells. Wall, door and rock cells are not counted.
 
 ### Heat (`Thermal.step`, once per slow tick = 625 ticks)
@@ -80,7 +81,7 @@ average temperature of whatever lies straight through each edge. Outdoor rooms a
 | Rock edge conductance | 0.3, linked to ground temperature `(outdoor + 14) / 2` | C |
 | Heat gain | `building heat / size * 1.2` degrees per slow tick | C |
 | Heater / cooler | +14 / -14 heat; a heater works only below 21 C, a cooler only above | C (replaces nothing known) |
-| Other heat sources | campfire +10, torch lamp +1.5, stove +3, smithy +4, generator +3, passive cooler -9 | C |
+| Other heat sources | campfire +10, pitch post +1.5, stove +3, coal forge +4, generator +3, frost vault -9 | C |
 | Temperature clamp | -60 to 80 C | C |
 
 Heat now flows **between neighbouring rooms** through doors and walls (before, rooms only exchanged with the outdoors), and the
