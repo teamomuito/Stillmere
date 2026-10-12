@@ -284,6 +284,7 @@ private fun Game.enterTile(c: Caravan): Boolean {
         // Passing through a settlement: stop only if it is the destination.
     }
     if (c.tile == c.destination) return true
+    if (!randomCaravanEvents) return true
     val hostileZone = world.settlements.any { it.faction.permanentEnemy && abs(world.x(it.tile) - world.x(c.tile)) + abs(world.y(it.tile) - world.y(c.tile)) <= 2 }
     val chance = 0.035f + (if (hostileZone) 0.05f else 0f)
     if (!rng.chance(chance)) return true
@@ -486,7 +487,8 @@ fun Game.settle(c: Caravan, name: String): Settled? {
     val archive = SaveGame.write(this)
     val biome = world.biome[tile]
     val lt = world.localTerrain(tile)
-    val g = Game(seed, GameMap.generate(map.w, map.h, seed * 17 + tick, biome, lt))
+    // A new colony is always Game.MAP_SIZE. The old colony's size is not copied, so a colony founded from a 100 by 100 save is 250 by 250.
+    val g = Game(seed, GameMap.generate(Game.MAP_SIZE, Game.MAP_SIZE, seed * 17 + tick, biome, lt))
     g.worldBiome = worldBiome
     g.world = world
     world.homeTile = tile

@@ -87,13 +87,67 @@ class MapGenTest {
         }
     }
 
+    /**
+     * Ore blotches per 10,000 cells (RimWorld/GenStep_RocksFromGrid.cs lines 127-143): 4, 8, 11, 16 for impassable, and 10 (the
+     * default) for no world tile. A blotch covers round(10,000 / density) cells, and the count is the area over that, rounded
+     * (Verse/GenStep_Scatterer.cs lines 266-274; the tie mode of the rounding is UNVERIFIED, see docs/fidelity/map.md).
+     */
+    @Test fun oreBlotchesFollowTheAreaAndHilliness() {
+        assertEquals(4, GameMap.oreBlotchCount(100, 100, Hills.FLAT))
+        assertEquals(8, GameMap.oreBlotchCount(100, 100, Hills.SMALL))
+        assertEquals(11, GameMap.oreBlotchCount(100, 100, Hills.LARGE))
+        assertEquals(16, GameMap.oreBlotchCount(100, 100, Hills.MOUNTAIN))
+        assertEquals(10, GameMap.oreBlotchCount(100, 100, null))
+        // 250 by 250 is 62,500 cells: 25, 50, 69 and 100. The default value gives 62.5, which rounds to the even 62 (UNVERIFIED tie mode).
+        assertEquals(25, GameMap.oreBlotchCount(250, 250, Hills.FLAT))
+        assertEquals(50, GameMap.oreBlotchCount(250, 250, Hills.SMALL))
+        assertEquals(69, GameMap.oreBlotchCount(250, 250, Hills.LARGE))
+        assertEquals(100, GameMap.oreBlotchCount(250, 250, Hills.MOUNTAIN))
+        assertEquals(62, GameMap.oreBlotchCount(250, 250, null))
+        // The density rule for a 44 by 44 map with no world tile would give 2 blotches. Battle maps do not use it: they keep their
+        // fixed veins (see battleMapsKeepTheFixedVeins).
+        assertEquals(2, GameMap.oreBlotchCount(44, 44, null))
+    }
+
+    /** A battle map has no world tile, so it keeps the 18 veins every map had before the map-size change. */
+    @Test fun battleMapsKeepTheFixedVeins() {
+        assertEquals(listOf(Ore.STEEL, Ore.SILVER, Ore.GOLD, Ore.HARDALLOY, Ore.COMPONENTS), GameMap.FIXED_ORE_VEINS.map { it.first })
+        assertEquals(18, GameMap.FIXED_ORE_VEINS.sumOf { it.second })
+        // The fixed plan has 8 steel of 7 cells, 3 silver, 2 gold, 2 hardalloy of 4, and 3 components of 3: 93 cells at most.
+        val fixedCells = GameMap.FIXED_ORE_VEINS.sumOf { (k, n) -> n * GameMap.oreLumpSize(k) }
+        assertEquals(93, fixedCells)
+        for (seed in SEEDS) {
+            val m = GameMap.generate(44, 44, seed, Biome.TEMPERATE, veins = GameMap.FIXED_ORE_VEINS)
+            val n = m.ore.count { it != Ore.NONE }
+            assertTrue("seed $seed: $n ore cells, at most $fixedCells", n in 1..fixedCells)
+        }
+    }
+
+    @Test fun oreVeinPlanAddsUpToTheBlotchCount() {
+        val hillsCases: List<Hills?> = Hills.entries + null
+        for (hills in hillsCases) for (side in listOf(44, 100, 250)) {
+            val plan = GameMap.oreVeinPlan(side, side, hills)
+            assertEquals("$side by $side, $hills", GameMap.oreBlotchCount(side, side, hills), plan.sumOf { it.second })
+            assertEquals(listOf(Ore.STEEL, Ore.SILVER, Ore.GOLD, Ore.HARDALLOY, Ore.COMPONENTS), plan.map { it.first })
+            assertTrue("no negative veins", plan.all { it.second >= 0 })
+        }
+        // 25 blotches split 8 : 3 : 2 : 2 : 3 of 18 with cumulative rounding.
+        assertEquals(listOf(11, 4, 3, 3, 4), GameMap.oreVeinPlan(250, 250, Hills.FLAT).map { it.second })
+    }
+
     @Test fun rockTypesOreAndVeinsStayInTheirRanges() {
         var rock = 0; var ore = 0; var oreIsolated = 0; var rockFractionSum = 0.0; var maps = 0
-        // The veins planned per map: 8 steel of 7, 3 silver, 2 gold, 2 hardalloy of 4, and 3 components of 3.
-        val planned = 8 * 7 + (3 + 2 + 2) * 4 + 3 * 3
+        // New colonies are 250 by 250. The most ore a map can hold is the largest vein plan over the hilliness values.
+        val side = Game.MAP_SIZE
+        val planned = Hills.entries.maxOf { h -> GameMap.oreVeinPlan(side, side, h).sumOf { (k, n) -> n * GameMap.oreLumpSize(k) } }
+        var plannedOre = 0L
         val missing = HashMap<Ore, Int>()
         for (seed in SEEDS) for (b in Biome.entries) {
-            val m = GameMap.generateFor(100, 100, seed, b)
+            // The map is the one generateFor makes; the planet's hilliness is kept so the map's own vein plan is known.
+            val world = World.generate(seed, b)
+            val local = world.localTerrain()
+            val m = GameMap.generate(side, side, seed, world.biome[world.homeTile], local)
+            plannedOre += GameMap.oreVeinPlan(side, side, local?.hills).sumOf { (k, n) -> n * GameMap.oreLumpSize(k) }
             val mapRock = m.terrain.count { it == Terrain.ROCK }
             val mapOre = m.ore.count { it != Ore.NONE }
             maps++
@@ -113,8 +167,11 @@ class MapGenTest {
             }
         }
         for (ore in Ore.entries.filter { it != Ore.NONE }) assertTrue("${ore.name} is on at least 90% of maps: ${missing[ore] ?: 0} without", (missing[ore] ?: 0) <= maps / 10)
+        // Almost all the planned ore is placed. A vein fails only when its random starts all land on open ground or on ore already.
+        // Measured: 99.6% over 72 maps (docs/fidelity/map.md).
+        assertTrue("the planned veins are placed: $ore of $plannedOre planned ore cells", ore >= plannedOre * 0.9)
         val oreShare = ore.toDouble() / rock
-        assertTrue("ore is 3%..15% of rock overall: $oreShare", oreShare in 0.03..0.15)
+        assertTrue("ore is at most 15% of rock overall: $oreShare", oreShare <= 0.15)
         // Lumps are grown as one connected blob, so almost no ore is left on its own.
         assertTrue("ore lumps are connected: $oreIsolated of $ore isolated", oreIsolated <= ore / 100)
         val meanRockFraction = rockFractionSum / maps
@@ -124,7 +181,7 @@ class MapGenTest {
         val rockTypes = IntArray(RockType.entries.size)
         var rockTiles = 0
         for (seed in 1L..40L) {
-            val m = GameMap.generateFor(100, 100, seed, Biome.TEMPERATE)
+            val m = GameMap.generateFor(Game.MAP_SIZE, Game.MAP_SIZE, seed, Biome.TEMPERATE)
             for (i in 0 until m.size) if (m.terrain[i] == Terrain.ROCK) { rockTypes[m.rockType[i].ordinal]++; rockTiles++ }
         }
         // Granite is the common rock, at about 40%; the other four share the rest at about 15% each.

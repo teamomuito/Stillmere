@@ -13,7 +13,7 @@ import kotlin.math.sqrt
 
 /** A calm seeded colony with a clear strip of open ground, as in CombatPipelineTest. */
 private fun arena(seed: Long): Game {
-    val g = Game(seed, GameMap.generateFor(100, 100, seed, Biome.TEMPERATE))
+    val g = Game(seed, GameMap.generateFor(Game.MAP_SIZE, Game.MAP_SIZE, seed, Biome.TEMPERATE))
     g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }

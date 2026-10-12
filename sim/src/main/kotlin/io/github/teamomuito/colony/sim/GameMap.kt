@@ -4,6 +4,7 @@ import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.round
 
 class Plant(val type: PlantType, val x: Int, val y: Int, var growth: Float) {
     var age = 0
@@ -619,6 +620,55 @@ class GameMap(val w: Int, val h: Int) {
         val DY8 = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
 
         /**
+         * Ore blotches per 10,000 cells by hilliness: flat 4, small hills 8, large hills 11, impassable 16 (RimWorld/GenStep_RocksFromGrid.cs
+         * lines 131, 134, 137, 143). The switch's default, 10 (line 127), is used for [null], a map with no world tile. Using that default
+         * for [null] is Stillmere's choice (C), not the reference's. [Hills.MOUNTAIN] is the impassable kind, as its label says (WorldMap.kt).
+         * See docs/fidelity/map.md for that mapping.
+         */
+        fun oreBlotchesPer10k(hills: Hills?): Float = when (hills) {
+            Hills.FLAT -> 4f
+            Hills.SMALL -> 8f
+            Hills.LARGE -> 11f
+            Hills.MOUNTAIN -> 16f
+            null -> 10f
+        }
+
+        /**
+         * Ore blotches on a [w] by [h] map. As in the reference (Verse/GenStep_Scatterer.cs lines 266-274), one blotch covers
+         * round(10,000 / density) cells, and the count is the area over that, rounded. The source rounds to the nearest integer, and the
+         * tie mode of that rounding is not in the tree, so the half-to-even rounding used here is UNVERIFIED (see docs/fidelity/map.md).
+         */
+        fun oreBlotchCount(w: Int, h: Int, hills: Hills?): Int {
+            val cellsPerBlotch = round(10000f / oreBlotchesPer10k(hills))
+            return round(w.toFloat() * h / cellsPerBlotch).toInt()
+        }
+
+        /**
+         * The old fixed vein counts: 8 steel, 3 silver, 2 gold, 2 hardalloy, 3 components (18 veins on every map before the map-size
+         * change). They are the shares the blotches are split into (see [oreVeinPlan]), and the plan of battle maps (see [generate]).
+         */
+        internal val FIXED_ORE_VEINS: List<Pair<Ore, Int>> = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.HARDALLOY to 2, Ore.COMPONENTS to 3)
+
+        /** Cells in one vein: steel 7, components 3, the others 4. */
+        internal fun oreLumpSize(ore: Ore): Int = if (ore == Ore.STEEL) 7 else if (ore == Ore.COMPONENTS) 3 else 4
+
+        /**
+         * The veins of each ore on a [w] by [h] map. The blotches are shared out by the [FIXED_ORE_VEINS] weights with cumulative
+         * rounding, so the veins always add up to [oreBlotchCount].
+         */
+        internal fun oreVeinPlan(w: Int, h: Int, hills: Hills?): List<Pair<Ore, Int>> {
+            val total = oreBlotchCount(w, h, hills)
+            val weight = FIXED_ORE_VEINS.sumOf { it.second }
+            var cumulative = 0
+            var given = 0
+            return FIXED_ORE_VEINS.map { (ore, share) ->
+                cumulative += share
+                val upTo = round(total * cumulative / weight.toFloat()).toInt()
+                (ore to upTo - given).also { given = upTo }
+            }
+        }
+
+        /**
          * The colony's map. The planet picks the home tile: the nearest tile of [biome] to the middle, or of any land when [biome]
          * is null. The map takes that tile's biome, and its river, lake and ruggedness.
          */
@@ -627,7 +677,14 @@ class GameMap(val w: Int, val h: Int) {
             return generate(w, h, seed, world.biome[world.homeTile], world.localTerrain())
         }
 
-        fun generate(w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null): GameMap {
+        /**
+         * A map of [w] by [h] cells. The ore veins follow [oreVeinPlan] for the hilliness of [local], unless [veins] gives the plan
+         * (battle maps pass [FIXED_ORE_VEINS], so a fight keeps the 18 veins it had before the map-size change).
+         */
+        fun generate(
+            w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null,
+            veins: List<Pair<Ore, Int>>? = null,
+        ): GameMap {
             val m = GameMap(w, h)
             m.biome = biome
             val rng = Rng(seed)
@@ -725,12 +782,11 @@ class GameMap(val w: Int, val h: Int) {
             }
             m.spawnX = sx; m.spawnY = sy
             m.connectSides(sx, sy)
-            // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. Lump sizes
-            // keep the ore per map where the old scattered veins left it.
-            val ores = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.HARDALLOY to 2, Ore.COMPONENTS to 3)
-            for ((ore, veins) in ores) {
-                val lump = if (ore == Ore.STEEL) 7 else if (ore == Ore.COMPONENTS) 3 else 4
-                repeat(veins) {
+            // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. The number of
+            // veins of each kind follows the map's area and hilliness (see [oreVeinPlan]), unless the caller gave the plan.
+            for ((ore, count) in veins ?: oreVeinPlan(w, h, local?.hills)) {
+                val lump = oreLumpSize(ore)
+                repeat(count) {
                     for (attempt in 0 until 80) {
                         val ox = rng.int(w); val oy = rng.int(h)
                         val start = m.idx(ox, oy)

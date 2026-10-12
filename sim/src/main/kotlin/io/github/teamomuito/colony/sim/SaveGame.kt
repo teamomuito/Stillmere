@@ -33,8 +33,12 @@ object SaveGame {
      *
      * 36 adds, at the end of each pawn record, the burn size of a fire on the pawn and the tick until which a melee hit keeps it
      * staggered (see [writePawn] and docs/fidelity/combat.md). Earlier saves read both as zero: not burning, not staggered.
+     *
+     * 37 changes no field and no layout. It marks the saves written after new colonies moved to a 250 by 250 map (docs/fidelity/map.md).
+     * The width and height have been written since version 14 and are read as before, so every save keeps the size it stores.
      */
-    private const val VERSION = 36
+    /** The version [write] writes by default. Tests compare against it, so they do not repeat the number. */
+    internal const val VERSION = 37
 
     /** Spoil times before version 35, which saved rot is rescaled from. */
     private const val OLD_MEAT_SPOIL_DAYS = 4f

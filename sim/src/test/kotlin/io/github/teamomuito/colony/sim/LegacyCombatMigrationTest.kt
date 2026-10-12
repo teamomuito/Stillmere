@@ -45,9 +45,9 @@ class LegacyCombatMigrationTest {
         assertTrue("no pawn is staggered", g.pawns.all { it.staggerUntil == 0L })
     }
 
-    @Test fun aVersionThirtyFiveSaveWrittenAgainIsVersionThirtySixAndKeepsItsCoat() {
+    @Test fun aVersionThirtyFiveSaveWrittenAgainIsTheCurrentVersionAndKeepsItsCoat() {
         val bytes = SaveGame.write(SaveGame.read(fixture))
-        assertEquals(36, versionOf(bytes))
+        assertEquals(SaveGame.VERSION, versionOf(bytes))
         val back = SaveGame.read(bytes)
         assertEquals(expect.getValue("coat.hp").toFloat(), back.colonists[0].apparel.last().hp, 1e-4f)
     }

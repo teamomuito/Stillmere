@@ -215,7 +215,7 @@ class Dialogs(val a: MainActivity) {
             }
             fun renderSize() {
                 sizeBox.removeAllViews()
-                for ((label, n) in listOf("Small 75" to 75, "Medium 100" to 100, "Large 150" to 150, "Huge 200" to 200)) sizeBox.addView(ui.button(label, 11f, selected = size == n) {
+                for ((label, n) in listOf("Standard ${Game.MAP_SIZE}" to Game.MAP_SIZE)) sizeBox.addView(ui.button(label, 11f, selected = size == n) {
                     size = n; g = Game(seed, GameMap.generateFor(size, size, seed, biome)); resetCrew(); renderSize(); renderCrew()
                 }, ui.lin(-2, -2, 0f, 0, 3, 4, 0))
             }

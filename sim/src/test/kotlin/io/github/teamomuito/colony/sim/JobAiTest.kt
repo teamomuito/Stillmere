@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private fun newGame(seed: Long): Game {
-    val g = Game(seed, GameMap.generateFor(100, 100, seed, Biome.TEMPERATE))
+    val g = Game(seed, GameMap.generateFor(Game.MAP_SIZE, Game.MAP_SIZE, seed, Biome.TEMPERATE))
     g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
@@ -174,8 +174,9 @@ class JobAiTest {
         val before = g.steelTotal()
         g.map.drop(ItemType.MEAL_HEARTH_STEW, 5, c.x, c.y)
         c.food = 0.05f
-        // Interrupted mid-haul: needs are checked every 10 ticks, so the eat job starts well before the walk ends.
-        assertTrue("the pawn now eats within one interrupt cycle", g.runUntil(10) { c.job?.type == JobType.EAT })
+        // Interrupted mid-haul: needs are checked once per interrupt cycle (tk(10) ticks, see HEALTH_STRIDE), so the eat job starts
+        // within that cycle, well before the walk ends.
+        assertTrue("the pawn now eats within one interrupt cycle", g.runUntil(tk(10)) { c.job?.type == JobType.EAT })
         assertEquals("nothing was delivered to the stockpile", 0, g.stockpileSteel())
         assertEquals("the load is back on the ground", 0, c.carryCount)
         assertEquals("steel conserved", before, g.steelTotal())

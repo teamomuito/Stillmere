@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 private fun newGame(seed: Long = 7, sc: Scenario = Scenario.SALVAGE_CREW): Game {
-    val g = Game(seed, GameMap.generateFor(100, 100, seed, Biome.TEMPERATE))
+    val g = Game(seed, GameMap.generateFor(Game.MAP_SIZE, Game.MAP_SIZE, seed, Biome.TEMPERATE))
     g.startNewColony(sc)
     return g
 }
@@ -43,7 +43,7 @@ class PathfinderTest {
 class WorldTest {
     @Test fun mapHasPlayableTerrainInEveryBiome() {
         for (b in Biome.entries) {
-            val m = GameMap.generate(100, 100, 42, b)
+            val m = GameMap.generate(Game.MAP_SIZE, Game.MAP_SIZE, 42, b)
             assertTrue("$b rock", m.terrain.count { it == Terrain.ROCK } > 200)
             assertTrue("$b ore", m.ore.count { it != Ore.NONE } > 10)
             assertTrue("$b land", m.terrain.count { it.passable && it != Terrain.WATER_SHALLOW } > 5000)
@@ -752,8 +752,10 @@ class MapSizeTest {
 
 class SettleTest {
     @Test fun caravanFoundsNewColonyAndOldOneIsArchived() {
-        // Seed 22: the random draws moved with the time base, and seed 21's trip now meets an ambush. This test is about settling.
+        // Random ambushes and finds on the road are the one part of the trip that depends on the seed. This test is about settling,
+        // so they are switched off, and the trip no longer depends on the seed.
         val g = newGame(22, Scenario.QUIET_ENCLAVE); g.quiet()
+        g.randomCaravanEvents = false
         g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY + 3, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.STEEL, 60, g.homeX, g.homeY)
         val homeTile = g.world.homeTile
@@ -799,8 +801,12 @@ class LifeTest {
         assertNotNull(baby)
         assertEquals(before + 1, g.pawns.count { !it.isAnimal })
         assertEquals(f.id, baby!!.mother)
+        // Only an idle adult feeds a baby. For the feeding, every colonist is idle and fed, so none goes for food, rest or work and
+        // takes the milk first. The old milk is removed and fresh milk is put down: milk spoils, and an old stack would rot away
+        // before the feeder reached it.
+        for (p in g.colonists) { for (w in WorkType.entries) p.priority[w.ordinal] = 0; p.job = null; p.food = 1f; p.rest = 1f; p.joy = 1f }
+        for (st in g.map.items.values.filter { it.type == ItemType.MILK }) g.map.take(g.map.idx(st.x, st.y), st.count)
         // Babies use 0.6 of the adult rate (1.6 a day), so one meal of milk is not enough for long: they need feeding about twice a day.
-        // Adults eat milk too, so restock it now: the test checks the feeding, not what is left over.
         g.map.drop(ItemType.MILK, 10, g.homeX, g.homeY)
         baby.food = 0.2f
         var fed = false
@@ -945,12 +951,15 @@ class ContentTest {
 
     @Test fun dormantMechsWakeNearColonists() {
         val g = newGame(54); g.quiet()
-        for (p in g.colonists) p.priority[WorkType.HAUL.ordinal] = 0   // hauling would walk the colonist away from the mech
+        // Work would walk a colonist away from the mech within the 200 ticks, so no colonist has any: each stays where the test puts it.
+        for (p in g.colonists) for (w in WorkType.entries) p.priority[w.ordinal] = 0
         val far = g.newMech(Race.HOOKTALON, g.homeX + 40, g.homeY + 40, -9)
         far.dormant = true
         g.run(200)
         assertTrue(far.dormant)
         g.colonists[0].x = far.x - 3; g.colonists[0].y = far.y
+        // Drafted, the colonist holds this spot, so only its distance from the mech decides the wake-up.
+        g.setDrafted(g.colonists[0], true)
         g.run(200)
         assertFalse(far.dormant)
     }
@@ -980,13 +989,18 @@ class RulesTest {
 
     @Test fun outfitPolicyKeepsArmorOffWorkers() {
         val g = newGame(62); g.quiet()
-        val p = g.colonists.first(); p.outfit = 1
+        // A bare-skinned colonist never wears apparel, so the test uses one who can.
+        val p = g.colonists.first { Trait.BARE_SKINNED !in it.traits }; p.outfit = 1
         for (o in g.colonists) if (o !== p) o.outfit = 1
         p.apparel.clear()
-        g.map.drop(ItemType.A_RIBBED_VEST, 1, p.x + 1, p.y)
+        // No colonist has work, so nothing carries the vest off. It lies on the colonist's own cell, so it is always in reach.
+        for (o in g.colonists) for (w in WorkType.entries) o.priority[w.ordinal] = 0
+        g.map.drop(ItemType.A_RIBBED_VEST, 1, p.x, p.y)
         g.run(600)
         assertTrue(p.apparel.none { it.type == ItemType.A_RIBBED_VEST })
+        // A new policy takes effect at the colonist's next decision, so its current job ends now.
         p.outfit = 2
+        p.job = null; p.clearPath()
         g.run(6000)
         assertTrue(p.apparel.any { it.type == ItemType.A_RIBBED_VEST })
     }

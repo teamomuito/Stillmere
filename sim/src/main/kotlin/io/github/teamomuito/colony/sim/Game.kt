@@ -115,6 +115,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var autosaveHook: (() -> Unit)? = null
     var debugHook: ((String) -> Unit)? = null
     var mentalBreaksEnabled = true
+    /** Random ambushes, cache finds and lost trails on the road (see enterTile in Caravans.kt). Tests switch them off, so a trip does not depend on the seed. Not saved. */
+    var randomCaravanEvents = true
     /** True for battle maps (caravan fights). */
     var encounter = false
     /** A caravan fight that has been asked for but not begun yet; the world waits for it. */
@@ -719,7 +721,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     }
 
     companion object {
-        /** Side length of a new colony's map. Saves store their own size and keep it when read (100 by 100 for older saves). */
+        /**
+         * Side length of a new colony's map. Saves store their own width and height and keep them when read, so an older save keeps
+         * the size it stores. Some committed fixtures are 100 by 100 and others 250 by 250 (docs/fidelity/map.md, "Saves on disk").
+         */
         const val MAP_SIZE = 250
         /** Ticks between slow updates (weather, power, climate, plants, spoilage, mood). */
         val SLOW_TICK = tk(250).toLong()

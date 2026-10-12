@@ -54,7 +54,7 @@ class LegacyEconomyMigrationTest {
     }
 
     @Test fun aVersionThirtyFourSaveWrittenAgainIsTheCurrentVersion() {
-        assertEquals(36, versionOf(SaveGame.write(SaveGame.read(fixture))))
+        assertEquals(SaveGame.VERSION, versionOf(SaveGame.write(SaveGame.read(fixture))))
     }
 
     @Test fun aRescaledRotIsNotRescaledAgainOnTheNextLoad() {
