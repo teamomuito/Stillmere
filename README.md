@@ -26,9 +26,10 @@
 ## About
 
 Stillmere is a fan-made, original implementation of the colony-simulation genre, inspired by
-RimWorld by Ludeon Studios. It is not affiliated with or endorsed by Ludeon Studios, and it contains no
-RimWorld code or assets. All art is drawn procedurally at runtime, and all code in this repository is
-original.
+RimWorld by Ludeon Studios. It is not affiliated with or endorsed by Ludeon Studios. This repository contains
+no RimWorld code or assets, and all code in it is original. Mechanics and numbers were checked against public
+references and against decompiled RimWorld source. Each value's source is recorded in `docs/fidelity`. All art is
+drawn procedurally at runtime.
 
 The project aims to play like its inspiration without adding DLC content. Balance numbers are the author's own
 tuning. There is no mod support, and caravan battles take place on a small temporary map without player

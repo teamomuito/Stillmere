@@ -10,7 +10,8 @@ The `sim/` module stays pure JVM with no Android dependencies.
 
 - Match mechanics, formulas and numbers. Record every constant you implement in `docs/fidelity/<system>.md` with its source.
   Mark anything you're not certain of as `UNVERIFIED`.
-- Never copy RimWorld text strings, art, XML defs or decompiled code. Write original wording and original assets.
+- Never copy RimWorld text strings, art, XML defs or decompiled code into the project. Write original wording and original assets.
+- Decompiled RimWorld source, such as the `Chillu1/RimWorldDecompiled` repository, may be read as a reference for numbers, formulas and mechanics. Record each value taken from it in `docs/fidelity/<system>.md` with the repository, file and line as its source, tagged `D`. Copy no identifier, comment, string or code block from it; write the logic in original code.
 - Exclude DLC content (Royalty, Ideology, Biotech, Anomaly, Odyssey). If an existing feature is DLC-sourced, flag it in the
   gap report. Do not delete it without asking.
 
