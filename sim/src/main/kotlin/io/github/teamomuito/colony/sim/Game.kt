@@ -188,23 +188,14 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         val child = rng.pick(Backstories.childhood)
         val adult = rng.pick(Backstories.adulthood)
         p.backstory = "${child.title}, ${adult.title.lowercase()}"
-        for (s in SkillType.entries) p.skill[s.ordinal] = if (rng.chance(0.15f)) rng.range(0, 2) else rng.range(1, 8)
-        for ((s, v) in child.skills) p.skill[s.ordinal] = max(p.skill[s.ordinal], v + rng.range(-1, 2))
-        for ((s, v) in adult.skills) p.skill[s.ordinal] = max(p.skill[s.ordinal], v + rng.range(-1, 2))
         for (w in adult.disabled) p.incapable = p.incapable or (1 shl w.ordinal)
-        val n = rng.range(1, 3)
-        repeat(n) {
-            val s = rng.int(SkillType.entries.size)
-            p.passion[s] = if (rng.chance(0.3f)) 2 else 1
-            p.skill[s] = min(20, p.skill[s] + 2)
-        }
-        repeat(rng.range(1, 3)) {
-            val t = Trait.entries[rng.int(Trait.entries.size)]
-            val clash = p.traits.any { o -> conflicts(o, t) || o == t }
-            if (!clash) p.traits.add(t)
-        }
+        drawTraits(p, child.traits + adult.traits)
         if (p.traits.none { it == Trait.SAME_SEX_DRAWN || it == Trait.BOTH_DRAWN || it == Trait.UNROMANTIC } && rng.chance(0.16f)) p.traits.add(rng.pick(listOf(Trait.SAME_SEX_DRAWN, Trait.BOTH_DRAWN, Trait.UNROMANTIC, Trait.BOTH_DRAWN)))
-        if (Trait.STREET_SCRAPPER in p.traits) p.passion[SkillType.CLOSE_COMBAT.ordinal] = 2
+        // Base levels, then passions. Passions never add levels (Verse/PawnGenerator.cs:1857-1954).
+        val gains = child.skills.map { it.key to it.value } + adult.skills.map { it.key to it.value }
+        SkillRules.generateLevels(rng, p.age, gains).copyInto(p.skill)
+        val forced = p.traits.mapNotNull { SkillRules.forcedPassion(it) }
+        SkillRules.generatePassions(rng, p.skill, forced, { s -> p.skillDisabled(s) }, adult = p.age >= 13).copyInto(p.passion)
         if (Trait.BARE_SKINNED in p.traits) { /* will undress when the schedule allows */ }
         p.x = x; p.y = y; p.fromX = x; p.fromY = y
         for (w in WorkType.entries) {
@@ -231,6 +222,25 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         recomputeHealth(p)
         pawns.add(p)
         return p
+    }
+
+    /**
+     * Traits for a new pawn. The backstory traits are added first. A trait the pawn already has is skipped; a clash is not
+     * checked, as for vanilla forced traits (Verse/PawnGenerator.cs:1461-1492; RimWorld/TraitSet.cs:258-270). The target of
+     * 1 to 3 is drawn after them (Verse/PawnGenerator.cs:1496), and the traits held count toward it (:1495). Random draws
+     * then add traits until the target is reached. A clashing or repeated draw is redrawn, up to target + 500 attempts
+     * (Verse/PawnGenerator.cs:1563-1595).
+     */
+    internal fun drawTraits(p: Pawn, backstoryTraits: List<Trait>) {
+        for (t in backstoryTraits) if (t !in p.traits) p.traits.add(t)
+        val target = rng.range(1, 3)
+        var attempts = 0
+        while (p.traits.size < target && attempts < target + 500) {
+            attempts++
+            val t = Trait.entries[rng.int(Trait.entries.size)]
+            if (p.traits.any { o -> o == t || conflicts(o, t) }) continue
+            p.traits.add(t)
+        }
     }
 
     fun conflicts(a: Trait, b: Trait): Boolean {
@@ -614,6 +624,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     // ------------------------------------------------------------------ pawn upkeep
     private fun pawnTick(p: Pawn) {
         if (p.dead) return
+        // Skill decay runs every 200 ticks per pawn, staggered by id (RimWorld/Pawn_SkillTracker.cs:101).
+        if (p.hasSkills && (tick + p.id) % SkillRules.INTERVAL_TICKS == 0L) p.skillIntervalTick()
         val sleeping = p.job?.type == JobType.SLEEP && p.job?.stage == 1
         if (p.race.mech) { p.food = 1f; p.rest = 1f }
         // Needs.
@@ -685,6 +697,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     private fun hourlyTick() {
         hourlyEvents()
         alliesHourly()
+        // The daily learning cap starts again at midnight, in battle maps too (RimWorld/Pawn_SkillTracker.cs:103-112).
+        if (hour == 0) for (p in pawns) p.xpToday.fill(0f)
         // A fight on a temporary map does not run the colony's or the world's daily upkeep.
         if (hour == 0 && !encounter) { factionsDaily(); lifeDaily() }
         autosaveHook?.invoke()

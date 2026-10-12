@@ -253,22 +253,33 @@ not vanilla thoughts as far as I know (**UNVERIFIED**) and look invented.
 
 ### 3.6 Skills, traits, passions, backstories
 
-**Status: Partial.** **Priority 2.**
-**Files:** `Defs.kt` (`SkillType`, `Trait`), `Pawn.kt` (`gainXp`, `workSpeed`, `Backstories`, `Names`), `Game.kt` (`newHuman`, `conflicts`).
+**Status: Partial** (learning, the XP curve, decay, the daily cap, the XP per work tick and per attack, and the generation of base levels and passions now follow the decompiled reference, see [skills-traits.md](skills-traits.md)). **Priority 2.**
+**Files:** `Skills.kt` (`SkillRules`), `Pawn.kt` (`gainXp`, `skillIntervalTick`), `Game.kt` (`newHuman`, `pawnTick`, `hourlyTick`), `JobDrivers.kt` (`doWork`), `Ai.kt` (`fire`, melee), `Health.kt` (`tendPawn`), `Defs.kt` (`SkillType`, `Trait`), `SaveGame.kt` (version 33).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
 | Skills | 12, cap 20 | 12, cap 20 | none | M |
-| Learning rate, no / minor / major passion | 1.0 / 1.4 / 2.0 | **0.35 / 1.0 / 1.5** | no-passion learns about 3x too fast | V (https://rimworldwiki.com/wiki/Passion) |
-| Skill decay | none | **XP drains above level 10, faster at higher levels** | **missing** | V (https://rimworldwiki.com/wiki/Skill) |
-| XP per level | `2500 + 400 * level` | ? | | ? |
-| Work speed from skill | `0.4 + 0.075 * level` linear | per-stat curves | shape differs | M |
-| Traits | 42, no degrees, 1 to 3 at random | around 50, with degrees (for example two levels of work speed) | partial | M |
-| Backstories | 33 (11 childhood, 22 adulthood) | hundreds | tiny set | M |
-| Backstory effects | skill bonuses, a few disabled work types; no trait grants, no skill penalties | all three | partial | M |
+| Learning rate, no / minor / major passion | 0.35 / 1.0 / 1.5 | 0.35 / 1.0 / 1.5 | none | D (RimWorld/SkillRecord.cs:379-381) |
+| Daily learning cap | 4000 XP a day, then 0.2 | same | none | D (SkillRecord.cs:33, 37, 391) |
+| Skill decay | from level 10: 0.1 to 12 XP per 200 ticks; the level drops at -1000 XP | same | none (no use check) | D (SkillRecord.cs:207-249) |
+| XP per level | 1000 + 1000 x level to 9; 10000 + 2000 x (level - 9) to 19; 30000 above | same | none | D (SkillRecord.cs:47-52) |
+| Passion budget | 5 + Gaussian (+/-4); major 1.5, minor 1; passions add no levels | same | none | D (Verse/PawnGenerator.cs:1857-1870) |
+| Base level | uniform 0 to 4, then backstory gains x 1.0 to 1.4, the age factor and the final compression | same, for skills whose flag is the default | per-skill flags are XML (UNVERIFIED) | D (PawnGenerator.cs:1963-2016) |
+| XP per work tick | mining 0.07, plant sowing and harvest 0.085, construction and deconstruction 0.25, repair 0.05, research 0.1, bills 0.1, animal gathering 0.13 | same | none for these jobs | D (JobDriver_*.cs, Toils_Recipe.cs:188) |
+| Combat XP | shooting 170 (hostile) or 20 x cycle seconds per burst; melee 200 x cycle seconds per attack | same | none | D (Verb_Shoot.cs:14-16; Verb_MeleeAttack.cs:31) |
+| Medicine XP per tend | 500 (animal 175) x 0.5 | 500 (175) x medicine factor; default 0.5 | per-medicine factors are XML (UNVERIFIED) | D (Toils_Tend.cs:68-70) |
+| Eager pupil / late bloomer learning | 1.4 / 0.6 | XML stat | values UNVERIFIED | UNVERIFIED |
+| Traits | 42, no degrees, 1 to 3 drawn (a clash is redrawn) | around 50, with degrees (for example two levels of work speed) | degrees and commonality missing | M |
+| Backstories | 33 (11 childhood, 22 adulthood) | hundreds | tiny set; titles are original | M |
+| Backstory effects | skill gains (summed, x 1.0 to 1.4), a few disabled work types; the forced-trait mechanism is in place, and no backstory uses it yet | all three, with trait grants | trait lists and trait skill grants open | M |
 
 All 42 traits have some effect in code (several only add a mood thought: meat-first, machine-minded, flame-drawn). the traits labelled Easy company, Meat-first and Inventive eye (names.md section 6.1) are not traits I recognise from the base game
 (**UNVERIFIED**).
+
+Still open: trait degrees and skill grants, trait and backstory commonality and lists (XML), passion conflicts, and the
+sexuality chance (ambiguous, kept as is). Child passions before 13 (PawnGenerator.cs:1886-1904, ungated by DLC) and the kind
+extra levels and ranges (PawnGenerator.cs:1998-2015) are not modelled; the first is unreachable from `newHuman`, which makes
+adults only. The derived-cache caveat is in 3.17: the health caches are fixed, and the room cache and room temperatures are open.
 
 ### 3.7 Work and jobs
 
@@ -371,7 +382,7 @@ because it places ore under a drill by hand.
 |---|---|---|---|---|
 | Year | 60 days | 60 days | none | V (https://rimworldwiki.com/wiki/Time) |
 | Baby / child / teen / adult | 0 to 2, 3 to 12, 13 to 17, 18+ | ? | | ? |
-| Growth moments | at 7, 10, 13 (passion, skill, trait) | recalled as a Biotech mechanic | **DLC-sourced candidate. UNVERIFIED. Flagged, not removed.** | M |
+| Growth moments | at 7, 10, 13 (passion, skill, trait) | Biotech only: growth points at Verse/Pawn_AgeTracker.cs:371, each birthday moment at :703 | **DLC-sourced: flagged, not removed.** The reference rows for its passion, skill and trait gains are not adopted. | D |
 | Pregnancy | 30 days; 6% chance per day for a partnered woman aged 16 to 45 | ? | | ? |
 | Old age | chronic conditions from 40 to 62; death roll from 80 | ? | | ? |
 | Social interactions | 8 kinds: chitchat, insult, argument, compliment, romance, and three friendly talks (their thoughts are Candid exchange, Warm talk and Friendly ribbing) | more, including slights and marriage proposals | partial | M, UNVERIFIED |
@@ -454,6 +465,11 @@ options, weather and biome effects on travel.
 * Saves: versioned format (28), old versions still load (tested back to version 1), autosave with a recovery copy, named saves, quicksave, archive of settled colonies, damage detection with fallback. This is the best-tested area (`SaveFormatTest`, `SaveRestoreTest`, `SaveSessionTest`, `SaveStoreTest`).
 * Win condition: ship (navigation brain, 2 engines, core furnace, cold pod) then launch. Vanilla's ship needs a different part list (**UNVERIFIED**).
 * Determinism caveat for saves: R2.
+* Derived caches are not saved. The health caches (`cap`, `pain`, `healthDirty`) are recomputed on load. In the live game they are
+  now refreshed on every read once an input has changed, so the live and loaded games read the same values (fixed in 3.6;
+  `HealthCacheTest`). The room cache (`roomDirty`) is still cleared only at the next slow tick in the live game, while a load clears
+  it at once, so the two can differ for that window (**open**). Room temperatures (`roomTemp`) are not saved at all, and a load starts
+  every room at the outdoor temperature (**open**; it needs a save format change, version 34 with a fixture).
 
 ## 4. README claims checked against the code
 
@@ -562,7 +578,7 @@ Per `CLAUDE.md`: flagged, not deleted.
 4. **Combat model is custom** end to end: weapon stats, accuracy, armour, melee, cover, no burning. (3.11)
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)
 6. **Health depth:** 29 parts, simplified bleeding and immunity, limited chronic disease, surgery and medicine. (3.4)
-7. **Skill model:** learning rates 1.0/1.4/2.0 against 0.35/1.0/1.5, no decay, thin backstories, no trait degrees. (3.6)
+7. ~~**Skill model:** learning rates, decay, the XP curve, the daily cap and the XP per work tick and attack.~~ **Done** (round 14, `skills-traits.md`). Open: trait degrees and skill grants, trait and backstory data, passion conflicts. (3.6)
 8. **Production numbers:** research cost model, recipes, building costs, power draws (glow panel, battery), crop growth 1.8x fast; subsoil auger cannot find ore; hidden Core items. (3.8, 3.9, 3.14)
 9. **Rule violations in `sim/`:** wall clock and UUID in `SaveStore`, hash-order save bytes, platform trig. Small fixes. (2.1)
 10. **Committed signing key** (X1). Labels and text copied from RimWorld are resolved for the verify check (2.2).
@@ -666,3 +682,34 @@ What this means:
 
 The version does not match the pinned target 1.6.4850. The owner has not yet chosen between keeping 1.6.4850 and re-pinning to 1.6.9438.38202.
 
+## 13. Skills, traits and passions (3.6), round 14
+
+Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, and the rows not adopted are in [skills-traits.md](skills-traits.md).
+
+* **Adopted from the reference (D):** learning factors 0.35, 1.0, 1.5 and the daily cap (4000, then 0.2); the XP curve; decay from level 10 every 200 ticks; the level cap at 20 and the drop at -1000 XP; the XP per work tick for mining, plants, construction, repair, research, bills, and animal gathering; shooting and melee XP per cycle second (the melee cycle includes the warm-up term, zero in the data); medicine XP per tend; the passion budget, forced passions and the order of passions; base levels (uniform 0 to 4), the backstory gains, the age factor and the final compression; the trait count with redraw on a clash, with backstory traits counted toward the target (PawnGenerator.cs:1495-1510).
+* **Removed (no reference basis):** the flat per-meal and per-gear XP (40 and 60), the per-tick tending XP, the flat 220 per tend, the old 15%-chance base level, and the +2 levels for each passion.
+* **Kept, marked UNVERIFIED:** the Eager pupil (1.4) and Late bloomer (0.6) learning factors (XML stats in vanilla), and the Stillmere backstory gains (design values).
+* **Not adopted:** trait degrees and skill grants, trait commonality, passion conflicts, backstory trait lists (all XML data); the growth moments, which are DLC and flagged (3.12).
+* **Discrepancies:** the brief said `VERSION` is 31; it is 32 at HEAD. The brief said decay applies to unused skills; the decompiled code has no use check, so it does not. The reference's cooking citation (`JobDrivers.kt:1191`) is butchering.
+* **Save version 33.** One new saved field: `xpToday` (the daily counter, 12 floats per pawn), gated on version 33. Two version-32 fixtures are tested by `LegacySkillsMigrationTest`: `legacy/colony_v32.sav` (all XP zero at its save point) and `legacy/colony_v32_xp.sav` (the same colony with non-zero XP, written at version 32; the current writer reproduces the original `colony_v32.sav` byte for byte at version 32, so the layout is unchanged). Enums unchanged.
+* **Tests changed, each for a stated reason:** the version assertions (32 to 33); a marksmanship test that now holds the skill level for each shot, since shots teach; a ransom test whose prisoners now get a content thought (the new traits lower some moods, and a prisoner below 0.28 tries to escape, which blocks offers; no assertion changed); the melee XP test now expects the full-cycle term.
+* **Superseded in section 14:** the next bullet (the relaxed `JobAiTest` checks and the masked save test) describes the state after round 14, not now.
+* **Two assertions relaxed, and one masked:** `JobAiTest` (the haul and build tests) used to require no reservation at all. The colonist now equips a bow, which holds one key, so the check now requires the held keys to be exactly the current job's key. That allows that one key. A haul reservation on another tile still fails it. A leftover on the same key as the current job would not be told apart from the job's own key; no case here shares a key. `SaveRestoreTest` (the blast-on-save test) flushes the health caches before saving. That **masks** the save and load divergence in 3.17 and does not fix it.
+* **Review fixes in this round:** the citations to `Verse/GenTicks.cs:67-70` and `Verse/Verb_Shoot.cs:14-16` (were `RimWorld/`); the shooting amounts are at :14 (not :15, the cycle); the growth birthday gate is at `Verse/Pawn_AgeTracker.cs:703` (`:371` gates growth points); the recipe factor is `Verse/RecipeDef.cs:65`; the decay hash phase is in the decompile (`Verse/Gen.cs:214-217, 254-257`), and Stillmere keeps its id stagger (C); backstory traits count toward the trait target (`PawnGenerator.cs:1495-1510`), with a test; child passions before 13 (`PawnGenerator.cs:1886-1904`, ungated) and the kind extra levels and ranges (`PawnGenerator.cs:1998-2015`) are recorded as not modelled, with the unreachable path explained; the melee cycle includes the warm-up term; the Gaussian floor 1e-7 is recorded as Stillmere's guard (C); the version 33 note is in `SaveGame.kt`; the non-zero XP fixture is new.
+* **Tests:** 601 pass, 0 failures, 0 errors, 0 skipped (`./gradlew :sim:test --console=plain`). New: `SkillsTraitsTest` (40, two of them for the trait count), `LegacySkillsMigrationTest` (10, four of them for the non-zero XP fixture).
+* **Open:** the save caveat for derived caches (3.17); trait data (3.6); the per-skill backstory flags and per-medicine factors (UNVERIFIED); the work-speed curve (3.6 and 3.7, no reference row).
+* **Nothing is committed.**
+
+## 14. Review fixes to section 13
+
+Made on branch `ccr-41984ede-stlmp4`, after a review of section 13. The plan, the constants and the rows not adopted are in [skills-traits.md](skills-traits.md).
+
+* **Health caches (determinism).** The blast-on-save test had flushed the health caches before saving, which hid a difference between the live and the loaded game. The flush is removed, and the test is back to its original form. `Pawn.cap` and `Pawn.pain` now refresh on read whenever an input has changed. Every write to an input sets the mark (`Health.kt`, `Pawn.kt`, `Mood.kt`, `World.kt`, `Life.kt`). `HealthCacheTest` (3 tests) checks each read against a fresh computation, and the loaded game against the live one. Removing one of the marks makes it fail (checked).
+* **Rooms (open).** The room cache is stale in the live game until the next slow tick after a building change, and room temperatures are not saved. Not fixed here; see 3.17.
+* **Skills code.** `applyXp` is now a climb (the rise, with the cap) followed by a fall (the drop, with the level-0 hold). The passion budget is a purse that buys a stock of passions, and forced and unforced passions draw from it in turn. The parameter name `force` is gone. Both were checked against the previous code by a temporary test (about 3 million XP inputs, 200,000 passion seeds, the same RNG draws after each call); the test was deleted, and the results match exactly.
+* **Backstory traits.** Forced backstory traits skip repeats, not clashes, as in the reference (`Verse/PawnGenerator.cs:1461-1492`; `RimWorld/TraitSet.cs:258-270`). The doc and the code comment said the opposite. Two tests added (`SkillsTraitsTest`).
+* **Draw order.** The doc said the target is drawn before the backstory traits. The reference draws it after the forced traits (`Verse/PawnGenerator.cs:1496`), and the code did the same. The doc is corrected, and the row now states the count of traits held.
+* **JobAiTest.** The two reservation checks are strict again. The weapons are removed from these two tests, so no equip job (which holds a key of its own) can start during the check.
+* **Citations.** The 66 citations in `skills-traits.md` were opened at their lines, and their values checked. The short-name citations in the rows not adopted (`TraitUtility.cs`, `TraitDegreeData.cs`, `GrowthUtility.cs`, `PawnGenerator.cs:1429-2015`, `Toils_Recipe.cs:107`) were checked too. The `Verse/PawnGenerator.cs:1563-1595` attempt cap is checked.
+* **Save format.** Unchanged. `VERSION` is 33 and nothing saved changed, so there is no bump and no new fixture. The brief said 31 at the start of the run; the tree had 33 (section 13 has 32 at HEAD).
+* **Tests:** 606 pass, 0 failures, 0 errors, 0 skipped (`./gradlew :sim:test --console=plain`, from a clean test task). Section 13 had 601: `SkillsTraitsTest` now has 42, and `HealthCacheTest` (3) is new. Section 5's totals were out of date before this round and are not refreshed here.

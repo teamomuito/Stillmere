@@ -114,8 +114,9 @@ fun Game.fire(p: Pawn, t: Pawn) {
             }
             shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + tk(5) + k * tk(2), anyHit, if (w == Weapon.BOW || w == Weapon.LONGSTAVE) 3 else 0))
         }
-        p.attackCd = max(tk(8), (w.cooldownTicks * (if (Trait.QUICK_TRIGGER in p.traits) 0.85f else if (Trait.STEADY_AIM in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
-        p.gainXp(SkillType.MARKSMANSHIP, 4f * w.burst)
+        val cooldown = max(tk(8), (w.cooldownTicks * (if (Trait.QUICK_TRIGGER in p.traits) 0.85f else if (Trait.STEADY_AIM in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.attackCd = cooldown
+        shootingXp(p, t, w, cooldown)
     } else {
         if (d > 2.1f) return
         val hit = rng.chance(hitChance(p, t, w, d, cover = 0f))
@@ -125,10 +126,30 @@ fun Game.fire(p: Pawn, t: Pawn) {
             if (p.isAnimal) dmg *= (0.7f + 0.3f * p.race.size)
             dealDamage(t, w.kind, dmg, w.armorPen, p)
         }
-        p.attackCd = max(tk(10), (w.cooldownTicks / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
-        p.gainXp(SkillType.CLOSE_COMBAT, 4f)
+        val cooldown = max(tk(10), (w.cooldownTicks / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.attackCd = cooldown
+        // Every attack learns, hit or miss, unless the target is downed or a colony mechanoid (RimWorld/Verb_MeleeAttack.cs:31).
+        if (!t.downed && !colonyMech(t)) p.gainXp(SkillType.CLOSE_COMBAT, SkillRules.MELEE_XP_PER_SECOND * SkillRules.cycleSeconds(fullCycleTicks(w, cooldown)))
     }
 }
+
+/**
+ * The full cycle of one attack in ticks: warm-up, cooldown, and the spacing between a burst's shots (Stillmere spaces them
+ * tk(2) apart). Melee weapons carry no warm-up in the data and fire one shot, so their cycle is their cooldown
+ * (Verse/VerbProperties.cs:579-581).
+ */
+private fun fullCycleTicks(w: Weapon, cooldown: Int): Int = w.warmupTicks + cooldown + (w.burst - 1) * tk(2)
+
+/** Shooting XP for one burst, at warm-up completion, for a standing target that is not a colony mechanoid (Verse/Verb_Shoot.cs:14-16). */
+private fun Game.shootingXp(p: Pawn, t: Pawn, w: Weapon, cooldown: Int) {
+    if (t.downed || colonyMech(t)) return
+    p.gainXp(SkillType.MARKSMANSHIP, SkillRules.shootingXpPerSecond(hostileBetween(p, t)) * SkillRules.cycleSeconds(fullCycleTicks(w, cooldown)))
+}
+
+private fun colonyMech(t: Pawn) = t.race.mech && t.faction == Faction.PLAYER
+
+/** Hostile when the two pawns are on different sides and at least one is hostile. A stand-in for vanilla's HostileTo (**C**). */
+private fun hostileBetween(p: Pawn, t: Pawn) = t.faction != p.faction && (t.hostile || p.hostile)
 
 internal fun Game.draftedAI(p: Pawn) {
     // Retreating pawns walk to the edge and leave, whatever else they could be doing.

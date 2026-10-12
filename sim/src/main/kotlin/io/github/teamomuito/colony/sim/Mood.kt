@@ -75,9 +75,11 @@ fun Game.comfortTick(p: Pawn) {
     if (p.cap[Cap.FILTRATION.ordinal] < 0.3f && !p.isAnimal) {
         val h = tox ?: addHediff(p, HediffKind.TOXIN_LOAD, 0f)
         h.severity = min(1f, h.severity + 0.01f)
+        p.healthDirty = true
         if (h.severity >= 1f) die(p, "organ failure")
     } else if (tox != null) {
         tox.severity -= 0.0012f
+        p.healthDirty = true
         if (tox.severity <= 0f) removeHediff(p, HediffKind.TOXIN_LOAD)
     }
     // Addiction severity is the chemical need: it falls each day. Each addiction in withdrawal adds a craving. The cravings
@@ -87,6 +89,7 @@ fun Game.comfortTick(p: Pawn) {
     for (h in p.hediffs.toList()) {
         if (h.kind !in DrugRules.ADDICTIONS) continue
         h.severity = max(0f, h.severity - addictFall)
+        p.healthDirty = true
         if (h.severity <= DrugRules.WITHDRAWAL_LEVEL) craving += DrugRules.CRAVING_PER_ADDICTION
     }
     if (craving > 0f) {

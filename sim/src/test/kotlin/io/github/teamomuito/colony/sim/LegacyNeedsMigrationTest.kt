@@ -53,8 +53,9 @@ class LegacyNeedsMigrationTest {
         }
     }
 
-    @Test fun aVersionThirtyOneSaveWrittenAgainIsVersionThirtyTwo() {
-        assertEquals(32, versionOf(SaveGame.write(SaveGame.read(fixture))))
+    /** Version 33 added the daily skill counter (docs/fidelity/skills-traits.md); a version-31 save written again is version 33. */
+    @Test fun aVersionThirtyOneSaveWrittenAgainIsVersionThirtyThree() {
+        assertEquals(33, versionOf(SaveGame.write(SaveGame.read(fixture))))
     }
 
     @Test fun needsAndToleranceSurviveASaveAtVersionThirtyTwo() {

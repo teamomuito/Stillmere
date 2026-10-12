@@ -125,9 +125,19 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     val hediffs = ArrayList<Hediff>()
     var bloodLoss = 0f
     val parts: List<PartDef> get() = race.body
+    /**
+     * Set whenever an input of the capacities and pain changes: injuries, hediffs, blood loss, implants or pregnancy. The
+     * capacities and pain are a cache of those inputs. A read of [cap] or [pain] refreshes the cache while this is set, so a
+     * read never returns a value the inputs no longer give. Not saved: SaveGame recomputes the cache when it loads a pawn.
+     */
     var healthDirty = true
-    val cap = FloatArray(Cap.entries.size) { 1f }
-    var pain = 0f
+    internal val capCache = FloatArray(Cap.entries.size) { 1f }
+    internal var painCache = 0f
+    val cap: FloatArray get() { if (healthDirty) refreshHealthCache(this); return capCache }
+    /** Pain from the cache. Assigning a value sets the cache until the next refresh; tests use this to set a state directly. */
+    var pain: Float
+        get() { if (healthDirty) refreshHealthCache(this); return painCache }
+        set(value) { painCache = value }
     var careLevel = 2 // 0 none, 1 herbal, 2 any medicine
     var fullHealthCache = 1f
     val implants = HashMap<Int, Implant>()
@@ -137,6 +147,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     // Skills and traits
     val skill = IntArray(SkillType.entries.size)
     val xp = FloatArray(SkillType.entries.size)
+    /** XP learned today per skill, for the daily cap. Reset at the start of each day. Saved from version 33. */
+    val xpToday = FloatArray(SkillType.entries.size)
     val passion = IntArray(SkillType.entries.size)
     val priority = IntArray(WorkType.entries.size) { 3 }
     val traits = ArrayList<Trait>()
@@ -249,14 +261,43 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
         return max(tk(3), Math.round(t * TIME_SCALE))
     }
 
+    /** Only humanlike pawns have skills (RimWorld/PawnComponentsUtility.cs:77-81). Animals and mechanoids do not learn. */
+    val hasSkills get() = !isAnimal && !race.mech
+
+    fun skillDisabled(s: SkillType): Boolean = SkillRules.skillDisabled(s, incapable)
+
+    /**
+     * Learns XP for [s]. The rate is the passion factor, then the trait factors, then the daily cap: once the skill has
+     * gained more than the cap today, the rest of today's XP learns at the saturated factor (RimWorld/SkillRecord.cs:371-397).
+     */
     fun gainXp(s: SkillType, amount: Float) {
+        if (!hasSkills || amount <= 0f || skillDisabled(s)) return
         val i = s.ordinal
-        var mult = when (passion[i]) { 2 -> 2.0f; 1 -> 1.4f; else -> 1.0f }
-        if (Trait.EAGER_PUPIL in traits) mult *= 1.4f
-        if (Trait.SLOW_STUDY in traits) mult *= 0.6f
-        xp[i] += amount * mult
-        val need = 2500f + skill[i] * 400f
-        if (xp[i] >= need && skill[i] < 20) { xp[i] -= need; skill[i]++ }
+        var rate = SkillRules.passionFactor(passion[i])
+        if (Trait.EAGER_PUPIL in traits) rate *= 1.4f
+        if (Trait.SLOW_STUDY in traits) rate *= 0.6f
+        if (xpToday[i] > SkillRules.DAILY_FULL_RATE_XP) rate *= SkillRules.SATURATED_FACTOR
+        addXp(i, amount * rate)
+    }
+
+    /** Adds XP already scaled by the rate, and records it for today. Negative amounts are decay. */
+    private fun addXp(i: Int, gained: Float) {
+        xpToday[i] += gained
+        val (lvl, x) = SkillRules.applyXp(skill[i], xp[i], gained)
+        skill[i] = lvl
+        xp[i] = x
+    }
+
+    /**
+     * The decay interval for every skill: a skill at level 10 or above loses XP, more at higher levels, whether or
+     * not it was used (RimWorld/SkillRecord.cs:207-249). Skills that are disabled do not decay.
+     */
+    fun skillIntervalTick() {
+        if (!hasSkills) return
+        for (i in skill.indices) {
+            val d = SkillRules.decayPerInterval(skill[i])
+            if (d != 0f && !skillDisabled(SkillType.entries[i])) addXp(i, d)
+        }
     }
 
     fun addThought(label: String, mood: Float, now: Long, duration: Int) {

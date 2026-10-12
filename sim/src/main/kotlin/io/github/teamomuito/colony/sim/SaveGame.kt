@@ -19,8 +19,11 @@ object SaveGame {
      *
      * 32 adds, at the end of each pawn record: the outdoors and indoors needs, the zero-rest counter, the break timers and
      * cooldown, and drug tolerance (see [writePawn] and docs/fidelity/needs-mood.md). Earlier saves read these as their defaults.
+     *
+     * 33 adds, at the end of each pawn record, the XP each skill learned today (12 floats, the daily learning cap; see [writePawn] and
+     * docs/fidelity/skills-traits.md). Earlier saves read these as zero, which is the value at the start of a day.
      */
-    private const val VERSION = 32
+    private const val VERSION = 33
 
     /** Saves older than this count ticks in the old base of 1,000 ticks per hour. Their times are converted when read. */
     private const val TIME_BASE_VERSION = 25
@@ -347,6 +350,7 @@ object SaveGame {
             o.writeInt(p.drugTolerance.size)
             for ((drug, tolerance) in p.drugTolerance) { o.writeInt(drug.ordinal); o.writeFloat(tolerance) }
         }
+        if (version >= 33) for (x in p.xpToday) o.writeFloat(x)
     }
 
     fun read(data: ByteArray): Game {
@@ -614,6 +618,7 @@ object SaveGame {
             p.moodBelowExtremeTicks = i.readInt(); p.moodBelowMajorTicks = i.readInt(); p.moodBelowMinorTicks = i.readInt(); p.breakCooldown = i.readInt()
             repeat(i.readInt()) { val drug = ItemType.entries[i.readInt()]; p.drugTolerance[drug] = i.readFloat() }
         }
+        if (version >= 33) for (k in p.xpToday.indices) p.xpToday[k] = i.readFloat()
         return p
     }
 }

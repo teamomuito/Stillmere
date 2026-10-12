@@ -55,7 +55,7 @@ private fun Game.growthMoment(p: Pawn) {
     p.skill[s] = min(20, p.skill[s] + 2)
     if (p.age == 13) {
         val t = if (rng.chance(0.16f)) rng.pick(listOf(Trait.SAME_SEX_DRAWN, Trait.BOTH_DRAWN, Trait.UNROMANTIC)) else Trait.entries[rng.int(Trait.entries.size)]
-        if (p.traits.none { it == t || conflicts(it, t) } && p.traits.size < 4) { p.traits.add(t); if (p.colonist) say("$first became ${t.label.lowercase()}.", 1) }
+        if (p.traits.none { it == t || conflicts(it, t) } && p.traits.size < 4) { p.traits.add(t); p.healthDirty = true; if (p.colonist) say("$first became ${t.label.lowercase()}.", 1) }
         for (w in WorkType.entries) {
             val sk = w.skill()
             p.priority[w.ordinal] = if (sk == null) (if (w == WorkType.FIREFIGHT || w == WorkType.PATIENT) 1 else 3) else if (p.passion[sk.ordinal] > 0) 2 else 3
@@ -211,6 +211,7 @@ private fun Game.animalLifeDaily(p: Pawn) {
         }
     } else if (p.pregnantUntil > 0L && tick >= p.pregnantUntil) {
         p.pregnantUntil = 0L
+        p.healthDirty = true
         val n = rng.range(1, p.race.litter)
         repeat(n) {
             val c = newAnimal(p.race, p.x, p.y, Faction.PLAYER)

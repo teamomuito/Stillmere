@@ -1619,6 +1619,8 @@ class RansomTest {
         val f = g.neutralFaction()
         val a = g.prisonerOf(f.id, index = g.colonists.size - 1)
         val b = g.prisonerOf(f.id, index = g.colonists.size - 2)
+        // A prisoner with a poor mood tries to escape, which blocks the offer (Events.kt). These two are kept content.
+        for (p in listOf(a, b)) p.addThought("Settled", 0.5f, g.tick, 30 * TICKS_PER_DAY)
         var n = 0
         while ((g.ransomOfferFor(a.id) == null || g.ransomOfferFor(b.id) == null) && n++ < 400) g.run(TICKS_PER_HOUR)
         val oa = g.ransomOfferFor(a.id)!!; val ob = g.ransomOfferFor(b.id)!!

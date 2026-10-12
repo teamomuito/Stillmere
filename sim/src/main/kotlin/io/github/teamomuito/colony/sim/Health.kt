@@ -46,7 +46,10 @@ fun Pawn.shouldBeDowned(): Boolean = HealthRules.shouldBeDowned(cap[Cap.CONSCIOU
 
 private fun Pawn.hasTag(tag: PartTag) = race.body.any { it.tag == tag }
 
-fun Game.recomputeHealth(p: Pawn) {
+/** Recomputes the cached pain and capacities of [p] from its injuries, hediffs, blood loss and pregnancy. Pure in the pawn. */
+fun Game.recomputeHealth(p: Pawn) = refreshHealthCache(p)
+
+internal fun refreshHealthCache(p: Pawn) {
     p.healthDirty = false
     var pain = 0f
     for (inj in p.injuries) {
@@ -57,7 +60,7 @@ fun Game.recomputeHealth(p: Pawn) {
     // A tender-frame colonist's low pain shock threshold is applied in painShockThreshold().
     if (Trait.THICK_HIDE in p.traits) pain *= 0.7f
     // Painkilling drugs (white rush, surge tonic) already lower pain through their hediff values above.
-    p.pain = pain.coerceIn(0f, 1f)
+    p.painCache = pain.coerceIn(0f, 1f)
 
     val legs = p.avgEff(PartTag.LEG)
     var moving = HealthRules.moving(legs, p.avgEff(PartTag.FOOT), p.avgEff(PartTag.TOE))
@@ -88,17 +91,17 @@ fun Game.recomputeHealth(p: Pawn) {
     moving *= (1f - p.pain * 0.2f)
     manip *= (1f - p.pain * 0.2f)
 
-    p.cap[Cap.CONSCIOUSNESS.ordinal] = cons.coerceIn(0f, 1f)
-    p.cap[Cap.MOVING.ordinal] = moving.coerceIn(0f, 1.2f).let { if (legs <= 0.01f) min(it, 0.0f) else it }
-    p.cap[Cap.MANIPULATION.ordinal] = manip.coerceIn(0f, 1f)
-    p.cap[Cap.SIGHT.ordinal] = sight
-    p.cap[Cap.HEARING.ordinal] = hearing
-    p.cap[Cap.TALKING.ordinal] = jaw
-    p.cap[Cap.EATING.ordinal] = eating.coerceIn(0f, 1f)
-    p.cap[Cap.BREATHING.ordinal] = breathing
-    p.cap[Cap.PUMPING.ordinal] = pumping
-    p.cap[Cap.FILTRATION.ordinal] = filtration.coerceIn(0f, 1f)
-    p.cap[Cap.METABOLISM.ordinal] = metabolism.coerceIn(0f, 1f)
+    p.capCache[Cap.CONSCIOUSNESS.ordinal] = cons.coerceIn(0f, 1f)
+    p.capCache[Cap.MOVING.ordinal] = moving.coerceIn(0f, 1.2f).let { if (legs <= 0.01f) min(it, 0.0f) else it }
+    p.capCache[Cap.MANIPULATION.ordinal] = manip.coerceIn(0f, 1f)
+    p.capCache[Cap.SIGHT.ordinal] = sight
+    p.capCache[Cap.HEARING.ordinal] = hearing
+    p.capCache[Cap.TALKING.ordinal] = jaw
+    p.capCache[Cap.EATING.ordinal] = eating.coerceIn(0f, 1f)
+    p.capCache[Cap.BREATHING.ordinal] = breathing
+    p.capCache[Cap.PUMPING.ordinal] = pumping
+    p.capCache[Cap.FILTRATION.ordinal] = filtration.coerceIn(0f, 1f)
+    p.capCache[Cap.METABOLISM.ordinal] = metabolism.coerceIn(0f, 1f)
 }
 
 private fun Game.pickOuterPart(p: Pawn): Int {
@@ -172,6 +175,7 @@ internal fun Game.applyWound(target: Pawn, part: Int, kind: DamageKind, dmg: Flo
     if (kind == DamageKind.BRUISE || kind == DamageKind.CRUSH) inj.bleed *= 0.1f
     inj.infectable = kind.infect > 0f
     target.injuries.add(inj)
+    target.healthDirty = true
     if (cur + dmg >= maxHp) destroyPart(target, part, kind, source)
     // Blood spatter.
     val i = map.idx(target.x, target.y)
@@ -199,7 +203,7 @@ private fun Game.destroyPart(p: Pawn, part: Int, kind: DamageKind, source: Pawn?
 
 fun Game.addHediff(p: Pawn, kind: HediffKind, severity: Float, part: Int = -1): Hediff {
     val ex = p.hediffs.firstOrNull { it.kind == kind && it.part == part }
-    if (ex != null) { ex.severity = min(1f, ex.severity + severity); return ex }
+    if (ex != null) { ex.severity = min(1f, ex.severity + severity); p.healthDirty = true; return ex }
     val h = Hediff(kind, severity)
     h.part = part
     p.hediffs.add(h)
@@ -343,7 +347,9 @@ fun Game.healthTick(p: Pawn, dt: Int) {
             5 -> { /* chronic: stays for life */ }
         }
     }
-    if (p.healthDirty) recomputeHealth(p)
+    // Healing, infection and hediff severity were changed in place above, without a mark on each change.
+    p.healthDirty = true
+    recomputeHealth(p)
     // Dropping into shock or unconsciousness.
     if (!p.downed && p.shouldBeDowned()) {
         if (!p.dead) downPawn(p)
@@ -396,7 +402,7 @@ fun Game.tendPawn(doctor: Pawn?, patient: Pawn, med: ItemType?) {
     }
     for (h in patient.hediffs) if (h.kind.needsTend) { h.tended = true; h.tendQuality = q; h.age = 0; any = true }
     if (any) patient.healthDirty = true
-    doctor?.gainXp(SkillType.HEALING, 220f)
+    doctor?.gainXp(SkillType.HEALING, SkillRules.tendXp(patient.isAnimal))
 }
 
 fun Game.die(p: Pawn, cause: String, source: Pawn? = null) {

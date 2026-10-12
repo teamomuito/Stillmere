@@ -135,7 +135,8 @@ class CombatPipelineTest {
             me.weaponItem = ItemType.W_RIFLE
             me.skill[SkillType.MARKSMANSHIP.ordinal] = level
             val target = g.enemy(g.homeX + 10, g.homeY)
-            repeat(200) { g.shoot(me, target) }
+            // Shots now teach marksmanship (docs/fidelity/skills-traits.md), so the level is held for every shot.
+            repeat(200) { me.skill[SkillType.MARKSMANSHIP.ordinal] = level; g.shoot(me, target) }
             return g.shots.count { it.hit }
         }
         val novice = hitsAtSkill(0)

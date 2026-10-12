@@ -246,6 +246,7 @@ fun Game.worldSlowTick() {
         for (p in pawns) if (p.alive && !p.isAnimal && !m.roofed(m.idx(p.x, p.y))) {
             val h = addHediff(p, HediffKind.TOXIN_LOAD, 0f)
             h.severity = min(1f, h.severity + 0.0035f)
+            p.healthDirty = true
         }
         for (i in 0 until m.size) { val pl = m.plant[i]; if (pl != null && !m.roofed(i) && rng.chance(0.002f)) m.plant[i] = null }
     }

@@ -130,6 +130,8 @@ class JobAiTest {
     @Test fun aHaulEndsWhenItsItemVanishesBeforePickup() {
         val g = newGame(207)
         g.removeItems { it.type == ItemType.STEEL }
+        // No weapon is left on the map, so the colonist cannot start an equip job, which holds a key of its own.
+        g.removeItems { it.type.weapon != null }
         g.paintZone(g.homeX + 6, g.homeY - 6, g.homeX + 8, g.homeY - 4, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.STEEL, 20, g.homeX - 6, g.homeY + 2)
         val c = g.colonists[0]
@@ -145,6 +147,8 @@ class JobAiTest {
 
     @Test fun aBuildEndsWhenItsBlueprintIsRemoved() {
         val g = newGame(208)
+        // No weapon is left on the map, so the colonist cannot start an equip job, which holds a key of its own.
+        g.removeItems { it.type.weapon != null }
         g.map.drop(ItemType.WOOD, 40, g.homeX - 3, g.homeY + 4)
         val x = g.homeX - 1; val y = g.homeY + 4
         assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, x, y))

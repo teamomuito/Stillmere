@@ -5,10 +5,14 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
-private fun Game.doWork(p: Pawn, j: Job, skill: SkillType?, total: Float): Boolean {
-    // Work and skill gain are per tick, so they are divided by TIME_SCALE to keep their effect per game hour.
+/**
+ * One tick of work. Work progress is per tick, so it is divided by TIME_SCALE to keep its effect per game hour. The XP
+ * is per tick at the reference rate for the job (docs/fidelity/skills-traits.md); a job with no reference rate keeps
+ * the old rate, which is the default.
+ */
+private fun Game.doWork(p: Pawn, j: Job, skill: SkillType?, total: Float, xpPerTick: Float = 0.07f / TIME_SCALE): Boolean {
     j.work += p.workSpeed(skill) / TIME_SCALE
-    if (skill != null) p.gainXp(skill, 0.07f / TIME_SCALE)
+    if (skill != null && xpPerTick > 0f) p.gainXp(skill, xpPerTick)
     return j.work >= total
 }
 
@@ -436,7 +440,7 @@ private fun Game.driveMine(p: Pawn, j: Job) {
     }
     val ore = map.ore[i]
     val total = if (ore != Ore.NONE) ore.work else 1000f
-    if (doWork(p, j, SkillType.QUARRYING, total)) {
+    if (doWork(p, j, SkillType.QUARRYING, total, 0.07f)) {
         if (ore != Ore.NONE && ore.item != null) {
             map.drop(ore.item, rng.range(ore.yieldMin, ore.yieldMax), p.x, p.y)
         } else if (rng.chance(0.55f)) map.drop(ItemType.STONE_CHUNK, 1, p.x, p.y)
@@ -459,7 +463,9 @@ private fun Game.driveCut(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    if (doWork(p, j, SkillType.HORTICULTURE, pl.type.harvestWork.toFloat() * (if (pl.growth < 1f) 0.5f else 1f))) {
+    // Harvest and cut learn only from a plant that yields and is fully grown (RimWorld/JobDriver_PlantCut.cs:8-18).
+    val cutXp = if (pl.type.yieldType != null && pl.growth >= 1f) 0.085f else 0f
+    if (doWork(p, j, SkillType.HORTICULTURE, pl.type.harvestWork.toFloat() * (if (pl.growth < 1f) 0.5f else 1f), cutXp)) {
         val yt = pl.type.yieldType
         if (yt != null) {
             var n = (pl.type.yieldCount * (0.5f + 0.5f * p.workSpeed(SkillType.HORTICULTURE).coerceAtMost(1.6f)) * (if (pl.growth < 1f) pl.growth else 1f)).toInt()
@@ -482,7 +488,7 @@ private fun Game.driveSow(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    if (doWork(p, j, SkillType.HORTICULTURE, z.crop.sowWork.toFloat())) {
+    if (doWork(p, j, SkillType.HORTICULTURE, z.crop.sowWork.toFloat(), 0.085f)) {
         map.plant[i] = Plant(z.crop, j.tx, j.ty, 0.02f)
         endJob(p)
     }
@@ -649,7 +655,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
         }
         4 -> {
             b.progress = j.work
-            if (doWork(p, j, skill, b.def.work.toFloat())) {
+            if (doWork(p, j, skill, b.def.work.toFloat(), 0.25f)) {
                 val q = if (b.def.category == "Furniture" || b.def.isFloor || b.def.workbench) rollQuality(p.level(skill) + (if ((Trait.CREATIVE in p.traits || Trait.BROODING_MUSE in p.traits) && b.def.art) 4 else 0), b.def.art) else Quality.NORMAL
                 if (b.def.isFloor) {
                     map.floor[i] = b.def
@@ -688,7 +694,7 @@ private fun Game.driveDecon(p: Pawn, j: Job) {
         return
     }
     val def = b?.def ?: fl ?: BuildDef.CONDUIT
-    if (doWork(p, j, SkillType.ARCHITECTURE, def.work * 0.5f)) {
+    if (doWork(p, j, SkillType.ARCHITECTURE, def.work * 0.5f, 0.25f)) {
         for ((t, n) in b?.cost ?: def.cost) map.drop(t, max(1, n / 2), p.x, p.y)
         if (b != null) map.removeBuilding(b) else if (fl != null) map.floor[i] = null else map.conduit[i] = false
         map.desig[i] = 0
@@ -707,7 +713,7 @@ private fun Game.driveRepair(p: Pawn, j: Job) {
         return
     }
     b.hp = min(b.maxHp, b.hp + 0.4f * p.workSpeed(SkillType.ARCHITECTURE) / TIME_SCALE)
-    p.gainXp(SkillType.ARCHITECTURE, 0.04f / TIME_SCALE)
+    p.gainXp(SkillType.ARCHITECTURE, 0.05f)
     if (b.hp >= b.maxHp) { map.desig[i] = 0; endJob(p) }
 }
 
@@ -836,15 +842,15 @@ private fun Game.driveBill(p: Pawn, j: Job) {
         3 -> {
             bench.inUse = tk(700)
             val sk = r.workType.skill() ?: SkillType.WORKMANSHIP
-            if (doWork(p, j, sk, r.work.toFloat() * (if (bench.def.workbench) 1f else 1f))) {
+            // Recipe XP is 0.1 per work tick times the recipe's learning factor, which is 1 here (Verse.AI/Toils_Recipe.cs:188).
+            // There is no flat award per product in the reference, so none is given.
+            if (doWork(p, j, sk, r.work.toFloat() * (if (bench.def.workbench) 1f else 1f), 0.1f)) {
                 j.held.clear()
                 val gear = r.out.isGear
                 val q = if (gear) rollQuality(p.level(sk), false) else Quality.NORMAL
                 map.drop(r.out, r.outCount, p.x, p.y, q)
                 bill.done++
                 if (bill.mode == BillMode.DO_X && bill.done >= bill.target) bench.bills.remove(bill)
-                if (r.out == ItemType.MEAL_HEARTH_STEW || r.out == ItemType.MEAL_ROASTED_PLATTER) p.gainXp(SkillType.GALLEY, 40f)
-                if (r.out == ItemType.A_GHOSTWEAVE_ARMOR || r.out.isGear) p.gainXp(sk, 60f)
                 endJob(p)
             }
         }
@@ -863,7 +869,7 @@ private fun Game.driveResearch(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    p.gainXp(SkillType.SCHOLARSHIP, 0.07f / TIME_SCALE)
+    p.gainXp(SkillType.SCHOLARSHIP, 0.1f)
     val mult = if (bench.def == BuildDef.PRECISION_BENCH) 1.6f else 1f
     val prog = (researchProgress[cur] ?: 0f) + p.workSpeed(SkillType.SCHOLARSHIP) / TIME_SCALE * 0.25f * mult * (if (Trait.KEEN_MIND in p.traits) 1.35f else 1f)
     researchProgress[cur] = prog
@@ -898,7 +904,8 @@ private fun Game.driveTend(p: Pawn, j: Job) {
         1 -> {
             val self = o === p
             val bedsite = o.carriedBy >= 0
-            if (doWork(p, j, SkillType.HEALING, if (self) 360f else 200f)) {
+            // Tending learns only once, at completion (Health.kt tendPawn). Vanilla gives no per-tick tending XP (RimWorld/Toils_Tend.cs:70).
+            if (doWork(p, j, SkillType.HEALING, if (self) 360f else 200f, 0f)) {
                 val med = if (p.carryCount > 0) p.carryType else null
                 tendPawn(p, o, med)
                 if (med != null) { p.carryCount = 0; p.carryType = null }
@@ -1081,7 +1088,7 @@ private fun Game.driveGather(p: Pawn, j: Job) {
         if (r == -1) abort(p) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (doWork(p, j, SkillType.HUSBANDRY, 280f)) {
+    if (doWork(p, j, SkillType.HUSBANDRY, 280f, 0.13f)) {
         val n = (a.race.productPerDay * a.animalProductTimer / TICKS_PER_DAY.toFloat()).toInt()
         val prod = a.race.product!!
         if (n > 0) map.drop(prod, n, p.x, p.y)
