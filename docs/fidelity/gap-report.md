@@ -598,3 +598,75 @@ Made on branch `ccr-401b8c33-djvmwb`. Sources for the new values are in `needs-m
   `Game.kt:569`, "always false"). They were already there before this change, and nothing was done about them.
 * **Stale in this report:** section 1's test count (337) and warning count, section 3.3 and 3.4 (health and temperature changed after the
   audit), and section 7 item 1 (done).
+
+## 11. Source-checked coverage pass (2026-10-12)
+
+Added after the decompiled 1.6 source became available: `Chillu1/RimWorldDecompiled`, commit `2d50803`, build `1.6.9438.38202`.
+Every constant cited below is in [`source-constants.md`](source-constants.md), with the file and line in that repo. The source
+replaces the **V** and **M** figures for every system it covers. XML-only values (item costs, biome lists, trait and backstory tables,
+storyteller weights, research costs) are not in that repo and stay unverified.
+
+No code or RimWorld text was copied into Stillmere. Only numbers and their source locations were recorded.
+
+### 11.1 Summary
+
+| Verdict | Count | Systems |
+|---|---|---|
+| Matches | 1 | Time base (60,000 ticks per day, 2,500 per hour, 60 days per year, 15 per season) |
+| Partial | 5 | Temperature and rooms (constants match, room model does not), needs (food and awake rest match), mood and breaks (threshold fractions match), construction, power and fire (power mechanism comparable), social and life stages (growth ages match) |
+| Divergent | 8 | Map and world size, health (bleed model), skills (passion base and XP curve), plants and crops (growth model), threats and raids (wealth curve), research (rate about 12x vanilla per pawn-day), combat (custom throughout), world and caravans (sizes) |
+| Not comparable from this repo | 4 | Work and jobs (amounts are XML), animals (mostly XML), UI (not reviewed), scenarios and saves (XML and format) |
+
+**Rough answer to "how close":** about one of the 18 areas matches exactly, about five are partly right, and about eight are
+clearly different. The four areas that can't be checked here are mostly XML. Counting areas understates the work, but this pass did not count content.
+Vanilla's item, biome, creature and research lists are XML and not in the repo, so the size gap in content is unmeasured here.
+
+### 11.2 Biggest differences found in source
+
+1. **Colony map 100 x 100 vs 250 x 250 default** (`WorldInfo.cs:24`). The allowed vanilla range is 200 to 325.
+2. **Research rate about 12 times vanilla per pawn-day** (`ResearchManager.cs:38` against `JobDrivers.kt:866`). Costs are XML, so this is the rate gap only.
+3. **Skill XP curve reversed in shape.** Vanilla is cheaper at the start (1,000 to level 1) and far more expensive at the top
+   (30,000 at level 19). Stillmere is 2,500 at level 0 and 10,100 at level 19. Passion base is 1.0 vs vanilla 0.35.
+4. **Raid points.** Vanilla uses a wealth curve plus a per-colonist curve, clamped to 10,000 (`StorytellerUtility.cs:18-24`, `:43-49`, `:186-190`). Stillmere uses wealth / 95 plus 17 per colonist. At 1,000,000 wealth this is about 10,500 points against vanilla's 4,200 before the colonist term.
+5. **Combat has no accuracy-by-distance, no cover angle model, and no dodge roll.** Vanilla has all three (`ShotReport.cs:167-173`, `CoverUtility.cs:55-99`, `Verb_MeleeAttack.cs:43-45`).
+6. **Joy drain flat at 0.42 per day.** Vanilla's rate depends on the current joy level, from 0.24 to 0.6 per day (`Need_Joy.cs:43-50`).
+7. **Tended bleeding.** Vanilla stops bleeding completely when tended. Stillmere keeps 6% (`HealthRules.kt:92`, against `Hediff_Injury.cs` `BleedRate`).
+8. **Fire is a single intensity value** with a cap of 1.2. Vanilla has a size up to 1.75 with growth, sparks and heat (`Fire.cs:30-68`).
+9. **Plant growth** uses a hard light gate and temperature cut. Vanilla uses curves for fertility, light and temperature (`PlantUtility.cs:352-370`).
+10. **Missing needs:** comfort, beauty, indoors and outdoors. Vanilla thresholds and deltas are in `Need_Comfort.cs`, `Need_Beauty.cs`, `Need_Indoors.cs` and `Need_Outdoors.cs`.
+
+### 11.3 Matches, confirmed by source
+
+* Ticks per day, hour, season and year (`GenDate.cs`).
+* Food fall of 1.6 per day (`Need_Food.cs:11`).
+* Awake rest fall of 0.95 per day (`Need_Rest.cs:20`).
+* Mental-break threshold fractions 1/7, 0.5714 and 1.0 of the break stat (`MentalBreaker.cs:40-44`). The base stat of 0.35 is XML, so Stillmere's 0.35 is consistent with the formula but not confirmed.
+* Diurnal swing of 7 C and setpoint of 21 C (`TemperatureTuning.cs`).
+* Growth moments at 7, 10 and 13 (`GrowthUtility.cs:56`). The code does not visibly check for Biotech. Treat them as DLC until confirmed, as section 6 already does.
+
+### 11.4 Core vs DLC notes from the source
+
+* **Colonist age factor in raid points** is gated on Biotech (`StorytellerUtility.cs`, around line 180). It is excluded from Core.
+* **Growth moments** (`GrowthUtility.cs`) belong to the Biotech-era growth tier code. Still flagged, as in section 6.
+* Many cited classes reference Ideology, Royalty, Anomaly and Odyssey. Those were not used.
+
+### 11.5 What the source cannot settle
+
+* Every XML `Def`: item, building and plant costs, work amounts, weapon stats, biome lists, ore and rock tables, research costs, trait and backstory tables, storyteller and incident weights, race stats, gestation periods, the base mental-break stat.
+* The world-tile count (a geodesic grid whose size depends on coverage). It is generated in code, but not counted here.
+* Stillmere's break frequencies, skill-gain amounts per action, and the full social opinion scale. These are in Stillmere code and were not compared in this pass.
+
+### 11.6 Recommended order, updated
+
+Based on the source-checked differences, the phase order in section 8 still holds. Two items move up:
+
+* **Phase 4 (skills):** the XP curve and passion base can be fixed directly from source. Old saves store skill XP, so this needs a migration plan.
+* **Phase 9 (economy):** confirm the research rate gap against vanilla project costs before changing any number.
+
+Also under **Phase 6 (combat):** the source gives every formula except the weapon stats, so combat can be rebuilt on verified rules.
+
+### 11.7 Open items and changes made
+
+* Working branch: `ccr-f0ba5f6d-dunne5`. This pass changes docs only. No simulation code was changed.
+* Section 9 said no vanilla source was available. That was true when it was written. Section 11 supersedes it for the systems it covers.
+* The repo-local git identity is currently `Claude <noreply@anthropic.com>`. CLAUDE.md and the user preference both require the GitHub identity (teamomuito). The commit for this pass was made with the GitHub identity by passing it on the command line. The repo config has not been changed.
