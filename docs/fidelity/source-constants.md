@@ -117,7 +117,7 @@ not: vanilla uses separate wall, roof, door and vent rates, and only uses outdoo
 | Fast / slow learner | XML trait offsets | 1.4 / 0.6 | XML |
 | XP to level up | piecewise linear through (0, 1000), (9, 10000), (19, 30000) (`RimWorld/SkillRecord.cs:47-50`) | 2500 + 400 x level, i.e. 2,500 at 0 and 10,100 at 19 | S |
 | Passion effect on XP needed | none (passion scales XP gained) | none | S |
-| Skill decay | no ongoing decay found in `RimWorld/SkillRecord.cs`; only a minimum-level floor (`:401-404`) | none | S |
+| Skill decay | every 200-tick interval from level 10: removes 0.1, 0.2, 0.4, 0.6, 1.0, 1.8, 2.8, 4, 6, 8, 12 XP at levels 10 to 20; halved with great memory; exempt with perfect memory, which needs Anomaly (`RimWorld/SkillRecord.cs` `Interval`; `RimWorld/Pawn_SkillTracker.cs` `SkillsTickInterval`, gated on `IsHashIntervalTick(200)`) | none | S |
 
 **Result: Divergent.** Stillmere's passion base is 1.0 where vanilla uses 0.35, and the top passion gives 2.0 where vanilla gives 1.5.
 Vanilla also has a daily XP cap, which Stillmere lacks. The XP curve is the other big difference: vanilla is cheaper at the start and much more expensive at the top (30,000 vs 10,100 at level 19), so skills rise faster early in Stillmere but far slower late in vanilla.
@@ -276,3 +276,35 @@ Biome lists and weights, ore and rock definitions, plant growth days, animal and
 storyteller weights and incident frequencies, item and recipe costs, work amounts, weapon stats, research costs, quest definitions,
 faction tables, scenario definitions, and the base values of most stats. Each of these needs the XML `Defs` from the game's data
 folder, which this repo does not contain.
+
+---
+
+## 16. Added in the 2026-10-12 final pass
+
+Constants found while finishing the gap report. Same rules as above: numbers and locations only.
+
+| Constant | Vanilla | Stillmere | Tag |
+|---|---|---|---|
+| Skill tick gate | 200 ticks (`RimWorld/Pawn_SkillTracker.cs`, `SkillsTickInterval`) | per tick | S |
+| Daily learning cap | 4,000 XP at full rate, then x0.2 (`RimWorld/SkillRecord.cs:33`, `:37`, `:139`) | none | S |
+| Trade price factors | buy 1.4, sell 0.6; minimums 0.5 buy, 0.01 sell (`RimWorld/TradeUtility.cs:14-20`) | buy `1.35 - social x 0.01`; sell `0.5 + social x 0.01` | S |
+| Tend quality, no medicine | potency 0.3, quality cap 0.7, no-doctor quality 0.75 (`RimWorld/TendUtility.cs:10-14`) | not found in the code read | S |
+| Self-tend factor | 0.7 (`RimWorld/TendUtility.cs:16`, `:108`) | x0.7 (section 3.4) | S |
+| Tend bond chance | 0.004 (`RimWorld/TendUtility.cs:18`) | not compared | S |
+| Herbal medicine potency | XML | 0.6, max tend quality 0.7 (`Defs.kt:166`) | XML / S |
+| Industrial medicine potency | XML | 1.0 (`Defs.kt:167`) | XML / S |
+| Meat food poisoning | fixed 2% (`RimWorld/ThingDefGenerator_Meat.cs:68`) | 1% | S |
+| Corpse food poisoning | fixed 5% (`RimWorld/ThingDefGenerator_Corpses.cs:154`) | not compared | S |
+| Food poisoning stages | initial 2, major 1, recovering 0 (`RimWorld/FoodUtility.cs:19-23`) | not compared | S |
+| Suppression thresholds | can suppress below 0.7; critical below 0.3 (`RimWorld/Need_Suppression.cs:8-10`) | own design, not compared | S |
+| Mood base level | `def.baseLevel`, XML (`RimWorld/Need_Mood.cs:31`) | 0.55 | XML |
+| Time speeds | Normal 1x, Fast 3x, Superfast 6x (12x or 18x in some cases), Ultrafast 150x (`Verse/TickManager.cs:88-104`) | 1x, 3x, 6x | S |
+| Starting colonists default | 3 (`RimWorld/Dialog_ChooseNewWanderers.cs:63`) | crashlanded 3 | S |
+| Room role workers | 23 (`RimWorld/RoomRoleWorker_*.cs`) | 9 roles | S |
+| Room stat workers | 7 (`RimWorld/RoomStatWorker_*.cs`) | 4 stats plus roles | S |
+| Caravan move default | 3,300 ticks (`RimWorld.Planet/CaravanTicksPerMoveUtility.cs:40`) | 1,900 cost units, about 4,750 ticks in the new length | S |
+| Planet coverage options | 30, 50, 100% (`RimWorld/Page_CreateWorldParams.cs:32`) | 60 x 40 tile grid | S |
+| Trainable names | Obedience, Release, Tameness, Comfort, Dig, Forage, AttackTarget, EggSpew, SludgeSpew (`RimWorld/TrainableUtility.cs`, `TrainableDefOf` references) | generic tricks | S |
+| Pyromaniac trait | exists (`RimWorld/TraitDefOf.cs:40`) | 42 traits; name list not compared | S |
+| Psychite tea | old def name `PsychiteTea` (`Verse/BackCompatibilityConverter_0_18.cs:44`) | hidden | S (name) |
+| Aurora, brewery, ambrosia, luciferium | referenced in code with no DLC gate in the files read (`RimWorld/IncidentWorker_Aurora.cs`, `RimWorld.BaseGen/SymbolResolver_Interior_Brewery.cs`, `RimWorld/IncidentWorker_AmbrosiaSprout.cs`, `RimWorld/Recipe_AdministerIngestible.cs`); defs are XML | Aurora incident and BREWERY building present; ambrosia and luciferium absent | S (code), XML (defs) |
