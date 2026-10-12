@@ -1,0 +1,7 @@
+tick=17000
+colonists=3
+meat.rot=0.25
+corpse.rot=0.3
+research.forge=123.5
+battery.charge=300.0
+meat.count=10

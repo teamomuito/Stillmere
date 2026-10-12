@@ -219,11 +219,16 @@ class ColonyTest {
         assertTrue(g.map.terrain[rockI] != Terrain.ROCK)
     }
 
-    @Test fun cropsGrowAndGetHarvested() {
+    @Test fun cropsSownInAGrowingZoneGrowOnTheReferenceRate() {
+        // Rice takes about 11.6 game days of light on Stillmere's day (docs/fidelity/economy.md; RimWorld/Plant.cs:346). After
+        // 8 days the first crops are still growing, not ripe, and the cold snap on day 9 kills immature crops (the frost rule).
+        // So this checks the growth made in the zone, which is the part the reference rate changed.
         val g = newGame(); g.quiet()
         g.paintZone(g.homeX - 2, g.homeY + 3, g.homeX + 2, g.homeY + 5, ZoneKind.GROWING, PlantType.RICE)
-        g.run(TICKS_PER_DAY * 9)
-        assertTrue("planted", g.map.plant.any { it?.type == PlantType.RICE } || g.map.countItems(ItemType.RICE) > 0)
+        g.run(TICKS_PER_DAY * 8)
+        val rice = g.map.plant.filterNotNull().filter { it.type == PlantType.RICE }
+        assertTrue("planted", rice.isNotEmpty())
+        assertTrue("grown past the first days", rice.maxOf { it.growth } > 0.4f)
     }
 
     @Test fun billsCookMealsFromRawFood() {

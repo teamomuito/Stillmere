@@ -181,12 +181,12 @@ fun Game.powerTick() {
     for ((k, b) in devices.withIndex()) {
         val net = nets.getOrPut(find(attach[k][0])) { Net() }
         val d = b.def
-        if (d == BuildDef.BATTERY) { net.cap += 600f; net.stored += b.charge; net.batteries.add(b); continue }
+        if (d == BuildDef.BATTERY) { net.cap += BATTERY_CAPACITY_WD; net.stored += b.charge; net.batteries.add(b); continue }
         if (d.producesPower) {
             var out = 0f
             when (d) {
-                BuildDef.SOLAR_PANEL -> out = d.power * daylight() * (if (ps.flare) 0f else 1f)
-                BuildDef.BREEZE_MILL -> out = d.power * windFactor
+                BuildDef.SOLAR_PANEL -> out = d.power * daylight() * m.unroofedShare(b)
+                BuildDef.BREEZE_MILL -> out = d.power * min(windFactor, BREEZE_OUTPUT_WIND_CAP)
                 BuildDef.WOOD_GENERATOR -> if (b.fuel > 0f) { out = d.power; b.fuel = max(0f, b.fuel - Game.SLOW_TICK.toFloat() / TICKS_PER_HOUR * 0.8f) }
                 else -> {}
             }
@@ -202,6 +202,8 @@ fun Game.powerTick() {
         var balance = (net.prod - net.cons) * dt
         var energy = net.stored
         energy = (energy + balance).coerceIn(0f, net.cap)
+        // Each battery loses its self-discharge every tick, never more than it holds (RimWorld/CompPowerBattery.cs:70).
+        energy = max(0f, energy - net.batteries.size * BATTERY_SELF_DISCHARGE_W * dt)
         val ok = net.prod >= net.cons || (net.stored + balance >= 0f && net.stored > 0f)
         val per = if (net.batteries.isEmpty()) 0f else energy / net.batteries.size
         for (bt in net.batteries) bt.charge = per
@@ -354,13 +356,69 @@ internal fun Game.roomClimate(out: Float) {
     next.copyInto(m.roomTemp)
 }
 
+/** Fertility factor: the reference's sensitivity blend (RimWorld/PlantUtility.cs:358). */
+internal fun fertilityGrowthFactor(fertility: Float): Float =
+    fertility * PLANT_FERTILITY_SENSITIVITY + (1f - PLANT_FERTILITY_SENSITIVITY)
+
+/**
+ * Temperature factor for a plant whose optimal band is [optimalLow] to [optimalHigh] degrees. Zero at the growth limits, a
+ * straight ramp to full inside the band (RimWorld/PlantUtility.cs:370-381). The limits are the band's default distances.
+ */
+internal fun temperatureGrowthFactor(t: Float, optimalLow: Float, optimalHigh: Float): Float {
+    val growthMin = optimalLow - GROWTH_BELOW_OPTIMAL_C
+    val growthMax = optimalHigh + GROWTH_ABOVE_OPTIMAL_C
+    return when {
+        t <= growthMin || t >= growthMax -> 0f
+        t < optimalLow -> (t - growthMin) / (optimalLow - growthMin)
+        t <= optimalHigh -> 1f
+        else -> (growthMax - t) / (growthMax - optimalHigh)
+    }
+}
+
+/** Light factor: a ramp from [GROW_MIN_GLOW] to [GROW_OPTIMAL_GLOW] (RimWorld/PlantUtility.cs:361-367). */
+internal fun lightGrowthFactor(glow: Float): Float = ((glow - GROW_MIN_GLOW) / (GROW_OPTIMAL_GLOW - GROW_MIN_GLOW)).coerceIn(0f, 1f)
+
+/**
+ * The glow a cell gives a plant: the daylight, or the cell's artificial light when that is brighter. [cellLight] is the cell's
+ * light from [lightTick]: the daylight (less under a natural roof, or 85% of it indoors), with a lamp's or a fire's light on
+ * top where it is brighter. Taking the larger of the two keeps the glow on the ramp of [lightGrowthFactor] instead of stepping
+ * to full glow when the cell light passes half. Mapping the daylight to glow is Stillmere's (C); the glow ramp is
+ * RimWorld/PlantUtility.cs:361-367.
+ */
+internal fun plantGlow(daylit: Float, cellLight: Float): Float = max(daylit, cellLight)
+
+/** Whether a grower may sow this crop on a cell at [t] degrees: strictly inside the growth limits (RimWorld/PlantUtility.cs:21-33). */
+internal fun growthSeasonOk(t: Float, type: PlantType): Boolean =
+    t > type.minTemp - GROWTH_BELOW_OPTIMAL_C && t < type.maxTemp + GROWTH_ABOVE_OPTIMAL_C
+
+/**
+ * Growth added in one slow tick: the grow days set the full-rate time, and the three factors scale it (RimWorld/Plant.cs:346,
+ * 289-302). [fertFactor] is the fertility factor from [fertilityGrowthFactor], or a grow tray's factor. At full factors this is
+ * one grow-time per day, with no extra multiplier.
+ */
+internal fun growthPerSlowTick(type: PlantType, fertFactor: Float, t: Float, glow: Float): Float {
+    val days = if (type.growDays <= 0f) 1f else type.growDays
+    val factor = fertFactor * temperatureGrowthFactor(t, type.minTemp, type.maxTemp) * lightGrowthFactor(glow)
+    return Game.SLOW_TICK.toFloat() / (days * TICKS_PER_DAY) * factor
+}
+
+/**
+ * Harvest yield before random rounding (RimWorld/Plant.cs:932-947). A plant at or below the harvest minimum is not harvestable,
+ * so it yields nothing (RimWorld/Plant.cs:115, and the zero returns at 917-919 and 934-936). Above it the yield rises from about
+ * half at the minimum to full at full growth. Health is not modelled and the difficulty factor is 1.
+ */
+internal fun harvestYieldExact(count: Int, growth: Float): Float {
+    if (growth <= HARVEST_MIN_GROWTH) return 0f
+    val share = ((growth - HARVEST_MIN_GROWTH) / (1f - HARVEST_MIN_GROWTH)).coerceIn(0f, 1f)
+    return count * (0.5f + 0.5f * share)
+}
+
 private fun Game.plantsTick(out: Float) {
     val m = map
-    val light = daylight()
+    val daylit = daylight()
     for (i in 0 until m.size) {
         val pl = m.plant[i] ?: continue
         val t = m.tempAt(i, out)
-        val fert = m.terrain[i].fertility.let { f -> if (m.building[i]?.def == BuildDef.GROW_TRAY && m.building[i]?.powered == true) 2.0f else f }
         if (pl.type.crop || pl.type.isTree || pl.type.regrows) {
             pl.age += Game.SLOW_TICK.toInt()
             if (pl.growth >= 1f) {
@@ -374,13 +432,15 @@ private fun Game.plantsTick(out: Float) {
                 }
                 continue
             }
-            val lit = light > 0.2f || m.light[i] > 0.5f
-            if (t < pl.type.minTemp || t > pl.type.maxTemp || !lit) continue
-            val days = if (pl.type.growDays <= 0f) 1f else pl.type.growDays
-            var rate = 1f / (days * TICKS_PER_DAY * 0.55f) * Game.SLOW_TICK * max(0.2f, fert)
-            if (weather == Weather.RAIN) rate *= 1.1f
-            if (Trait.GARDEN_SENSE in pawns.firstOrNull { it.colonist }?.traits.orEmpty()) rate *= 1.25f
-            pl.growth = min(1f, pl.growth + rate)
+            // The glow is the daylight, or a brighter lamp or fire on the cell (see plantGlow). A powered grow tray takes its own
+            // factor in place of the terrain fertility. Growth is fertility x temperature x light over the grow days, with no
+            // weather or trait term (RimWorld/Plant.cs:289-302, 346).
+            val glow = plantGlow(daylit, m.light[i])
+            val fertFactor = if (m.building[i]?.def == BuildDef.GROW_TRAY && m.building[i]?.powered == true) GROW_TRAY_GROWTH_FACTOR
+                else fertilityGrowthFactor(m.terrain[i].fertility)
+            val step = growthPerSlowTick(pl.type, fertFactor, t, glow)
+            if (step <= 0f) continue
+            pl.growth = min(1f, pl.growth + step)
         }
     }
     // Saplings: forests slowly spread.
@@ -421,6 +481,24 @@ private fun Game.deteriorationTick() {
     for (i in gone) { val s = m.items.remove(i) ?: continue; if (s.type.isGear) say("A ${s.type.label.lowercase()} fell apart in the weather.", 0) }
 }
 
+/** Rot rate by temperature: none at or below 0 C, a straight ramp to full at 10 C (Verse/GenTemperature.cs:459-470). */
+internal fun rotTemperatureFactor(t: Float): Float = when {
+    t <= 0f -> 0f
+    t >= 10f -> 1f
+    else -> t / 10f
+}
+
+/** Share of a building's footprint that is not roofed. A roofed cell gives a sun array nothing (RimWorld/CompPowerPlantSolar.cs:19). */
+internal fun GameMap.unroofedShare(b: Building): Float {
+    var total = 0
+    var open = 0
+    for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) {
+        total++
+        if (inB(xx, yy) && !roofed(idx(xx, yy))) open++
+    }
+    return if (total == 0) 1f else open / total.toFloat()
+}
+
 private fun Game.spoilTick(out: Float) {
     val m = map
     val dt = Game.SLOW_TICK.toFloat()
@@ -428,15 +506,9 @@ private fun Game.spoilTick(out: Float) {
     var spoiled = 0
     val rem = ArrayList<Int>()
     for ((i, s) in m.items) {
-        val days = if (s.corpseOf != null) 2.2f else s.type.spoilDays
+        val days = if (s.corpseOf != null) CORPSE_ROT_DAYS else s.type.spoilDays
         if (days <= 0f) continue
-        val t = m.tempAt(i, out)
-        val f = when {
-            t <= 0f -> 0f
-            t < 10f -> 0.2f + t / 10f * 0.4f
-            t < 20f -> 0.6f + (t - 10f) / 10f * 0.4f
-            else -> 1f + (t - 20f) / 20f
-        }
+        val f = rotTemperatureFactor(m.tempAt(i, out))
         if (f <= 0f) continue
         s.rot += dt / (days * TICKS_PER_DAY) * f
         if (s.rot >= 1f) { rem.add(i); spoiled += s.count }

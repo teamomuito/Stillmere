@@ -2,8 +2,15 @@ package io.github.teamomuito.colony.sim
 
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
+
+/** Rounds [x] up with a chance equal to its fraction, otherwise down. Always draws one number, so the sim stays deterministic. */
+private fun Game.roundRandom(x: Float): Int {
+    val f = floor(x)
+    return f.toInt() + if (rng.float() < x - f) 1 else 0
+}
 
 /**
  * One tick of work. Work progress is per tick, so it is divided by TIME_SCALE to keep its effect per game hour. The XP
@@ -288,8 +295,9 @@ private fun Game.driveEat(p: Pawn, j: Job) {
                 if (Trait.HEARTY_APPETITE in p.traits) p.addThought("Full belly", 0.05f, tick, dur)
                 if (Trait.MEAT_FIRST in p.traits && t.cat == ItemCat.FOOD_MEAT) p.addThought("Ate meat", 0.05f, tick, dur)
                 // Rotten food can make people ill.
-                if (j.heldRot > 0.65f && rng.chance(0.4f)) { addHediff(p, HediffKind.SPOILED_STOMACH, 0.25f); say("${p.name} got a spoiled stomach.", 2) }
-                else if (t.cat == ItemCat.FOOD_MEAT && rng.chance(0.01f)) addHediff(p, HediffKind.SPOILED_STOMACH, 0.2f)
+                // Raw meat is fresh until it is destroyed at full rot, so only the raw-meat roll applies to it (RimWorld/ThingDefGenerator_Meat.cs:37, 68).
+                if (j.heldRot > 0.65f && t != ItemType.MEAT && rng.chance(0.4f)) { addHediff(p, HediffKind.SPOILED_STOMACH, 0.25f); say("${p.name} got a spoiled stomach.", 2) }
+                else if (t.cat == ItemCat.FOOD_MEAT && rng.chance(if (t == ItemType.MEAT) RAW_MEAT_POISON_CHANCE else 0.01f)) addHediff(p, HediffKind.SPOILED_STOMACH, 0.2f)
                 p.carryCount = 0; p.carryType = null
                 endJob(p)
             }
@@ -463,13 +471,17 @@ private fun Game.driveCut(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    // Harvest and cut learn only from a plant that yields and is fully grown (RimWorld/JobDriver_PlantCut.cs:8-18).
+    // Harvest and cut learn only from a fully grown plant that yields. This is Stillmere's own gate (C). The reference gates the
+    // cut's learning on the plant being able to yield now (RimWorld/JobDriver_PlantCut.cs:11-13), which for a crop starts above
+    // 65% growth. Not changed this round; see docs/fidelity/economy.md.
     val cutXp = if (pl.type.yieldType != null && pl.growth >= 1f) 0.085f else 0f
     if (doWork(p, j, SkillType.HORTICULTURE, pl.type.harvestWork.toFloat() * (if (pl.growth < 1f) 0.5f else 1f), cutXp)) {
         val yt = pl.type.yieldType
         if (yt != null) {
-            var n = (pl.type.yieldCount * (0.5f + 0.5f * p.workSpeed(SkillType.HORTICULTURE).coerceAtMost(1.6f)) * (if (pl.growth < 1f) pl.growth else 1f)).toInt()
-            if (pl.type.crop) n = (pl.type.yieldCount * (0.75f + 0.25f * (p.level(SkillType.HORTICULTURE) / 10f))).toInt()
+            // Yield is zero at or below the harvest minimum, and above it rises from about half to full at full growth
+            // (RimWorld/Plant.cs:115, 917-919, 934-947). Plant health is not modelled, so its term is 1, and the crop difficulty
+            // factor is 1. No skill or work-speed term (the reference has none).
+            val n = roundRandom(harvestYieldExact(pl.type.yieldCount, pl.growth))
             if (n > 0) map.drop(yt, n, p.x, p.y)
         }
         if (Trait.GARDEN_SENSE in p.traits) p.addThought("Worked with plants", 0.04f, tick, TICKS_PER_DAY / 2)
@@ -489,7 +501,8 @@ private fun Game.driveSow(p: Pawn, j: Job) {
         return
     }
     if (doWork(p, j, SkillType.HORTICULTURE, z.crop.sowWork.toFloat(), 0.085f)) {
-        map.plant[i] = Plant(z.crop, j.tx, j.ty, 0.02f)
+        // A sown crop starts at 0.0001 growth (RimWorld/JobDriver_PlantSow.cs:61).
+        map.plant[i] = Plant(z.crop, j.tx, j.ty, 0.0001f)
         endJob(p)
     }
 }
@@ -665,6 +678,12 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                     map.conduit[i] = true
                     map.removeBuilding(b)
                 } else {
+                    // A subsoil auger drills out the rock under it. The ore stays in the cell, so the auger pulls it from there.
+                    if (b.def == BuildDef.SUBSOIL_AUGER && map.terrain[i] == Terrain.ROCK) {
+                        map.terrain[i] = Terrain.GRAVEL
+                        map.markWalkChanged()
+                        map.roomDirty = true
+                    }
                     b.built = true
                     map.markWalkChanged()
                     b.hp = b.maxHp
@@ -859,6 +878,13 @@ private fun Game.driveBill(p: Pawn, j: Job) {
 
 // ---------------------------------------------------------------- research
 
+/**
+ * Research points added in one tick: the reference rate per work tick (RimWorld/ResearchManager.cs:38) on Stillmere's point
+ * scale, times the researcher's speed, the bench factor and the keen-mind factor. Stillmere's own keen-mind factor (C).
+ */
+internal fun researchPointsPerTick(workSpeed: Float, benchFactor: Float, keenMind: Boolean): Float =
+    workSpeed * RESEARCH_BASE_RATE * RESEARCH_POINT_SCALE * benchFactor * (if (keenMind) 1.35f else 1f)
+
 private fun Game.driveResearch(p: Pawn, j: Job) {
     val bench = map.building[map.idx(j.tx, j.ty)]
     val cur = researchCurrent
@@ -871,7 +897,7 @@ private fun Game.driveResearch(p: Pawn, j: Job) {
     }
     p.gainXp(SkillType.SCHOLARSHIP, 0.1f)
     val mult = if (bench.def == BuildDef.PRECISION_BENCH) 1.6f else 1f
-    val prog = (researchProgress[cur] ?: 0f) + p.workSpeed(SkillType.SCHOLARSHIP) / TIME_SCALE * 0.25f * mult * (if (Trait.KEEN_MIND in p.traits) 1.35f else 1f)
+    val prog = (researchProgress[cur] ?: 0f) + researchPointsPerTick(p.workSpeed(SkillType.SCHOLARSHIP), mult, Trait.KEEN_MIND in p.traits)
     researchProgress[cur] = prog
     if (prog >= cur.cost) {
         researchDone.add(cur)
@@ -880,7 +906,7 @@ private fun Game.driveResearch(p: Pawn, j: Job) {
         endJob(p)
         return
     }
-    if (++j.timer > tk(900)) endJob(p)
+    if (++j.timer > RESEARCH_SESSION_TICKS) endJob(p)
 }
 
 // ---------------------------------------------------------------- medical
@@ -1199,7 +1225,8 @@ private fun Game.driveButcher(p: Pawn, j: Job) {
             val race = s.corpseRace ?: Race.HARE
             if (doWork(p, j, SkillType.GALLEY, 160f + race.meat * 1.2f)) {
                 val eff = 0.55f + p.workSpeed(SkillType.GALLEY).coerceAtMost(1.5f) * 0.3f
-                val meat = (race.meat * eff * (1f - s.rot * 0.5f)).toInt()
+                // Meat is round-random of the meat amount times efficiency, with no rot term (Verse/Pawn.cs:2962).
+                val meat = roundRandom(race.meat * eff)
                 if (meat > 0) map.drop(if (race.insect) ItemType.CHITIN_CUTS else ItemType.MEAT, meat, p.x, p.y)
                 val leather = (race.leather * eff).toInt()
                 if (leather > 0) map.drop(ItemType.LEATHER, leather, p.x, p.y)

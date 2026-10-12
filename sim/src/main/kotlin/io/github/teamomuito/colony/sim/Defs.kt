@@ -20,6 +20,51 @@ const val TIME_SCALE = TICKS_PER_HOUR / LEGACY_TICKS_PER_HOUR.toFloat()
 fun tk(legacyTicks: Int): Int = Math.round(legacyTicks * TIME_SCALE)
 fun tk(legacyTicks: Long): Long = Math.round(legacyTicks * TIME_SCALE.toDouble())
 
+// Production and economy: construction, power, plants, food and research. Each value and its source is in
+// docs/fidelity/economy.md. "D" values are read from the decompiled reference; the file and line are cited beside each.
+
+/** Capacity of one battery in watt-days (RimWorld/CompProperties_Battery.cs:5, the code default). */
+const val BATTERY_CAPACITY_WD = 1000f
+/** Each battery drains this many watts every tick (RimWorld/CompPowerBattery.cs:70, in CompTick). */
+const val BATTERY_SELF_DISCHARGE_W = 5f
+/** The breeze mill uses no more wind than this (RimWorld/CompPowerPlantWind.cs:32). */
+const val BREEZE_OUTPUT_WIND_CAP = 1.5f
+/** How far fertility moves the growth rate (RimWorld/PlantProperties.cs:97, default 0.5). */
+const val PLANT_FERTILITY_SENSITIVITY = 0.5f
+/**
+ * Growth stops this many degrees below the optimal band: the optimal minimum of 6 (RimWorld/PlantProperties.cs:89) less the
+ * growth minimum, which has no initializer and so is 0 (RimWorld/PlantProperties.cs:87).
+ */
+const val GROWTH_BELOW_OPTIMAL_C = 6f
+/**
+ * Growth stops this many degrees above the optimal band: the growth maximum of 58 (RimWorld/PlantProperties.cs:93) less the
+ * optimal maximum of 42 (RimWorld/PlantProperties.cs:91), which is 16.
+ */
+const val GROWTH_ABOVE_OPTIMAL_C = 16f
+/** Light factor is zero at this glow and full at [GROW_OPTIMAL_GLOW] (RimWorld/PlantProperties.cs:75, 77). */
+const val GROW_MIN_GLOW = 0.51f
+const val GROW_OPTIMAL_GLOW = 1f
+/**
+ * A powered grow tray's growth factor, used in place of the terrain fertility blend. A Stillmere rule (C), not a reference
+ * value; it keeps the factor the tray had before the blend, so the tray's growth does not change with the blend.
+ */
+const val GROW_TRAY_GROWTH_FACTOR = 2f
+/** A crop can be harvested once it passes this share of growth (RimWorld/Plant.cs:115, default in PlantProperties.cs:55). */
+const val HARVEST_MIN_GROWTH = 0.65f
+/** Corpses start to rot after this many days (RimWorld/ThingDefGenerator_Corpses.cs:181). */
+const val CORPSE_ROT_DAYS = 2.5f
+/** Chance that a raw meat item poisons the eater (RimWorld/ThingDefGenerator_Meat.cs:68). */
+const val RAW_MEAT_POISON_CHANCE = 0.02f
+/** Base research rate per work tick, before the unit scale below (RimWorld/ResearchManager.cs:38). */
+const val RESEARCH_BASE_RATE = 0.00825f
+/**
+ * Stillmere's unit for research points. Project costs are base cost times this, as before this round, so saved progress keeps
+ * its meaning. The scale is Stillmere's own choice (C), not a reference value.
+ */
+const val RESEARCH_POINT_SCALE = 16f
+/** A research session lasts this many ticks in Delay mode (RimWorld/JobDriver_Research.cs:48). */
+const val RESEARCH_SESSION_TICKS = 4000
+
 enum class Terrain(val label: String, val passable: Boolean, val fertility: Float, val cost: Int) {
     SOIL("Soil", true, 1f, 1),
     RICH_SOIL("Rich soil", true, 1.4f, 1),
@@ -149,7 +194,8 @@ enum class ItemType(
     POTATOES("Potatoes", ItemCat.FOOD_PLANT, 75, 1.1f, 0.05f, 40f),
     CORN("Corn", ItemCat.FOOD_PLANT, 75, 1.1f, 0.05f, 40f),
     STRAWBERRIES("Strawberries", ItemCat.FOOD_PLANT, 75, 1.2f, 0.05f, 10f),
-    MEAT("Meat", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 4f),
+    // Raw meat is destroyed when it reaches the rotting stage, 2 days in (RimWorld/ThingDefGenerator_Meat.cs:37).
+    MEAT("Meat", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 2f),
     MANFLESH("Manflesh", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 4f),
     CHITIN_CUTS("Chitin cuts", ItemCat.FOOD_MEAT, 75, 1.2f, 0.05f, 4f),
     EGGS("Eggs", ItemCat.FOOD_MEAT, 75, 2f, 0.05f, 8f),
@@ -427,5 +473,5 @@ enum class Research(
     PYRE_RITES("Pyre rites", 400f, listOf(PHARMACOLOGY), "Pyre house", 2),
     ;
 
-    val cost get() = baseCost * 16f
+    val cost get() = baseCost * RESEARCH_POINT_SCALE
 }

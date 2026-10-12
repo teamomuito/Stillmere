@@ -299,19 +299,22 @@ order; a 24-hour schedule of anything / work / joy / sleep; reservations and unr
 
 ### 3.8 Construction, power, fire, zones
 
-**Status: Partial.** **Priority 2.**
+**Status: Partial.** **Priority 2.** Round 16 (`economy.md`) closed the construction and power rows of the reference. Fire and zones are not in that round.
 **Files:** `Buildings.kt`, `Game.kt` (`placeBlueprint`, zones), `JobDrivers.kt` (`driveBuild`), `World.kt` (`powerTick`, `fireTick`, `explode`), `GameMap.kt` (`Zone`).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
 | Buildings offered | 72 (76 defined, 4 legacy) | far more | partial | M |
 | Wood wall | 5 wood, 160 work | wall costs 5 stuff; work **UNVERIFIED** | | M |
-| Sun array | 1,700 W | 1,700 W recalled | none | M |
-| Log-burning engine | 1,000 W | 1,000 W recalled | none | M |
-| Breeze mill | 1,500 W constant x wind 0.15 to 1.35 | ? | | ? |
-| Battery capacity | 600 per battery | 1,000 recalled | -40% | M |
-| Glow panel draw | 400 W | 2,900 recalled | far too low | M |
-| Hotplate, picture box, grow tray | 350, 200, 70 W | same recalled | none | M |
+| Sun array | 1,700 W; output scaled by the unroofed share of its footprint (round 16; D `CompPowerPlantSolar.cs:17`) | 1,700 W recalled; roof share in source | roof share matches; rating UNVERIFIED (XML) | M |
+| Log-burning engine | 1,000 W | 1,000 W recalled | rating UNVERIFIED (XML) | M |
+| Breeze mill | 1,500 W x wind; wind used capped at 1.5 (round 16; D `CompPowerPlantWind.cs:32`); wind walk 0.15 to 1.35 | cap 1.5 in source; walk is noise (XML) | cap matches; walk UNVERIFIED | M |
+| Battery capacity | 1,000 Wd per battery (round 16; D `CompProperties_Battery.cs:5`, code default) | 1,000 recalled | matches; battery XML may override (UNVERIFIED) | M |
+| Battery self-discharge | 5 W per battery per tick, capped by stored energy (round 16; D `CompPowerBattery.cs:70`) | 5 W per tick | matches | high |
+| Battery charge efficiency | Lossless | code default 0.5 (`CompProperties_Battery.cs:7`); XML may override | not adopted (UNVERIFIED) | M |
+| Glow panel draw | 400 W | 2,900 recalled; no reference row (XML) | UNVERIFIED | M |
+| Hotplate, picture box, grow tray | 350, 200, 70 W | same recalled | UNVERIFIED | M |
+| Construction learning | 0.25 XP per tick in the work stage, after all materials are in | 0.25 per tick while the frame holds resources | **Matches** (reference row was stale) | high |
 | Zone priorities | low, normal, preferred, important, critical | same five | **Matches** | M |
 | Materials | wood, stone, steel, hardalloy for walls; wood or steel for doors | many stuff types by property | 4 only | C |
 | Fire | intensity 0 to 1.2 per cell, spreads by flammability, rain 0.01 per step | fire size model | model differs | C |
@@ -320,32 +323,54 @@ order; a 24-hour schedule of anything / work / joy / sleep; reservations and unr
 power transmitters, multiple room-based work-table effects, snow clearing zones, named animal and pen areas (only 3 restriction
 areas exist), a hit-point filter on zones.
 
+**Open (power, round 16):** the power shortage shedding (every 20 ticks, 5% of consumers) and the battery restart reserve need a
+finer power step than the 625-tick network step, so they are deferred. Also open: the breeze mill's 250-tick wind read and its
+blocked wind path, the battery charge efficiency (UNVERIFIED), and the sun output curve (depends on the time model in 3.1).
+Building costs and power ratings are XML in vanilla and stay UNVERIFIED (see `economy.md`).
+
 ### 3.9 Plants, food, cooking, spoilage
 
-**Status: Partial.** **Priority 2.**
-**Files:** `Defs.kt` (`PlantType`, `ItemType`), `World.kt` (`plantsTick`, `spoilTick`, `deteriorationTick`), `Recipes.kt`, `JobDrivers.kt` (`driveSow`, `driveCut`, `driveEat`), `Jobs.kt` (`findGrow`).
+**Status: Partial.** **Priority 2.** Round 16 (`economy.md`) closed the crop growth, harvest, rot and raw-meat rows of the reference.
+**Files:** `Defs.kt` (`PlantType`, `ItemType`), `World.kt` (`plantsTick`, `spoilTick`, `deteriorationTick`), `Recipes.kt`, `JobDrivers.kt` (`driveSow`, `driveCut`, `driveEat`, `driveButcher`), `Jobs.kt` (`findGrow`).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
-| Crop grow days (rice, potato, corn, strawberry, cotton, mirewort) | 5.8, 5.8, 11.5, 6.5, 5.5, 8 | same recalled | none | M |
-| Effective growth speed | `1 / (days * 0.55)` per day at fertility 1 | takes the full grow days | crops grow about 1.8x too fast | C |
+| Crop grow days (rice, potato, corn, strawberry, cotton, mirewort) | 5.8, 5.8, 11.5, 6.5, 5.5, 8 | same recalled | per-plant XML UNVERIFIED | M |
+| Growth speed | `1 / days` per day at full factors (round 16; the 0.55 is removed, D `Plant.cs:346`); about 0.46 of the old rate on Stillmere's daylight, so rice takes about 11.6 game days, not 5.4 | `1 / growDays` times the light, fertility and temperature factors | **Matches** in formula; the daylight-as-glow mapping is C | high |
+| Fertility factor | `fertility x 0.5 + 0.5` (round 16; D `PlantUtility.cs:358`); grow tray growth factor 2.0 kept as before (C), applied directly and not through the blend | same blend, sensitivity default 0.5 | per-plant sensitivity UNVERIFIED | high |
+| Temperature factor | 0 at the growth limits (6 C below and 16 C above the 6 to 42 C band), ramp to 1 in the band (round 16; D `PlantUtility.cs:370-381`) | same ramp; limits 0 and 58 C by default | per-plant limits UNVERIFIED | high |
+| Light factor | Ramp from glow 0.51 to 1.0, glow = daylight (lamp cells count as 1.0) (round 16; D `PlantUtility.cs:361-367`) | same ramp | daylight-as-glow mapping is C | medium |
+| Rain and garden-sense growth bonuses | Removed (round 16; D `Plant.cs:289-302`: no weather or trait term) | none | **Matches** | medium |
 | Corn yield / potato yield | 40 / 11 | 40 / 11 recalled | none | M |
 | Rice yield | 12 | 6 recalled | 2x | M |
-| Crop growth temperature | 6 to 42 C (wispsilk from 10) | 6 to 42 recalled | none | M |
-| Frost kill | below -2 C, 15% per slow tick | ? | | ? |
-| Spoilage (days): meat, meals, milk | 4, 4, 4 | 4 recalled | none | M |
-| Spoilage: raw plants | 40 days (strawberries 10) | ? | | ? |
-| Corpse rot | 2.2 days | ? | | ? |
-| Rot temperature factor | none below 0 C, 0.2 at 0 C rising to 1.0 at 20 C | ? | | ? |
-| Spoiled stomach (vanilla name: names.md section 6.3) | 40% if the food was over 65% rotten, 1% from any meat | depends on cleanliness and cook skill recalled | model differs | M |
+| Harvest yield | Zero at or below 65% growth (not harvestable); above it `count x (0.5 + 0.5 x share from 65% to 100% growth)`, randomly rounded, no skill term (round 16; D `Plant.cs:115`, `Plant.cs:917-919` and `934-936` for the zero, `Plant.cs:932` for the formula); health term 1 (C); difficulty 1 | same formula, plus health and difficulty | **Matches** | high |
+| Crop harvest threshold | Crops harvestable above 65% growth (round 16; D `Plant.cs:115`); trees and regrowing plants keep the full-growth rule | harvest minimum 65% | **Matches** for crops | high |
+| Sown crop starting growth | 0.0001 (round 16; D `JobDriver_PlantSow.cs:61`) | 0.0001 | **Matches** | high |
+| Crop growth temperature | 6 to 42 C band (wispsilk from 10) | 6 to 42 recalled | optimal band matches | M |
+| Sowing temperature gate | Strictly between the growth limits (round 16; D `PlantUtility.cs:21-33`) | same | **Matches** | high |
+| Frost kill | below -2 C, 15% per slow tick | ? | C | ? |
+| Spoilage (days): raw meat | 2 (round 16; D `ThingDefGenerator_Meat.cs:37`, destroyed at the rotting stage) | 2 | **Matches** | medium |
+| Spoilage (days): meals, milk | 4, 4 | ? (XML) | UNVERIFIED | ? |
+| Spoilage: raw plants | 40 days (strawberries 10) | ? | UNVERIFIED | ? |
+| Corpse rot | 2.5 days (round 16; D `ThingDefGenerator_Corpses.cs:181`) | 2.5 days to rotting, 5 to dessicated | **Matches** to rotting; no dessicated stage (see below) | high |
+| Rot temperature factor | 0 at or below 0 C, linear to 1 at 10 C (round 16; D `Verse/GenTemperature.cs:459-470`) | same | **Matches** | high |
+| Raw meat poisoning | 2% per eating; no rotten-food roll for raw meat (round 16; D `ThingDefGenerator_Meat.cs:68`) | 2% | **Matches** | high |
+| Other meat-category poisoning | 1% per eating; 40% for other food over 65% rot | fresh-stage rule; other food's boundary is XML | UNVERIFIED for non-meat food | C |
+| Butcher meat yield | Round-random of `meat x (0.55 + 0.3 x min(cook speed, 1.5))`, no rot term (round 16; D `Verse/Pawn.cs:2962`); the cook-speed term is C | round-random of meat amount times efficiency | efficiency mapping C | medium |
+| Cooking output count | Fixed output per recipe (`Recipes.kt`) | ceil(count x efficiency) | no source mapping for efficiency; left fixed | medium |
 
-**Missing:** grass and wild-plant ecology, plant fertility mapping beyond terrain, ambient light needs per crop, animal feed items
-beyond fodder and feed pellets, insect jelly, chocolate, and the like. The mash works (a separate bench for beer) is **not in the base game as far as I
-know (UNVERIFIED)**; vanilla uses a fermenting vessel fed with wort.
+**Missing:** grass and wild-plant ecology, plant fertility mapping beyond terrain, animal feed items beyond fodder and feed
+pellets, insect jelly, chocolate, and the like. Also not in this round: death from lack of light (needs a persisted counter on
+each plant, so a save bump), plant lifespan (needs plant hit points), the food-choice cut-off at 88% rot and the rotting boundary
+for non-meat foods (XML), and the dessicated corpse stage. The mash works (a separate bench for beer) is **not in the base game as far as I
+know (UNVERIFIED)**; the reference shows a fermenting barrel and no mash bench identifier in source.
 
-**Defect found:** a subsoil auger brings up ore from the cell it stands on, but ore only exists in rock and rock cannot be built on, so
-a real subsoil auger always yields rough rocks (`World.kt productionTick`). `BaseContentTest.aPoweredSubsoilAugerBringsUpItsOre` passes
-because it places ore under a drill by hand.
+**Defect fixed (round 16):** a subsoil auger brought up ore from the cell it stood on, but ore only sits in rock and a building
+could not stand on rock, so a real auger always yielded rough rock. The auger may now stand on ore rock. When it is finished,
+its rock is drilled out to gravel and the ore stays in the cell, so it pulls the ore from its own cell. Regression:
+`BaseContentTest.aSubsoilAugerPlacedOnOreRockYieldsItsOwnOre` (places the auger, has a colonist build it, then checks the steel).
+`aSubsoilAugerIsStillRefusedOnRockWithNoOre` checks that rock without ore is still refused. The earlier test
+`aPoweredSubsoilAugerBringsUpItsOre` still places its ore by hand.
 
 ### 3.10 Animals
 
@@ -410,13 +435,17 @@ is registered (incident `AURORA`, log text now "sky curtain") and I cannot confi
 
 ### 3.14 Research
 
-**Status: Divergent.** **Priority 2.**
-**Files:** `Defs.kt` (`Research`), `Game.kt` (`researchAvailable`, `startResearch`), `JobDrivers.kt` (`driveResearch`), `Jobs.kt` (`findResearch`).
+**Status: Divergent.** **Priority 2.** Round 16 (`economy.md`) set the reference progress rate and session length. The cost scale and base costs remain Stillmere's.
+**Files:** `Defs.kt` (`Research`), `Game.kt` (`researchAvailable`, `startResearch`), `JobDrivers.kt` (`driveResearch`, `researchPointsPerTick`), `Jobs.kt` (`findResearch`).
 
 * 57 projects (README says 53).
-* **Cost model is invented:** `cost = baseCost * 16`, progress per tick = `workSpeed * 0.25 * bench multiplier (1.0 or 1.6) * trait`. Vanilla assigns each project a fixed point cost and a research-speed stat; I cannot compare without that data (**UNVERIFIED**).
+* **Progress rate (round 16):** `0.00825` points per work tick (D `ResearchManager.cs:38`) times work speed, bench factor and keen mind, on Stillmere's point scale of 16 (C, kept so saved progress keeps its meaning). At work speed 1 a project takes its base cost divided by 0.00825 ticks, the reference formula's time.
+* **Cost:** `base cost x 16`. The base costs are **UNVERIFIED**: vanilla costs are project XML and are not in the decompile. The old progress rate was 0.1 per tick, so a project now takes about 24% less time at the same cost.
+* **Learning:** 0.1 XP per tick on scholarship through `gainXp`, with passion and saturation (matches D `JobDriver_Research.cs:39`; the reference row was stale).
+* **Session (round 16):** 4000 ticks in Delay mode (D `JobDriver_Research.cs:48`), was 2250.
+* Keen mind 1.35 and the precision lab factor 1.6 stay Stillmere values (C, UNVERIFIED; the reference has no value for keen mind, and the bench factor is XML).
 * Several project names are not vanilla Core as far as I know (for example "Banquet cookery", "Alloy edging") (**UNVERIFIED**); the tree shape is original.
-* Missing: tech levels, techprints, prerequisite rules beyond the listed dependencies, study desks' effect on speed beyond the 1.0/1.6 split.
+* Missing: the tech-level cost factor (`1 + 0.5 x (project level - researcher level)`, D `ResearchProjectDef.cs:486-499`). It needs the colony's tech level, which is set in faction XML that the decompile does not contain, and a mapping from Stillmere's three tiers. Deferred to the owner, because it would make tier 2 and 3 projects 1.5 and 2 times dearer. Techprints match (none without Royalty). Study desks' effect beyond the 1.0 and 1.6 split is XML (facility offsets).
 
 ### 3.15 World map, factions, caravans, quests
 
@@ -730,3 +759,28 @@ Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, 
 * **Discrepancy:** the brief said `VERSION` is 31. It was 33 at the start of this run.
 * **Checked by a temporary run (deleted):** raid launches over a year, five seeds: Marlowe 76.8 (expected about 78), Orrin 51.8 (about 53.5). The first version of the cycle timer lost hits that sat exactly the spacing after the last one (58 a year); the timer now measures from the time it was due.
 * **Open:** adaptation, population-intent weighting, the siege budget, the temperature gates, the psychic drone levels, the raid strategy kinds, the pawn wealth term, the storyteller points-by-days curves (XML), and cycles for the other channels. Item values are not checked against vanilla market values (UNVERIFIED), so the wealth curve's scale is unconfirmed.
+
+## 16. Production and economy (3.8, 3.9, 3.14), round 16
+
+Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, and the rows not adopted are in [economy.md](economy.md). Nothing is committed.
+
+* **Adopted (D, checked in the decompiled tree):** battery capacity 1,000 Wd (code default; the battery XML may override it, UNVERIFIED); battery self-discharge of 5 W per battery per tick, capped by stored energy; the breeze mill's 1.5 wind cap; the sun array's roof share of its footprint; crop growth of `1 / days` per day at full factors (the 0.55 is removed); the fertility blend (sensitivity 0.5); the temperature ramp around the 6 to 42 C band (limits 0 and 58 C); the light ramp from glow 0.51 to 1.0; no rain or garden-sense growth bonus; a sown crop starting at 0.0001; crop harvest above 65% growth; the harvest yield, zero at or below 65% growth and from about half to full above it, with random rounding; raw meat spoiling in 2 days and corpses in 2.5; the rot rate ramp from 0 C to 10 C; raw meat poisoning at 2%, and no rotten-food roll for raw meat; the butcher's meat without a rot term, randomly rounded; the sowing gate at the growth limits; the research point rate of 0.00825 per work tick (about 24% less time per project than before); the research session of 4000 ticks.
+* **Adopted with Stillmere's own values (C or UNVERIFIED):** the research point scale of 16 (kept, so saved progress keeps its meaning); the growth limits as the optimal band plus the default distances; the daylight as glow, or a lamp's or fire's light where that is brighter, on the same ramp (`plantGlow`, not a step); the health term of 1 for plants; the cook-speed term in butchering; the research base costs (UNVERIFIED).
+* **Already matched, no change:** construction learning (0.25 per tick in the work stage) and research learning (0.1 per tick through `gainXp`). Both reference rows were out of date.
+* **Bug fix (not a reference value):** a subsoil auger can stand on ore rock, drills the rock out at completion, and pulls the ore from its own cell. Regression test `BaseContentTest.aSubsoilAugerPlacedOnOreRockYieldsItsOwnOre`.
+* **Not adopted, with reasons (summary; each row is in `economy.md`):** power shedding and the battery restart reserve (needs a finer power step); the breeze mill's 250-tick read and blocked path; the battery efficiency of 0.5 (XML may override); death from lack of light and plant lifespan (save bump and plant hit points); the food-choice cut-off and the non-meat rot boundary (XML); cooking output count (no efficiency mapping); the tech-level cost factor and tech-level scale (faction XML; a decision for the owner); bench eligibility and facility offsets (XML); fire, zones, roofs, snow and work-table penalties (other rows of 3.8).
+* **Crop speed, owner decision:** on Stillmere's daylight the adopted rate makes rice take about 11.6 game days instead of 5.4 (weather off; `aClearDayGivesAboutHalfAGrowTimeOfLightOnTheRamp` checks the day average of 0.499). The gap report's "1.8x too fast" was wrong for this schedule. Trees and other growing plants slow by the same factor. This is the largest balance change here and should be reviewed.
+* **Save format: version 34 to 35.** The layout is unchanged. The meaning of saved rot changed (raw meat 4 days to 2, corpses 2.2 to 2.5), so rot read from older saves is rescaled as it is read: map items, job stacks, and the held food of an eat job (`Job.heldRot`, raw meat only, which the spoiled-stomach roll never uses). The research progress unit and the battery charge are unchanged. A version 34 fixture (`legacy/colony_v34.sav`, with `legacy/colony_v34_expect.txt`) was made from the unchanged code before the change. `LegacyEconomyMigrationTest` checks that it loads, that its rot is rescaled once, and that the next write is version 35.
+* **Tests changed (old values):** seven assertions that the default write is version 34 now say 35, in `LegacyThreatsMigrationTest`, `LegacyNeedsMigrationTest`, `LegacySkillsMigrationTest` (two) and `LegacyNamesMigrationTest` (three). One test name (`aVersionThirtyOneSaveWrittenAgainIsVersionThirtyFour`) was renamed to `...IsTheCurrentVersion`. No other existing test asserted an economy value; the existing crop, research, battery, auger and spoilage tests pass unchanged.
+* **Tests added:** `EconomyFidelityTest` (27, one or more per adopted rule), `LegacyEconomyMigrationTest` (9), and two auger tests in `BaseContentTest`.
+* **Test changed for the new rate:** `GameTest.cropsGrowAndGetHarvested` is now `cropsSownInAGrowingZoneGrowOnTheReferenceRate`. It asserted a planted rice crop after 9 days. On the reference rate the first crops are still growing at 8 days (about 0.57 in the seed used), and a cold snap on day 9 kills immature crops through the existing frost rule. It now checks that the zone's crops are above 0.4 growth after 8 days. Nothing else in the suite changed.
+* **Tests:** 682 pass, 0 failures, 0 errors, 0 skipped (`./gradlew :sim:test --console=plain`).
+* **Discrepancy:** the brief said `VERSION` is 31. The committed `VERSION` is 34 (`SaveGame.kt:29` at `HEAD`), and the working tree has 35 (`SaveGame.kt:34`), the value this round sets. It is not changed in the review run.
+* **Review fixes (this run, on the uncommitted working tree):**
+  * **Light step.** The glow was full (1.0) whenever the cell light was above 0.5, and outdoors the cell light is the daylight, so the light factor jumped at half daylight. Rice would take 10.7 game days on that step, not 11.6. The glow is now `plantGlow` (the larger of the daylight and the cell's light). `aPlantUnderDimDaylightGrowsOnTheRampInTheWorldTick` fails under the step and passes now.
+  * **Grow tray.** The sowing filter (`Jobs.kt` `findGrow`) used a literal 2 for a powered tray. It now uses `GROW_TRAY_GROWTH_FACTOR`, as the growth step already did.
+  * **Harvest row.** The old tree and wild formula had a work-speed term (`0.5 + 0.5 x min(work speed, 1.6)`), so a tree at full growth gave the same count only at work speed 1.0. `economy.md` now says so.
+  * **Citations.** Every D citation in `economy.md` and in the economy code comments was opened and its value checked. One was wrong: the bench default of 1.0 is `StatDef.cs:96` (read at `StatWorker.cs:1248`), and `economy.md` now cites both. One comment was also wrong: the cut-XP comment said "fully grown" at `JobDriver_PlantCut.cs:8-18`, but lines 11-13 gate on `CanYieldNow()`. The fully grown gate is Stillmere's (C), it was already in HEAD, and it is recorded as an open row in `economy.md`, not changed here.
+  * **Untracked.** `economy.md`, `EconomyFidelityTest.kt`, `LegacyEconomyMigrationTest.kt`, `legacy/colony_v34.sav` and `legacy/colony_v34_expect.txt` are still untracked. This run does not commit them.
+* **Open:** the power shedding and reserve; the breeze mill's 250-tick read and blocked path; battery efficiency (UNVERIFIED); death from lack of light; plant lifespan; the food-choice cut-off; the tech-level cost factor (owner decision); the cut and harvest learning gate (owner decision, see `economy.md`); the research base costs and all building costs and power ratings (XML, UNVERIFIED); the per-plant growth sensitivities and temperature limits (UNVERIFIED).
+

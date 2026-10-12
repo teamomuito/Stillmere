@@ -564,10 +564,10 @@ internal fun Game.findGrow(p: Pawn): Job? {
         if (z == null || z.kind != ZoneKind.GROWING || !z.sow || map.plant[it] != null) return@nearestCell false
         val bd = map.building[it]
         if (bd != null && bd.def != BuildDef.GROW_TRAY) return@nearestCell false
-        val fert = if (bd?.def == BuildDef.GROW_TRAY && bd.powered) 2f else map.terrain[it].fertility
+        val fert = if (bd?.def == BuildDef.GROW_TRAY && bd.powered) GROW_TRAY_GROWTH_FACTOR else map.terrain[it].fertility
         if (fert <= 0f) return@nearestCell false
         val t = map.tempAt(it, outdoorTemp())
-        t > max(6f, z.crop.minTemp) && t < z.crop.maxTemp - 3f && !map.fires.containsKey(it)
+        growthSeasonOk(t, z.crop) && !map.fires.containsKey(it)
     }
     if (s >= 0) {
         reserve(p, key(s, K_PLANT))

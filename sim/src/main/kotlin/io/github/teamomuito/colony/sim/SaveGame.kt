@@ -25,8 +25,17 @@ object SaveGame {
      *
      * 34 adds, right after the incident history, the five most recent random incidents by name, most recent first
      * ([Game.lastRandomIncidents]; see docs/fidelity/threats.md). Earlier saves read an empty list.
+     *
+     * 35 keeps the layout but changes what a saved rot means: the share of its spoil time that has passed. Raw meat now spoils in
+     * 2 days (was 4) and corpses in 2.5 (was 2.2), so the rot of items read from older saves (map items and job stacks, see
+     * [migrateRot]) and the rot of food an eat job holds (see [heldRotFromOld]) is rescaled to keep the same time spent
+     * (docs/fidelity/economy.md).
      */
-    private const val VERSION = 34
+    private const val VERSION = 35
+
+    /** Spoil times before version 35, which saved rot is rescaled from. */
+    private const val OLD_MEAT_SPOIL_DAYS = 4f
+    private const val OLD_CORPSE_ROT_DAYS = 2.2f
 
     /** Saves older than this count ticks in the old base of 1,000 ticks per hour. Their times are converted when read. */
     private const val TIME_BASE_VERSION = 25
@@ -93,15 +102,36 @@ object SaveGame {
         opt(s.corpseOf); writeInt(s.corpseRace?.ordinal ?: -1); writeBoolean(s.corpseColonist); writeInt(s.corpseAge)
     }
 
-    private fun DataInputStream.readJobStack(): ItemStack {
+    private fun DataInputStream.readJobStack(version: Int): ItemStack {
         val id = readInt(); val t = ItemType.entries[readInt()]
         val x = readShort().toInt(); val y = readShort().toInt(); val n = readInt()
         val s = ItemStack(id, t, n, x, y)
         s.quality = Quality.entries[readByte().toInt()]; s.rot = readFloat(); s.hp = readFloat(); s.forbidden = readBoolean()
         s.corpseOf = opt(); val cr = readInt(); s.corpseRace = if (cr >= 0) Race.entries[cr] else null
         s.corpseColonist = readBoolean(); s.corpseAge = readInt()
+        s.migrateRot(version)
         return s
     }
+
+    /**
+     * Rot is saved as the share of the spoil time that has passed. Before version 35 raw meat spoiled in 4 days and corpses in
+     * 2.2, so the rot is rescaled to the same time spent under the current spoil times (docs/fidelity/economy.md).
+     */
+    private fun ItemStack.migrateRot(version: Int) {
+        if (version >= 35) return
+        rot = when {
+            corpseOf != null -> rot * (OLD_CORPSE_ROT_DAYS / CORPSE_ROT_DAYS)
+            type == ItemType.MEAT -> rot * (OLD_MEAT_SPOIL_DAYS / ItemType.MEAT.spoilDays)
+            else -> rot
+        }
+    }
+
+    /**
+     * The rot of the food an eat job holds ([Job.heldRot]) is a share of the same spoil time, so raw meat gets the same rescale.
+     * No other food changed its spoil time. [food] is the eat job's food type, which is read before this value.
+     */
+    private fun heldRotFromOld(rot: Float, food: ItemType?, version: Int): Float =
+        if (version >= 35 || food != ItemType.MEAT) rot else rot * (OLD_MEAT_SPOIL_DAYS / ItemType.MEAT.spoilDays)
 
     /** A job exactly as it was: what it is doing, its targets, progress, what it holds, and the stack it carries. */
     private fun DataOutputStream.writeJob(j: Job) {
@@ -123,8 +153,8 @@ object SaveGame {
         val item = readInt(); j.item = if (item >= 0) ItemType.entries[item] else null
         j.aux = readInt(); j.ingIdx = readInt(); j.collected = readInt()
         repeat(readInt()) { val t = ItemType.entries[readInt()]; val n = readInt(); j.held.add(Triple(t, n, Quality.entries[readInt()])) }
-        j.heldRot = readFloat()
-        if (readBoolean()) j.stack = readJobStack()
+        j.heldRot = heldRotFromOld(readFloat(), j.item, version)
+        if (readBoolean()) j.stack = readJobStack(version)
         return j
     }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -453,6 +483,7 @@ object SaveGame {
             s.quality = Quality.entries[i.readByte().toInt()]; s.rot = i.readFloat(); s.hp = i.readFloat(); s.forbidden = i.readBoolean()
             s.corpseOf = i.opt(); val cr = i.readInt(); s.corpseRace = if (cr >= 0) Race.entries[cr] else null
             s.corpseColonist = i.readBoolean(); s.corpseAge = i.readInt()
+            s.migrateRot(version)
             map.items[map.idx(x, y)] = s
         }
         repeat(i.readInt()) { val c = i.readInt(); map.fires[c] = Fire(i.readFloat()) }

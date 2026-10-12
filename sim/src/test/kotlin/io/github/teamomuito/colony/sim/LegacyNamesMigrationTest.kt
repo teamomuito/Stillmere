@@ -150,7 +150,7 @@ class LegacyNamesMigrationTest {
     @Test fun savingAnOldGameWritesTheCurrentVersionAndTheTitlesSurviveARoundTrip() {
         val g = SaveGame.read(fixture)
         val bytes = SaveGame.write(g)
-        assertEquals(34, versionOf(bytes))
+        assertEquals(35, versionOf(bytes))
         assertEquals(g.colonists.map { it.backstory }, SaveGame.read(bytes).colonists.map { it.backstory })
     }
 
@@ -350,7 +350,7 @@ class LegacyNamesMigrationTest {
         val oldLabel = pairs("thought").first { it.second == "Lucid high" }.first
         g.colonists[0].addThought(oldLabel, 0.1f, g.tick, 1000)
         val bytes = SaveGame.write(g)
-        assertEquals(34, versionOf(bytes))
+        assertEquals(35, versionOf(bytes))
         val back = SaveGame.read(bytes)
         assertEquals(listOf("Lucid high", oldLabel), back.colonists[0].thoughts.map { it.label })
         assertEquals(g.incidentLast[Incident.SKYHORN_VISIT], back.incidentLast[Incident.SKYHORN_VISIT])
@@ -465,7 +465,7 @@ class LegacyNamesMigrationTest {
     @Test fun aVersion30SaveWrittenAgainIsVersion31AndKeepsItsText() {
         val g = SaveGame.read(v30)
         val bytes = SaveGame.write(g)
-        assertEquals(34, versionOf(bytes))
+        assertEquals(35, versionOf(bytes))
         val back = SaveGame.read(bytes)
         assertEquals(g.graveyard, back.graveyard)
         assertEquals(g.colonists.map { it.backstory }, back.colonists.map { it.backstory })

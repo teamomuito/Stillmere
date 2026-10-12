@@ -454,7 +454,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     private fun canBuildCell(def: BuildDef, x: Int, y: Int): Boolean {
         val i = cell(x, y); if (i < 0) return false
         val t = map.terrain[i]
-        if (!t.passable || t == Terrain.WATER_SHALLOW) return false
+        // A subsoil auger may stand on rock that holds ore: it drills that rock out, and pulls the ore from its own cell.
+        val drillOnOre = def == BuildDef.SUBSOIL_AUGER && t == Terrain.ROCK && map.ore[i] != Ore.NONE
+        if ((!t.passable && !drillOnOre) || t == Terrain.WATER_SHALLOW) return false
         if (def.research != null && def.research !in researchDone) return false
         if (def == BuildDef.CONDUIT) return map.building[i] == null && !map.conduitAt(i)
         if (def.isFloor) {

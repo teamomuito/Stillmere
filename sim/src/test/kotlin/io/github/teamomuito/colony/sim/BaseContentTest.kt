@@ -100,6 +100,45 @@ class BaseContentTest {
         assertTrue(g.map.countItems(ItemType.STONE_CHUNK) > 0)
     }
 
+    /**
+     * Regression for the defect in gap report 3.9: ore only sits in rock, and a building could not stand on rock, so a real auger
+     * always brought up rough rock. Now the auger is placed on the ore rock, a colonist builds it (which drills the rock out, and
+     * keeps the ore in the cell), and it pulls the ore from its own cell.
+     */
+    @Test fun aSubsoilAugerPlacedOnOreRockYieldsItsOwnOre() {
+        val g = contentGame(1107)
+        g.researchDone.add(Research.SUBSOIL_BORING)
+        val x = g.homeX + 4; val y = g.homeY + 2
+        val i = g.map.idx(x, y)
+        g.map.terrain[i] = Terrain.ROCK
+        g.map.ore[i] = Ore.STEEL
+        assertTrue("an auger may stand on ore rock", g.placeBlueprint(BuildDef.SUBSOIL_AUGER, x, y))
+        g.map.drop(ItemType.STEEL, 100, x - 2, y)
+        g.map.drop(ItemType.COMPONENT, 2, x - 2, y + 1)
+        var steps = 0
+        while (steps < TICKS_PER_DAY * 3 && g.map.building[i]?.built != true) { g.step(); steps++ }
+        val b = g.map.building[i]
+        assertTrue("a colonist built the auger", b != null && b.built)
+        assertEquals("the rock under the auger is drilled out", Terrain.GRAVEL, g.map.terrain[i])
+        assertEquals("the ore stays in its cell", Ore.STEEL, g.map.ore[i])
+        val steelBefore = g.map.countItems(ItemType.STEEL)
+        val chunksBefore = g.map.countItems(ItemType.STONE_CHUNK)
+        b!!.powered = true
+        g.productionTick()
+        assertTrue("steel comes up from its own cell", g.map.countItems(ItemType.STEEL) > steelBefore)
+        assertEquals("no rough rock from ore rock", chunksBefore, g.map.countItems(ItemType.STONE_CHUNK))
+    }
+
+    @Test fun aSubsoilAugerIsStillRefusedOnRockWithNoOre() {
+        val g = contentGame(1108)
+        g.researchDone.add(Research.SUBSOIL_BORING)
+        val x = g.homeX + 4; val y = g.homeY + 2
+        val i = g.map.idx(x, y)
+        g.map.terrain[i] = Terrain.ROCK
+        g.map.ore[i] = Ore.NONE
+        assertFalse("rock with no ore cannot take an auger", g.placeBlueprint(BuildDef.SUBSOIL_AUGER, x, y))
+    }
+
     @Test fun anUnpoweredSubsoilAugerDoesNothing() {
         val g = contentGame(1107)
         val x = g.homeX + 4; val y = g.homeY + 2
