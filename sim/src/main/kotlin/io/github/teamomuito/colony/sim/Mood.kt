@@ -22,6 +22,7 @@ fun Game.comfortTick(p: Pawn) {
     if (p.race.mech) return
     p.dark = !p.isAnimal && map.light[i] < 0.25f && !(p.job?.type == JobType.SLEEP)
     if (p.dead) return
+    if (!p.isAnimal) placeNeedsTick(p)
     val minT = p.comfyMin()
     val maxT = p.comfyMax()
     val cold = minT - p.temp
@@ -62,10 +63,10 @@ fun Game.comfortTick(p: Pawn) {
             if (heat.severity <= 0f) removeHediff(p, HediffKind.SUNSTRUCK)
         }
     }
-    // Starved frame recovers once fed.
+    // Starved frame recovers at the malnutrition rate whenever the pawn is not starving.
     val mal = p.hediff(HediffKind.STARVED_FRAME)
-    if (mal != null && p.food > 0.15f) {
-        mal.severity -= 0.03f
+    if (mal != null && p.food > 0f) {
+        mal.severity -= NeedRules.MALNUTRITION_PER_DAY * Game.SLOW_TICK.toFloat() / TICKS_PER_DAY
         p.healthDirty = true
         if (mal.severity <= 0f) removeHediff(p, HediffKind.STARVED_FRAME)
     }
@@ -79,16 +80,28 @@ fun Game.comfortTick(p: Pawn) {
         tox.severity -= 0.0012f
         if (tox.severity <= 0f) removeHediff(p, HediffKind.TOXIN_LOAD)
     }
-    // Drug effects wear off; withdrawal.
+    // Addiction severity is the chemical need: it falls each day. Each addiction in withdrawal adds a craving. The cravings
+    // are summed over every addiction first and the keep-or-remove rule is applied once, so hediff order does not matter.
+    val addictFall = DrugRules.ADDICTION_FALL_PER_DAY * Game.SLOW_TICK.toFloat() / TICKS_PER_DAY
+    var craving = 0f
     for (h in p.hediffs.toList()) {
-        if (h.kind.category == 3 && h.kind.name.endsWith("_ADDICTION")) {
-            h.severity -= 0.45f / 96f
-            if (h.severity <= 0f) {
-                h.severity = 0f
-                if (p.hediff(HediffKind.CRAVING_ACHE) == null) addHediff(p, HediffKind.CRAVING_ACHE, 0.4f)
-            } else removeHediff(p, HediffKind.CRAVING_ACHE)
-        }
+        if (h.kind !in DrugRules.ADDICTIONS) continue
+        h.severity = max(0f, h.severity - addictFall)
+        if (h.severity <= DrugRules.WITHDRAWAL_LEVEL) craving += DrugRules.CRAVING_PER_ADDICTION
     }
+    if (craving > 0f) {
+        val level = min(1f, craving)
+        val ache = p.hediff(HediffKind.CRAVING_ACHE)
+        if (ache == null) addHediff(p, HediffKind.CRAVING_ACHE, level)
+        else if (ache.severity != level) { ache.severity = level; p.healthDirty = true }
+    } else removeHediff(p, HediffKind.CRAVING_ACHE)
+    // Drug tolerance wears off slowly.
+    if (p.drugTolerance.isNotEmpty()) {
+        val fall = DrugRules.TOLERANCE_FALL_PER_DAY * Game.SLOW_TICK.toFloat() / TICKS_PER_DAY
+        val it = p.drugTolerance.entries.iterator()
+        while (it.hasNext()) { val e = it.next(); val v = e.value - fall; if (v <= 0f) it.remove() else e.setValue(v) }
+    }
+    restCollapseTick(p)
     // Disease: occasionally someone gets sick from dirt and cold.
     if (p.colonist && tick % tk(5000L) == 0L) maybeSick(p)
 }
@@ -133,13 +146,14 @@ fun Game.moodUpdate(p: Pawn) {
     }
     val cold = p.comfyMin() - p.temp
     val hot = p.temp - p.comfyMax()
-    when {
-        cold > 20f -> add("Freezing", -0.25f)
-        cold > 9f -> add("Very cold", -0.14f)
-        cold > 3f -> add("Cold", -0.05f)
-        hot > 15f -> add("Scorching", -0.25f)
-        hot > 7f -> add("Very hot", -0.14f)
-        hot > 3f -> add("Hot", -0.05f)
+    if (cold > 0f) when (NeedRules.thermalStage(cold)) {
+        0 -> add("Cold", -0.02f)
+        1 -> add("Very cold", -0.14f)
+        else -> add("Freezing", -0.25f)
+    } else if (hot > 0f) when (NeedRules.thermalStage(hot)) {
+        0 -> add("Hot", -0.02f)
+        1 -> add("Very hot", -0.14f)
+        else -> add("Scorching", -0.25f)
     }
     if (p.hediffs.any { it.kind.category == 0 && it.severity > 0.1f }) add("Sick", -0.06f)
     val lost = p.injuries.count { it.missing && !p.implants.containsKey(it.part) && !p.race.body[it.part].inner }
@@ -151,12 +165,21 @@ fun Game.moodUpdate(p: Pawn) {
     else if (p.apparel.isNotEmpty() && p.apparel.any { it.hp < (it.type.apparel?.hp ?: 100f) * 0.3f }) add("Tattered clothing", -0.04f)
     else if (p.apparel.any { it.quality.ordinal >= Quality.EXCELLENT.ordinal }) add("Fine clothing", 0.04f)
     // Environment.
+    // Outdoors and indoors needs: time spent shut in, or outside for too long. Values are Stillmere's own (UNVERIFIED).
+    val outNeed = p.outdoorsNeed
+    when {
+        outNeed <= 0.05f -> add("Sealed in", -0.15f)
+        outNeed <= 0.2f -> add("Trapped inside", -0.10f)
+        outNeed <= 0.4f -> add("Cooped up", -0.05f)
+    }
+    if (p.indoorsNeed <= 0.2f) add("Worn by the weather", -0.04f)
     if (p.dark && p.job?.type != JobType.SLEEP) add("In the dark", -0.03f)
     if ((weather == Weather.RAIN || weather == Weather.THUNDER) && !map.roofed(i)) add("Soaking wet", -0.04f)
     val r = map.roomId[i]
     if (r >= 0 && map.roomIndoor[r] && !map.roomDirty) {
-        if (map.roomBeauty[r] < -0.6f) add("Drab rooms", -0.04f)
-        else if (map.roomBeauty[r] > 1.6f) add("Pretty surroundings", 0.06f)
+        val beauty = NeedRules.beautyLevel(map.roomBeauty[r])
+        if (beauty <= NeedRules.UGLY_BEAUTY) add("Drab rooms", -0.04f)
+        else if (beauty > NeedRules.PRETTY_BEAUTY) add("Pretty surroundings", 0.06f)
         if (map.roomClean[r] < -0.9f) add("Filthy room", -0.07f)
         else if (map.roomClean[r] < -0.4f) add("Dirty room", -0.03f)
         if (map.roomSize[r] < 7 && map.roomRole[r] != 1) add("Cramped", -0.04f)
@@ -231,18 +254,31 @@ fun Game.moodUpdate(p: Pawn) {
 }
 
 private fun Game.breaksTick(p: Pawn) {
+    val step = Game.SLOW_TICK.toInt()
+    // Time below each threshold, and the awake time left before the next break.
+    p.moodBelowExtremeTicks = if (p.mood < BreakRules.EXTREME) p.moodBelowExtremeTicks + step else 0
+    p.moodBelowMajorTicks = if (p.mood < BreakRules.MAJOR) p.moodBelowMajorTicks + step else 0
+    p.moodBelowMinorTicks = if (p.mood < BreakRules.MINOR) p.moodBelowMinorTicks + step else 0
+    if (p.breakCooldown > 0 && p.job?.type != JobType.SLEEP) p.breakCooldown = max(0, p.breakCooldown - step)
     if (p.breakUntil > 0 && tick >= p.breakUntil) {
         p.breakUntil = 0; p.breakKind = 0; p.hostileFlag = false
         if (p.downed && p.job == null) { /* catatonic recovery */ }
         endJob(p)
         p.addThought("Catharsis", 0.22f, tick, (2.5f * TICKS_PER_DAY).toInt())
+        p.breakCooldown = BreakRules.COOLDOWN_TICKS
         say("${p.name} has recovered from the mental break.", 0)
         return
     }
     if (p.breakUntil > 0 || p.downed || p.drafted && p.job?.type == JobType.ATTACK) return
-    if (!mentalBreaksEnabled) return
-    val sev = BreakRules.severity(p.mood)
-    val chance = BreakRules.chance(sev) * (if (Trait.UNMOVED in p.traits) 0.8f else 1f) * (if (Trait.STEEL_NERVES in p.traits) 0.35f else 1f) * (if (Trait.SHORT_FUSE in p.traits) 1.8f else 1f)
+    if (!mentalBreaksEnabled || p.breakCooldown > 0) return
+    // The most severe level that has been below its threshold long enough is the only one that can break.
+    val sev = when {
+        p.moodBelowExtremeTicks > BreakRules.MIN_TICKS_BELOW -> 2
+        p.moodBelowMajorTicks > BreakRules.MIN_TICKS_BELOW -> 1
+        p.moodBelowMinorTicks > BreakRules.MIN_TICKS_BELOW -> 0
+        else -> return
+    }
+    val chance = BreakRules.chance(sev, step) * (if (Trait.UNMOVED in p.traits) 0.8f else 1f) * (if (Trait.STEEL_NERVES in p.traits) 0.35f else 1f) * (if (Trait.SHORT_FUSE in p.traits) 1.8f else 1f)
     if (chance <= 0f || rng.float() > chance) return
     val options = ArrayList<Int>()
     options += Break.WANDER; options += Break.BINGE_FOOD; options += Break.INSULT; options += Break.HIDE
@@ -250,6 +286,43 @@ private fun Game.breaksTick(p: Pawn) {
     if (sev >= 2) { options += Break.CATATONIC; options += Break.RUN_WILD; options += Break.BERSERK }
     if (map.countItems(ItemType.BEER) + map.countItems(ItemType.JOINT) > 0) options += Break.BINGE_DRUGS
     startBreak(p, rng.pick(options))
+}
+
+/** Jobs in which a pawn sits or lies on the seat under it, so that seat's comfort applies. */
+private val SEAT_JOBS = setOf(JobType.SLEEP, JobType.REST, JobType.JOY, JobType.SOCIAL, JobType.EAT, JobType.WAIT)
+
+/** The comfort of the seat under the pawn while it sits or lies on one, and zero otherwise. */
+private fun Game.seatComfort(p: Pawn): Float {
+    val t = p.job?.type
+    if (t != null && t !in SEAT_JOBS) return 0f
+    val b = map.building[map.idx(p.x, p.y)] ?: return 0f
+    return if (b.built) b.def.comfort else 0f
+}
+
+/** The outdoors and indoors needs move with the cell the pawn stands on. Comfort is read from its seat. */
+private fun Game.placeNeedsTick(p: Pawn) {
+    val i = map.idx(p.x, p.y)
+    val outdoor = !map.roomIndoorAt(i)
+    val roofed = map.roofed(i)
+    val inBed = isInBed(p)
+    val k = Game.SLOW_TICK.toFloat() / NeedRules.INTERVAL_TICKS
+    p.outdoorsNeed = NeedRules.stepNeed(p.outdoorsNeed, NeedRules.outdoorsDelta(outdoor, roofed, inBed) * k, NeedRules.outdoorsFloor(outdoor, roofed))
+    p.indoorsNeed = NeedRules.stepNeed(p.indoorsNeed, NeedRules.indoorsDelta(outdoor, roofed) * k)
+    p.comfortNeed = seatComfort(p).coerceIn(0f, 1f)
+}
+
+/**
+ * A colonist or prisoner that has been at zero rest long enough may fall asleep where it stands. Hostile pawns keep their raid
+ * AI, and a drafted colonist is stood down (see [pawnTick]) before it can collapse.
+ */
+internal fun Game.restCollapseTick(p: Pawn) {
+    if (p.isAnimal || p.race.mech || p.isBaby || p.dead || !(p.colonist || p.prisoner)) return
+    p.ticksAtZeroRest = if (p.rest < NeedRules.ZERO_REST) p.ticksAtZeroRest + Game.SLOW_TICK.toInt() else 0
+    if (p.ticksAtZeroRest <= NeedRules.COLLAPSE_AFTER_TICKS || p.downed || p.drafted || p.job?.type == JobType.SLEEP) return
+    val chance = Game.SLOW_TICK.toFloat() / (NeedRules.collapseMtbDays(p.ticksAtZeroRest) * TICKS_PER_DAY)
+    if (!rng.chance(chance)) return
+    startSleepInPlace(p)
+    say("${p.name} collapsed from exhaustion.", 2)
 }
 
 fun Game.startBreak(p: Pawn, kind: Int) {

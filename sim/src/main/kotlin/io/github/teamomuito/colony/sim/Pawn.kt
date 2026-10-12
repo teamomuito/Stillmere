@@ -1,5 +1,6 @@
 package io.github.teamomuito.colony.sim
 
+import java.util.EnumMap
 import kotlin.math.max
 import kotlin.math.min
 
@@ -103,6 +104,21 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var lastSocial = 0L
     var lastJoyKind = ""
     var hunger = 1f
+    /** Outdoors and indoors needs, 1 is full. They move slowly, so they are saved (version 32). */
+    var outdoorsNeed = 1f
+    var indoorsNeed = 1f
+    /** Comfort of the seat under the pawn, recomputed each slow update (not saved). */
+    var comfortNeed = 0f
+    /** Ticks spent at zero rest. Past [NeedRules.COLLAPSE_AFTER_TICKS] the pawn may collapse into sleep (saved, version 32). */
+    var ticksAtZeroRest = 0
+    /** Ticks the mood has stayed below each break threshold (saved, version 32). */
+    var moodBelowExtremeTicks = 0
+    var moodBelowMajorTicks = 0
+    var moodBelowMinorTicks = 0
+    /** Awake ticks left before another mental break can happen (saved, version 32). */
+    var breakCooldown = 0
+    /** Drug tolerance per drug, 0 to 1. Kept in drug order so it saves the same way every time (saved, version 32). */
+    val drugTolerance = EnumMap<ItemType, Float>(ItemType::class.java)
 
     // Health
     val injuries = ArrayList<Injury>()

@@ -9,7 +9,7 @@ import java.io.DataInputStream
 /**
  * Saves written before the renames (see docs/fidelity/names.md). They hold the old names: backstory titles, thought labels,
  * an incident name and the temporary event name. Reading them must give the current names. Graveyard entries and log lines are kept
- * exactly as they were saved (names.md section 2). Saving again must write the current version (31).
+ * exactly as they were saved (names.md section 2). Saving again must write the current version (32).
  *
  * The old names are test data, so they are not written here. They are in sim/src/test/resources/legacy/old_text_cases.tsv
  * (columns: id, since, kind, old text, new text; "since" is the version whose rename the row belongs to), and the fixtures in
@@ -150,7 +150,7 @@ class LegacyNamesMigrationTest {
     @Test fun savingAnOldGameWritesTheCurrentVersionAndTheTitlesSurviveARoundTrip() {
         val g = SaveGame.read(fixture)
         val bytes = SaveGame.write(g)
-        assertEquals(31, versionOf(bytes))
+        assertEquals(32, versionOf(bytes))
         assertEquals(g.colonists.map { it.backstory }, SaveGame.read(bytes).colonists.map { it.backstory })
     }
 
@@ -350,7 +350,7 @@ class LegacyNamesMigrationTest {
         val oldLabel = pairs("thought").first { it.second == "Lucid high" }.first
         g.colonists[0].addThought(oldLabel, 0.1f, g.tick, 1000)
         val bytes = SaveGame.write(g)
-        assertEquals(31, versionOf(bytes))
+        assertEquals(32, versionOf(bytes))
         val back = SaveGame.read(bytes)
         assertEquals(listOf("Lucid high", oldLabel), back.colonists[0].thoughts.map { it.label })
         assertEquals(g.incidentLast[Incident.SKYHORN_VISIT], back.incidentLast[Incident.SKYHORN_VISIT])
@@ -465,7 +465,7 @@ class LegacyNamesMigrationTest {
     @Test fun aVersion30SaveWrittenAgainIsVersion31AndKeepsItsText() {
         val g = SaveGame.read(v30)
         val bytes = SaveGame.write(g)
-        assertEquals(31, versionOf(bytes))
+        assertEquals(32, versionOf(bytes))
         val back = SaveGame.read(bytes)
         assertEquals(g.graveyard, back.graveyard)
         assertEquals(g.colonists.map { it.backstory }, back.colonists.map { it.backstory })

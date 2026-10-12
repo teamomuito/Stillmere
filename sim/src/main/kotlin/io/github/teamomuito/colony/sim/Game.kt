@@ -618,10 +618,14 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (p.race.mech) { p.food = 1f; p.rest = 1f }
         // Needs.
         val foodRate = if (p.race.isAnimal) 0.55f * p.race.size.let { StrictMath.pow(it.toDouble(), 0.5).toFloat() } * (if (p.faction == Faction.WILD) 0.35f else 1f) else NeedRules.humanFoodPerDay(Trait.HEARTY_APPETITE in p.traits, Trait.PLAIN_LIVING in p.traits, p.pregnantUntil > 0L, p.age)
-        p.food = max(0f, p.food - foodRate / TICKS_PER_DAY * (if (sleeping) 0.7f else 1f))
+        p.food = max(0f, p.food - foodRate / TICKS_PER_DAY * (if (sleeping) 0.7f else 1f) * NeedRules.hungerMultiplier(p.food))
         if (!p.isAnimal) {
-            if (!sleeping) p.rest = max(0f, p.rest - 0.95f / TICKS_PER_DAY)
-            val joyDrain = 0.42f / TICKS_PER_DAY
+            // Rest falls on every step except one that takes a rest gain: asleep (SLEEP stage 1) or lying on a REST job (stage 1, driveSleep).
+            // A REST job still walking to its bed (stage 0) takes no gain, so it falls like any awake pawn. The reference does the same:
+            // its fall is skipped only in an update that took a gain, and the gain is taken only in the lay-down toil while asleep
+            // (RimWorld/Need_Rest.cs:104-117; RimWorld/Toils_LayDown.cs:94-97).
+            if (!sleeping && !(p.job?.type == JobType.REST && p.job?.stage == 1)) p.rest = max(0f, p.rest - NeedRules.REST_FALL_PER_DAY / TICKS_PER_DAY * NeedRules.restFallMultiplier(p.rest))
+            val joyDrain = NeedRules.joyFallPerInterval(p.joy) / NeedRules.INTERVAL_TICKS
             if (p.job?.type != JobType.JOY) p.joy = max(0f, p.joy - joyDrain)
         }
         if (p.food <= 0f && !p.isAnimal || p.food <= 0f && p.isAnimal) starvationTick(p)
@@ -660,7 +664,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     private fun starvationTick(p: Pawn) {
         if (tick % HEALTH_STRIDE != (p.id % HEALTH_STRIDE).toLong()) return
         val h = addHediff(p, HediffKind.STARVED_FRAME, 0f)
-        h.severity = min(1f, h.severity + HEALTH_STRIDE * 0.28f / TICKS_PER_DAY)
+        h.severity = min(1f, h.severity + HEALTH_STRIDE * NeedRules.MALNUTRITION_PER_DAY / TICKS_PER_DAY)
         p.healthDirty = true
         if (h.severity >= 1f) { die(p, "starvation") }
     }

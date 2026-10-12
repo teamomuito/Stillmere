@@ -308,7 +308,7 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
         if (r == 0) { j.stage = 1; if (b.def.medical) b.occupant = p.id }
         return
     }
-    val inBed = j.amount == 1
+    val inBed = isInBed(p)
     val bed = if (inBed) map.building[map.idx(p.x, p.y)] else null
     val comfort = bed?.def?.comfort ?: 0f
     // Rest gain is per tick: divided by TIME_SCALE so a bed restores the same amount per game hour.
@@ -323,7 +323,7 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
         return
     }
     p.rest = min(1f, p.rest + gain)
-    val done = p.rest >= 0.985f || (p.schedule[hour] != 3 && p.rest > 0.82f)
+    val done = p.rest >= 1f || (p.schedule[hour] != 3 && p.rest > 0.82f)
     if (done) {
         val i = map.idx(p.x, p.y)
         if (!inBed) p.addThought("Slept on the ground", -0.05f, tick, TICKS_PER_DAY)
@@ -397,13 +397,15 @@ fun Game.applyDrug(p: Pawn, t: ItemType) {
     h.duration = if (t == ItemType.BEER) tk(3500) else if (t == ItemType.SURGE_TONIC) tk(4000) else tk(2600)
     if (t == ItemType.PALE_DUST) p.addThought("Pale dust high", 0.28f, tick, TICKS_PER_DAY)
     if (t == ItemType.WHITE_RUSH) p.addThought("White rush high", 0.3f, tick, TICKS_PER_DAY)
-    // Existing addiction is satisfied again.
+    // Existing addiction is satisfied again. A new one is rolled at the chance the tolerance allows, before this dose adds tolerance.
+    val tolerance = p.drugTolerance[t] ?: 0f
     val ad = p.hediff(addict)
     if (ad != null) { ad.severity = 1f; removeHediff(p, HediffKind.CRAVING_ACHE) }
-    else if (rng.chance(when (t) { ItemType.LUCID_DRAUGHT -> 0.1f; ItemType.BEER -> 0.03f; ItemType.PALE_DUST -> 0.45f; ItemType.WHITE_RUSH -> 0.3f; ItemType.SURGE_TONIC -> 0.06f; else -> 0.015f })) {
+    else if (rng.chance(min(1f, DrugRules.addictionChance(t) * DrugRules.addictionMultiplier(tolerance)))) {
         addHediff(p, addict, 1f)
         say("${p.name} is now addicted to ${t.label.lowercase()}.", 3)
     }
+    if (t in DrugRules.ADDICTIVE) p.drugTolerance[t] = min(1f, tolerance + DrugRules.TOLERANCE_PER_DOSE)
     p.addThought("Drug use", 0.06f, tick, TICKS_PER_DAY / 2)
 }
 

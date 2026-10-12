@@ -16,8 +16,11 @@ object SaveGame {
      * translated, because each one is a record of a past event: graveyard entries in [Game.graveyard], which keep the death cause they
      * were written with (only new deaths write the current causes), log lines in [Game.log], and caravan last-event notes in
      * [Caravan.lastEvent]. The layout did not change. Decision recorded in docs/fidelity/names.md (section 2).
+     *
+     * 32 adds, at the end of each pawn record: the outdoors and indoors needs, the zero-rest counter, the break timers and
+     * cooldown, and drug tolerance (see [writePawn] and docs/fidelity/needs-mood.md). Earlier saves read these as their defaults.
      */
-    private const val VERSION = 31
+    private const val VERSION = 32
 
     /** Saves older than this count ticks in the old base of 1,000 ticks per hour. Their times are converted when read. */
     private const val TIME_BASE_VERSION = 25
@@ -338,6 +341,12 @@ object SaveGame {
             o.writeBoolean(j != null)
             if (j != null) o.writeJob(j)
         }
+        if (version >= 32) {
+            o.writeFloat(p.outdoorsNeed); o.writeFloat(p.indoorsNeed); o.writeInt(p.ticksAtZeroRest)
+            o.writeInt(p.moodBelowExtremeTicks); o.writeInt(p.moodBelowMajorTicks); o.writeInt(p.moodBelowMinorTicks); o.writeInt(p.breakCooldown)
+            o.writeInt(p.drugTolerance.size)
+            for ((drug, tolerance) in p.drugTolerance) { o.writeInt(drug.ordinal); o.writeFloat(tolerance) }
+        }
     }
 
     fun read(data: ByteArray): Game {
@@ -599,6 +608,11 @@ object SaveGame {
             p.path = if (pathLen < 0) null else IntArray(pathLen) { i.readInt() }
             repeat(i.readInt()) { p.reserved.add(i.readInt()) }
             if (i.readBoolean()) p.job = i.readJob(version)
+        }
+        if (version >= 32) {
+            p.outdoorsNeed = i.readFloat(); p.indoorsNeed = i.readFloat(); p.ticksAtZeroRest = i.readInt()
+            p.moodBelowExtremeTicks = i.readInt(); p.moodBelowMajorTicks = i.readInt(); p.moodBelowMinorTicks = i.readInt(); p.breakCooldown = i.readInt()
+            repeat(i.readInt()) { val drug = ItemType.entries[i.readInt()]; p.drugTolerance[drug] = i.readFloat() }
         }
         return p
     }

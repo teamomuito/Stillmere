@@ -159,8 +159,8 @@ fun Game.threatNear(p: Pawn): Boolean {
     return false
 }
 
-/** Below these a pawn drops whatever it is doing to eat or sleep, if it can. */
-internal const val URGENT_FOOD = 0.15f
+/** Below these a pawn drops whatever it is doing to eat or sleep, if it can. Food is the urgently hungry level (see NeedRules). */
+internal const val URGENT_FOOD = NeedRules.URGENT_FOOD
 internal const val URGENT_REST = 0.1f
 
 /** Jobs that are never dropped for a need: the need itself, threats, breaks, and work that must finish. */
@@ -336,6 +336,25 @@ internal fun Game.findBedFor(p: Pawn, forceMedical: Boolean = false): Int {
         if (bed >= 0) { map.building[bed]!!.occupant = p.id; p.bedId = bed; return bed }
     }
     return -1
+}
+
+/**
+ * True when the pawn was given a bed, has reached it, and the bed still stands. This is the one in-bed test: the rest gain and
+ * the outdoors need both use it. A pawn that collapses onto a bed cell has no bed (amount 0, see [startSleepInPlace]), so it is
+ * not in bed. A downed pawn has no job at all (see [downPawn]), so it is not in bed either.
+ */
+internal fun Game.isInBed(p: Pawn): Boolean {
+    val j = p.job ?: return false
+    if (j.type != JobType.SLEEP && j.type != JobType.REST) return false
+    if (j.stage != 1 || j.amount != 1) return false
+    val b = map.building[map.idx(p.x, p.y)] ?: return false
+    return b.built && b.def.sleeps
+}
+
+/** Lies down where the pawn stands, for exhaustion that overcomes it. Nothing else is set up: the sleep job rests it. */
+internal fun Game.startSleepInPlace(p: Pawn) {
+    endJob(p)
+    p.job = Job(JobType.SLEEP).also { it.stage = 1; it.amount = 0 }
 }
 
 internal fun Game.startSleep(p: Pawn): Boolean {
