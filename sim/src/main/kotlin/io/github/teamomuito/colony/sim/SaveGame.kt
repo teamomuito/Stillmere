@@ -22,8 +22,11 @@ object SaveGame {
      *
      * 33 adds, at the end of each pawn record, the XP each skill learned today (12 floats, the daily learning cap; see [writePawn] and
      * docs/fidelity/skills-traits.md). Earlier saves read these as zero, which is the value at the start of a day.
+     *
+     * 34 adds, right after the incident history, the five most recent random incidents by name, most recent first
+     * ([Game.lastRandomIncidents]; see docs/fidelity/threats.md). Earlier saves read an empty list.
      */
-    private const val VERSION = 33
+    private const val VERSION = 34
 
     /** Saves older than this count ticks in the old base of 1,000 ticks per hour. Their times are converted when read. */
     private const val TIME_BASE_VERSION = 25
@@ -154,6 +157,10 @@ object SaveGame {
             o.writeLong(g.raidLastEnded)
             o.writeInt(g.incidentLast.size)
             for ((k, v) in g.incidentLast) { o.writeUTF(k.name); o.writeLong(v) }
+        }
+        if (version >= 34) {
+            o.writeInt(g.lastRandomIncidents.size)
+            for (k in g.lastRandomIncidents) o.writeUTF(k.name)
         }
 
         val m = g.map
@@ -386,6 +393,10 @@ object SaveGame {
             raidEnded = i.tickAt(version)
             repeat(i.readInt()) { val name = i.readUTF().let { if (version < 28) LegacyNames.incidentName(it, version) else it }; val at = i.tickAt(version); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
         }
+        var recentRandom: List<Incident> = emptyList()
+        if (version >= 34) {
+            recentRandom = List(i.readInt()) { i.readUTF() }.mapNotNull { name -> Incident.entries.firstOrNull { it.name == name } }
+        }
 
         val w = i.readInt(); val h = i.readInt()
         val map = GameMap(w, h)
@@ -466,6 +477,7 @@ object SaveGame {
         g.traders.addAll(traderList)
         g.raidLastEnded = raidEnded
         g.incidentLast.putAll(incidents)
+        g.lastRandomIncidents.addAll(recentRandom.take(RECENT_INCIDENT_WEIGHTS.size))
 
         repeat(i.readInt()) { g.pawns.add(readPawn(i, tick, version)) }
         run {

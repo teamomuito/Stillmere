@@ -89,6 +89,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
     var raidLastEnded = -1L
     /** When each incident last happened. Cooldowns and the quiet after raids read this. Saved. */
     val incidentLast: MutableMap<Incident, Long> = java.util.EnumMap(Incident::class.java)
+    /** The most recent random incidents, most recent first, at most five. They lower the weight of a repeat. Saved from version 34. */
+    val lastRandomIncidents = ArrayList<Incident>()
     var raidCounter = 0
     var gameOver = false
     var won = false

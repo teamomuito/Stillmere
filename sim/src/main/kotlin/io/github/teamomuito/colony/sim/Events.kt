@@ -208,7 +208,7 @@ internal fun Game.manhunterPack() {
         Biome.DESERT, Biome.ARID -> rng.pick(listOf(Race.BOAR, Race.WOLF))
         else -> rng.pick(if (day < 14) listOf(Race.BOAR, Race.WOLF, Race.DEER) else listOf(Race.BOAR, Race.WOLF, Race.BEAR, Race.SHAGOX))
     }
-    val count = (threatPoints() / 18f / race.dangerous.coerceAtLeast(0.5f)).toInt().coerceIn(2, 10)
+    val count = manhuntCount(threatPoints(), race.dangerous)
     val side = rng.int(4)
     val e = edgeCell(side) ?: return
     repeat(count) {

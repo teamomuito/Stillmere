@@ -54,11 +54,11 @@ class LegacySkillsMigrationTest {
         for (p in g.colonists) assertTrue("${p.name}", p.xpToday.all { it == 0f })
     }
 
-    @Test fun aVersionThirtyTwoSaveWrittenAgainIsVersionThirtyThree() {
-        assertEquals(33, versionOf(SaveGame.write(SaveGame.read(fixture))))
+    @Test fun aVersionThirtyTwoSaveWrittenAgainIsVersionThirtyFour() {
+        assertEquals(34, versionOf(SaveGame.write(SaveGame.read(fixture))))
     }
 
-    @Test fun theDailyCounterSurvivesASaveAtVersionThirtyThree() {
+    @Test fun theDailyCounterSurvivesASaveAtVersionThirtyFour() {
         val g = SaveGame.read(fixture)
         g.colonists.first().xpToday[SkillType.ARTISTRY.ordinal] = 1234.5f
         val again = SaveGame.read(SaveGame.write(g)).colonists.first()
@@ -98,10 +98,10 @@ class LegacySkillsMigrationTest {
         for (p in g.colonists) assertTrue("${p.name}", p.xpToday.all { it == 0f })
     }
 
-    @Test fun theXpSurvivesASaveAtVersionThirtyThree() {
+    @Test fun theXpSurvivesASaveAtVersionThirtyFour() {
         val g = SaveGame.read(xpFixture)
         val bytes = SaveGame.write(g)
-        assertEquals(33, versionOf(bytes))
+        assertEquals(34, versionOf(bytes))
         val again = SaveGame.read(bytes)
         for (k in g.colonists.indices) {
             assertEquals("xp $k", g.colonists[k].xp.toList(), again.colonists[k].xp.toList())

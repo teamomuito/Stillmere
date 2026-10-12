@@ -392,19 +392,19 @@ parties, social fights beyond a bruise exchange, babies' separate needs. Orienta
 
 ### 3.13 Threats and storytellers
 
-**Status: Divergent.** **Priority 1.**
-**Files:** `Incidents.kt` (`IncidentRegistry`, `threatPoints`), `Events.kt` (`launchRaid` and all event effects), `Game.kt` (`Storyteller`, `Difficulty`, `init` timers), `Factions.kt` (`pickRaiders`).
+**Status: Partly closed (round 15, section 15).** Priority 1 stays for the open items listed there.
+**Files:** `Incidents.kt` (`IncidentRegistry`, `threatPoints`, the raid cycle), `Events.kt` (`launchRaid` and all event effects), `Game.kt` (`Storyteller`, `Difficulty`, `init` timers), `Factions.kt` (`pickRaiders`). The values and their sources are in [threats.md](threats.md).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
-| Raid points | `(17 * colonists + wealth / 95 + 6 * animal danger) * difficulty * storyteller * min(1, 0.34 + day / 34)`, floor `22 * difficulty` | **(wealth points + pawn points) x difficulty x starting factor x adaption**; buildings count at half; wealth capped at 1,000,000; points capped at 10,000 | different shape, no caps, no half-weight for buildings | V (https://rimworldwiki.com/wiki/Raid_points) |
+| Raid points | (wealth points + colonist points and 0.48 x danger per tamed animal, each blended by health) x difficulty x storyteller x min(1, 0.34 + day / 34), clamped between a seeded floor (35 up to a day ceiling of 70) and 10,000 (`Incidents.kt`) | **(wealth points + pawn points) x difficulty x starting factor x adaption**; buildings count at half; wealth capped at 1,000,000; points capped at 10,000. The formula's shape and its curves are now D (RimWorld/StorytellerUtility.cs:185-188). Still open: the pawn market-value term and the adaptation term. | adaptation and pawn terms not modelled; days factor and threat scales are Stillmere's (UNVERIFIED) | D (RimWorld/StorytellerUtility.cs:185) |
 | Difficulty threat scale | 0 / 0.6 / 0.9 / 1.5 / 2.2 | ? | | ? |
 | First raid | day 8 to 12 | ? | | ? |
 | Raid kinds | rush, tunnelers, shelling camp, lander drop, iron swarm (vanilla raid kinds: names.md section 6.3) | straight assault, sappers, breach, siege, drop pods, infestation, mech cluster | partial | M |
-| Incident channels | 6 timers (raid, wanderer, pod, trader, temperature, misc) with 24 incident types | storyteller-specific incident cycles | model differs | M |
+| Incident channels | 6 timers (raid, wanderer, pod, trader, temperature, misc) with 24 incident types. Raids of Marlowe and Orrin follow an on and off cycle (round 15); the other channels keep their timers | storyteller-specific incident cycles | model differs for the other channels | M |
 | Storytellers | 3, original characters | 3 in Core | structure similar, behaviour not | M |
 
-**Missing:** wealth and pawn point curves with caps, per-storyteller cycles, raid strategies beyond the five kinds, friendly raids
+**Missing:** pawn market-value wealth, adaptation, population-intent weighting, siege budget, temperature gates, psychic drone levels, raid strategy kinds, friendly raids (see section 15 for what is still open)
 (allied reinforcements exist only through comms), wanderer and refugee rules, the incident list beyond what is registered. "Aurora"
 is registered (incident `AURORA`, log text now "sky curtain") and I cannot confirm it is a Core event (**UNVERIFIED**).
 
@@ -569,6 +569,8 @@ Per `CLAUDE.md`: flagged, not deleted.
 | The traits labelled Easy company, Meat-first and Inventive eye | not recalled as Core traits | ? |
 | `W_LEVER`, `CLEAR_MIND_TEA` (hidden) | I believe these are Core, so they may be wrongly hidden | M |
 | Animal "tricks", suppression, "Lonely" thought, colony animal cap | invented, not DLC; flagged as non-vanilla (not as DLC) | C |
+| `Incident.MECH_CRASH` (mech cluster, Core channel, day 25) | the reference says the vanilla cluster refuses to run unless Royalty is active (`RimWorld/IncidentWorker_MechCluster.cs:11`). Round 15 flags it as DLC-sourced and keeps it (threats.md). The owner decides whether it stays. | D (the gate), M (the content) |
+| Colonist points for Biotech (age factor, colony mechs) | Biotech-gated in vanilla (`RimWorld/StorytellerUtility.cs:58-64, 178`). Not implemented, so nothing to flag in the sim; recorded here so it is not added without a decision. | D |
 
 ## 7. Top 10 gaps
 
@@ -713,3 +715,18 @@ Made on branch `ccr-41984ede-stlmp4`, after a review of section 13. The plan, th
 * **Citations.** The 66 citations in `skills-traits.md` were opened at their lines, and their values checked. The short-name citations in the rows not adopted (`TraitUtility.cs`, `TraitDegreeData.cs`, `GrowthUtility.cs`, `PawnGenerator.cs:1429-2015`, `Toils_Recipe.cs:107`) were checked too. The `Verse/PawnGenerator.cs:1563-1595` attempt cap is checked.
 * **Save format.** Unchanged. `VERSION` is 33 and nothing saved changed, so there is no bump and no new fixture. The brief said 31 at the start of the run; the tree had 33 (section 13 has 32 at HEAD).
 * **Tests:** 606 pass, 0 failures, 0 errors, 0 skipped (`./gradlew :sim:test --console=plain`, from a clean test task). Section 13 had 601: `SkillsTraitsTest` now has 42, and `HealthCacheTest` (3) is new. Section 5's totals were out of date before this round and are not refreshed here.
+
+## 15. Threats and storytellers (3.13), round 15
+
+Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, and the rows not adopted are in [threats.md](threats.md). Nothing is committed.
+
+* **Adopted (D):** the points cap of 10,000; the floor, now a seeded value from 35 up to a day ceiling (35 at day 12, 70 at day 35), drawn once per game hour and not scaled by difficulty; the wealth curve (0 to 14,000 gives 0, then 2,400 at 400,000, 3,600 at 700,000, 4,200 at 1,000,000); buildings at half value in the wealth; the colonist curve (15, 140, 200 per colonist) with the 65% health blend, which tamed animals get too (D, RimWorld/StorytellerUtility.cs:167-173 applies it to every counted pawn); the 0.08 factor for each tamed animal that is not downed; the manhunter ambush factor of 0.75, and the manhunt count's rounding and its minimum of two (D); the recent-incident factors 0.01, 0.3, 0.5, 0.7, 0.9 over the last five random incidents; the 60-interval day and the storyteller check step of 1,000 ticks, used by the raid cycle; a raid cycle window that cannot place its raids is dropped whole, not only the raids past its end (D, RimWorld/IncidentCycleUtility.cs:64-69).
+* **Adopted with Stillmere's own values (C, UNVERIFIED):** the raid cycle for Marlowe (day 8, on 10, off 6 days, 3 or 4 raids, 2 days apart) and for Orrin (day 8, on 8, off 12, 2 or 4 raids, 2 days apart). Juniper keeps the timer. The mean rates match the old timers (Marlowe about 0.22 a day, Orrin about 0.15). The animal combat power is Stillmere's proxy (6 times the danger), the manhunt count uses 18 times the danger (C, UNVERIFIED), a danger floor of 0.5 and a cap of 10 (C; the cap is a scope choice), the seed mixer and salts are Stillmere's (C), and the health of colonists and animals is `healthFraction()`.
+* **Kept:** the days-passed factor, the difficulty and storyteller threat scales, the hard cooldowns, the uniform channel spacing for every channel except the raid channel of Marlowe and Orrin, the hourly check, and the first raid timer (day 8 to 12).
+* **Not adopted, with reasons:** the adaptation term and its counter (all curves are XML); population-intent weighting (XML curves and a population-adaptation counter); the siege budget (no camp construction); the temperature gates (needs per-tile seasonal temperature); the psychic drone levels (no levels in Stillmere); raid strategy kinds (ambiguous); the pawn market-value term (no pawn value in Stillmere); Biotech colonist factors (DLC); the animal release-trainable condition (no animal training state); the manhunt upper bound of 100 (scope); the cycle window's end, which vanilla includes by one step and Stillmere excludes (C). The mech cluster is flagged as DLC-sourced in section 6 and kept.
+* **Save format: version 33 to 34.** One new field: the five most recent random incidents by name, written after the incident history and read only from version 34. A version 33 fixture (`legacy/colony_v33.sav`, with `legacy/colony_v33_expect.txt`) was made from the unchanged code before the change. `LegacyThreatsMigrationTest` checks that it loads, that its list reads as empty, and that a version 34 save keeps a list.
+* **Tests changed:** six assertions that the default write is version 33 now say 34, and four test names that said "ThirtyThree" were renamed to match (`LegacyNeedsMigrationTest`, `LegacySkillsMigrationTest`, `LegacyNamesMigrationTest`). No other existing test asserted a threat value.
+* **Tests:** 644 pass, 0 failures, 0 errors, 0 skipped (`./gradlew :sim:test --console=plain`). Before this round, 606.
+* **Discrepancy:** the brief said `VERSION` is 31. It was 33 at the start of this run.
+* **Checked by a temporary run (deleted):** raid launches over a year, five seeds: Marlowe 76.8 (expected about 78), Orrin 51.8 (about 53.5). The first version of the cycle timer lost hits that sat exactly the spacing after the last one (58 a year); the timer now measures from the time it was due.
+* **Open:** adaptation, population-intent weighting, the siege budget, the temperature gates, the psychic drone levels, the raid strategy kinds, the pawn wealth term, the storyteller points-by-days curves (XML), and cycles for the other channels. Item values are not checked against vanilla market values (UNVERIFIED), so the wealth curve's scale is unconfirmed.
