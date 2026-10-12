@@ -614,7 +614,7 @@ Made on branch `ccr-401b8c33-djvmwb`. Sources for the new values are in `needs-m
 
 ## 11. Names and labels on branch `ccr-41984ede-stlmp4`
 
-Not committed (working tree only).
+Committed as `eb9784c`.
 
 * **2.2 resolved for labels and text, with open items** (see the status line in 2.2). Mapping, rules and open items are in [names.md](names.md). Enum positions are unchanged (checked by position, names.md section 8).
 * **Round 7 (review of the names area).** No old RimWorld name remains in a code literal. The labels that the review listed were already renamed, and their constants were renamed in round 7 (names.md section 5.2). Labels renamed in earlier rounds, and the round 7 renames, are listed with their old and new names in names.md sections 6.1 to 6.4, which is the only place this report refers to them. The benches that were renamed are listed in names.md section 6 and section 11.
@@ -626,3 +626,39 @@ Not committed (working tree only).
 * **Round 11 (verdict on round 10, and the names-fix task).** The graveyard and log-line decisions are stated in the goal (names.md section 0) and in section 2. The log lines are kept as saved, and the claim that they are not saved is withdrawn. The save code has a comment at each read site. A test checks that an old graveyard string loads unchanged. The V cells of the four fidelity docs were re-checked by script: each has its URL in the row. The social-thought test was renamed to match its label ("Friendly ribbing"). The decisions on the titles, the README, the scope, the graveyard and the log lines are for the owner to confirm (names.md section 9). Nothing is committed.
 * **Round 12 (review of round 11, findings A and B).** The lower-case adult titles of T13 and T14 have keys (T20 and T21), so an old save that held either one loads the new adult title. The pirate camp texts saved in site names and pending-fight labels are translated for saves below version 28 (S01-S03). Caravan last-event notes are kept as saved, as a record of a past battle. The decisions on the camp texts and the last-event notes are for the owner to confirm (names.md items 26 and 27; section 16). Tests: 507 pass, 0 failures, 0 errors (`./gradlew :sim:test --console=plain`). Nothing is committed.
 * **Other docs.** Old RimWorld names in this report were replaced with references to names.md (the temperature event offsets, the food hediff row, the raid kinds and the quoted README claim). `health.md` and `README.md` use the round 7 names as well.
+
+## 12. Decompiled reference (version 1.6.9438.38202)
+
+Added on branch `ccr-41984ede-stlmp4`. Source: the decompiled RimWorld source at [Chillu1/RimWorldDecompiled](https://github.com/Chillu1/rimworlddecompiled), commit `2d50803`. Its README says personal use only, which the owner accepted for this work. Full table: [decompiled-reference.md](decompiled-reference.md).
+
+Two passes checked the citations. A reader extracted each value, and a second pass re-opened the cited line. **532** citations were confirmed. Rejected citations are not listed.
+
+| Section | System | Confirmed | Matches | Differs | Ambiguous |
+|---|---|---|---|---|---|
+| 3.1 | Time and determinism | 16 | 11 | 3 | 2 |
+| 3.2 | Map generation | 35 | 0 | 29 | 6 |
+| 3.3 | Temperature and rooms | 31 | 9 | 20 | 2 |
+| 3.4 | Health and medicine | 68 | 15 | 51 | 2 |
+| 3.5 | Needs, mood, thoughts, drugs, mental breaks | 44 | 4 | 34 | 6 |
+| 3.6 | Skills, traits, passions, backstories | 29 | 2 | 24 | 3 |
+| 3.7 | Work and jobs | 35 | 2 | 33 | 0 |
+| 3.8 | Construction, power, fire, zones | 43 | 4 | 35 | 4 |
+| 3.9 | Plants, food, cooking, spoilage | 26 | 2 | 21 | 3 |
+| 3.10 | Animals | 36 | 2 | 27 | 7 |
+| 3.11 | Combat | 50 | 3 | 45 | 2 |
+| 3.12 | Social and life stages | 25 | 3 | 20 | 2 |
+| 3.13 | Threats and storytellers | 27 | 1 | 21 | 5 |
+| 3.14 | Research | 15 | 6 | 8 | 1 |
+| 3.15 | World map, factions, caravans, quests | 36 | 6 | 27 | 3 |
+| 3.17 | Start, scenarios, save and load | 16 | 5 | 5 | 6 |
+| | **Total** | **532** | **75** | **403** | **54** |
+
+What this means:
+
+* **Matches** agree with the decompiled source. The most matches are in health (15), time (11), temperature-rooms (9), research (6).
+* **Differs** is a real difference, a unit or scope difference, or a difference in what the system includes. A "differs" is not automatically a bug. For example, a slow-update interval that Stillmere keeps in a converted unit looks different in ticks but is not a value error.
+* **Ambiguous** depends on runtime data, such as the starting season or tile temperatures, or on several candidate values. The reference doc marks these rows.
+* Section 3 status cells are unchanged. They will move only after each system is reviewed against the table in the reference doc.
+
+The version does not match the pinned target 1.6.4850. The owner has not yet chosen between keeping 1.6.4850 and re-pinning to 1.6.9438.38202.
+
