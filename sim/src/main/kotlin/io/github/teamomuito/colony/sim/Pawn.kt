@@ -79,6 +79,10 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var warmup = 0
     /** Under fire until this tick: the pawn's own ranged shots are less accurate. */
     var suppressedUntil = 0L
+    /** Burn size of the fire on this pawn; 0 when not burning. Saved from version 36 (docs/fidelity/combat.md). */
+    var burnSize = 0f
+    /** Tick until which a melee hit keeps this pawn staggered and it takes no action. Saved from version 36. */
+    var staggerUntil = 0L
     /** Tricks a tamed animal has learned, 0 to [MAX_TRICKS]. Trained animals hit harder. */
     var trained = 0
     /** The target this pawn is currently aiming at; -1 for none. Not saved: it is re-chosen after a load. */
@@ -338,16 +342,25 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
 
     fun weaponDamageMult() = (if (weaponItem != null) weaponQuality.mult else 1f) * (if (isAnimal) 1f + 0.2f * trained else 1f)
 
+    /**
+     * A summary of armour for a body region, for the character panel only: the covering layers' ratings added up and capped at
+     * 0.9. The hit roll does not use it. Each layer rolls on its own in `dealDamage` (Verse/ArmorUtility.cs:13-56).
+     */
     fun armorFor(coverBit: Int, sharp: Boolean): Float {
-        var armor = if (race.mech) race.armor * (if (sharp) 1f else 0.6f) else 0f
+        var armor = naturalArmor(sharp)
         for (w in apparel) {
             val a = w.type.apparel ?: continue
             if (a.cover and coverBit == 0) continue
-            val v = if (sharp) a.armorSharp else a.armorBlunt
-            armor += v * w.quality.mult * (0.5f + 0.5f * (w.hp / a.hp).coerceIn(0f, 1f))
+            armor += w.armorRating(sharp)
         }
         return min(0.9f, armor)
     }
+
+    /**
+     * Natural armour, applied after the worn layers (Verse/ArmorUtility.cs:44-45). Only mechanoids have it here, and the
+     * blunt rating at 0.6 of the sharp is kept from Stillmere (UNVERIFIED). See docs/fidelity/combat.md.
+     */
+    fun naturalArmor(sharp: Boolean): Float = if (race.mech) race.armor * (if (sharp) 1f else 0.6f) else 0f
 
     fun insulationCold(): Float = apparel.sumOf { ((it.type.apparel?.insCold ?: 0f) * it.quality.mult).toDouble() }.toFloat()
     fun insulationHeat(): Float = apparel.sumOf { ((it.type.apparel?.insHeat ?: 0f)).toDouble() }.toFloat()

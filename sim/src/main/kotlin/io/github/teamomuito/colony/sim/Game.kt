@@ -650,6 +650,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             if (p.dead) return
             if (p.downed) maybeStandUp(p)
         }
+        // A burning pawn takes its fire damage every 150 ticks, on its own phase (docs/fidelity/combat.md).
+        if (p.burnSize > 0f && tick % BURN_CHECK_TICKS == (p.id % BURN_CHECK_TICKS).toLong()) burnTick(p)
+        if (p.dead) return
         if (p.carriedBy >= 0) {
             val c = pawnById(p.carriedBy)
             if (c == null || !c.alive) { p.carriedBy = -1 } else { p.x = c.x; p.y = c.y; p.fromX = c.fromX; p.fromY = c.fromY; p.moveCd = c.moveCd; p.moveTotal = c.moveTotal; return }
@@ -662,6 +665,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         if (p.dormant) { dormantTick(p); return }
         if (p.isBaby) { babyTick(p); return }
         if (p.attackCd > 0) p.attackCd--
+        // A staggered pawn takes no action until the stagger ends (RimWorld/Verb_MeleeAttack.cs:98).
+        if (tick < p.staggerUntil) return
         if (map.fires.isNotEmpty() && tick % tk(3) == (p.id % tk(3)).toLong() && p.moveCd <= 0) stepOutOfFire(p)
         // Drafted animals of the colony fight under the same AI as drafted colonists.
         if (p.isAnimal && p.drafted && p.faction == Faction.PLAYER) { draftedAI(p); return }

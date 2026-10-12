@@ -48,7 +48,7 @@ class LegacyThreatsMigrationTest {
     }
 
     @Test fun aVersionThirtyThreeSaveWrittenAgainIsTheCurrentVersion() {
-        assertEquals(35, versionOf(SaveGame.write(SaveGame.read(fixture))))
+        assertEquals(36, versionOf(SaveGame.write(SaveGame.read(fixture))))
     }
 
     @Test fun theRecentIncidentsSurviveASaveAtTheCurrentVersion() {

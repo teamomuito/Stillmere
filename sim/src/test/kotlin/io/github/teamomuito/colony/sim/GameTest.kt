@@ -110,6 +110,9 @@ class HealthTest {
     @Test fun woundsBleedAndTendingHelps() {
         val (g, p) = human()
         p.skill[SkillType.HEALING.ordinal] = 15
+        // This test is about bleeding and tending, not armour. The armour roll is made per hit (docs/fidelity/combat.md), so the
+        // starting clothes could deflect the cut. They are taken off here so the wound is certain.
+        p.apparel.clear()
         g.dealDamage(p, DamageKind.CUT, 12f, 0f, null, 0)
         assertTrue(p.injuries.isNotEmpty())
         assertTrue(p.bleeding > 0f)

@@ -385,18 +385,31 @@ its rock is drilled out to gravel and the ore stays in the cell, so it pulls the
 
 ### 3.11 Combat
 
-**Status: Divergent.** **Priority 1.**
-**Files:** `Ai.kt` (`fire`, `hitChance`, `shotPath`, `hostileAI`, `draftedAI`), `Defs.kt` (`Weapon`, `Apparel`, `DamageKind`), `Health.kt` (`dealDamage`), `World.kt` (`turretsTick`, `explode`, `trapsTick`).
+**Status: Partly done (combat round, see `combat.md`).** **Priority 1.**
+**Files:** `Ai.kt` (`fire`, `aimChance`, `coverAgainst`, `meleeSwingHits`, `shotPath`, `hostileAI`, `draftedAI`), `Combat.kt` (constants and rules), `Burning.kt` (burning pawns), `Defs.kt` (`Weapon`, `Apparel`, `DamageKind`), `Health.kt` (`dealDamage`), `World.kt` (`turretsTick`, `explode`, `fireTick`).
 
-* **Weapon stat blocks are custom.** Each weapon has one damage, one range, one accuracy, a cooldown in ticks, a warmup in ticks, burst, armour penetration and (for shotguns) pellet count. Vanilla uses warmup and cooldown in seconds and accuracy that varies across touch, short, medium and long range (**UNVERIFIED**).
-* **Hit chance** is `accuracy * (0.62 + 0.03 * skill) * quality`, scaled down with distance, sight, cover, weather and suppression. Vanilla's formula differs (**UNVERIFIED**).
-* **Armour** multiplies damage down and sometimes deflects outright. Vanilla rolls armour against a random value and halves or negates damage (**UNVERIFIED**).
-* **Melee:** a single hit roll, no dodge or parry, no melee verb choice.
-* **Cover** only counts the best cover on the cells beside the target (`targetCover`), not along the path.
-* **Suppression** ("a volley that hits nothing pins down the target") and the "Under fire" thought are Stillmere inventions, not vanilla Core mechanics as far as I know (**UNVERIFIED**).
-* **Missing:** burning status on pawns, EMP and stun, fire modes, explosive types, proper turret ammo and power, infestation hives, mechanoid weapon variety, shields.
+Done this round, each with its source in [combat.md](combat.md):
+
+* **Accuracy by range band.** Touch, short, medium and long bands with breakpoints at 3, 12, 25 and 40 cells, blended and clamped (D, `Verse/ShootTuning.cs:5-11`; `Verse/VerbProperties.cs:652-653`). The medium and long values are a Stillmere choice (C). One stated accuracy per weapon; the four per-weapon band values are not added (combat.md, plan item 1).
+* **Shooter factor.** The aim is `f ^ distance` times the band factor, floored at 0.0201, then the target size factor (body size clamped 0.5 to 2), the prone factor and the execution factor (all D). The base `f` is UNVERIFIED.
+* **Two rolls for a ranged shot.** An aim roll, then a cover roll. The reference row for the cover pass is D.
+* **Cover.** The eight cells around the target are scanned, with angle and distance factors. Walls are full-fill (0.75). A shot that cover stops hits the cover building (D for the weighting, C for the damage). Cover now also takes the damage, and is read again for each pellet, so a cover shot apart stops no more (C).
+* **Armour.** Layers are rolled one by one, outermost first. A roll deflects below half the rating, halves below the rating, and makes a sharp hit blunt. Apparel takes 25 percent of the damage that reaches it. No cap. Penetration defaults to damage x 0.015 when a weapon sets none (all D). The rating kind is read once per hit, so a halved sharp hit leaves the later layers their sharp rating (D, `Verse/ArmorUtility.cs:21`).
+* **Damage.** Ranged damage is deterministic (D). Melee damage varies from 0.8 to 1.2 (D). Explosions hit each pawn once (D).
+* **Melee.** Reach 1.42 (adjacent, diagonals included, D). A non-miss roll, then a dodge roll (D for the two stages; the dodge value is C). A downed target is always hit: both rolls are skipped (D for the skips; downed standing in for immobile is C). The under-1 melee rule (raised to 1 and blunt) is adopted (D). A swing that leaves the target alive and on the map staggers it for 95 ticks (D).
+* **Burning.** A flame hit that is not deflected sets the pawn alight (D, the cumulative chance over 60 ticks). A pawn on a fire above intensity 0.4 may catch fire (D, 150 ticks). A burning pawn takes the reference fire damage every 150 ticks (D, unrounded), and its job stops (D). The direct 3.5 x intensity damage to pawns in fire cells is removed.
+* **Save.** Version 35 to 36 (burn size, stagger end). A version 35 fixture loads with both at zero.
+* **Ranged reach.** Ends exactly at the weapon range, with no tolerance (D).
+
+Still open:
+
+* **Burn dynamics** (decay per check, the intensity read as fire size, pawn flammability 1.0) are Stillmere choices or UNVERIFIED.
+* **Parry** is not in the decompiled source (a search of the whole tree finds no "Parry"). It is not added.
+* **Not adopted:** warmup reset on target change (medium confidence, negative search); burst spacing; cooldown factors; minimum range for ranged weapons (needs a melee fallback); stray misses; the intercept and impact model; walls that stop shots only past 5 cells; blunt stun curves; EMP; shields; the fire growth, spread and rain rows of 3.8. Reasons are in [combat.md](combat.md).
+* **Weapon stat blocks are still Stillmere's.** The per-weapon values, the medium and long factors, and the apparel armour values are not from the source (C or UNVERIFIED). Vanilla warmup and cooldown are in seconds (the units match, so the units are not a gap).
+* **Suppression** ("a volley that hits nothing pins down the target") and the "Under fire" thought are Stillmere inventions, kept (UNVERIFIED).
 * 38 weapons defined. Swing repeater and lucid draught are hidden by `Catalog.kt` as "not in the base game" or "not confirmed"; **I believe both are in Core (UNVERIFIED), so hiding them may be wrong.**
-* Tested well for internal behaviour (`CombatPipelineTest`, 20 tests), but against no vanilla numbers.
+* Tests: `CombatPipelineTest` (20, three updated; `GameTest` `HealthTest.woundsBleedAndTendingHelps` one more; the version assertions in five Legacy tests; see combat.md), `CombatModelTest` (27, new; four added in the review round), `LegacyCombatMigrationTest` (4, new). Full run: 713 pass. The combat numbers are checked against the reference's formulas, not against vanilla play.
 
 ### 3.12 Social and life stages
 
@@ -606,7 +619,7 @@ Per `CLAUDE.md`: flagged, not deleted.
 1. ~~**Time base (24,000 vs 60,000 ticks per day)**~~ **Done** (`7e402c9`): 60,000 ticks per day. (3.1)
 2. **Map: new colonies are 250 x 250 (round 6); no roofs, grass, caves or ruins**, rooms that count as indoors without a roof. (3.2, 3.3)
 3. **Needs and mood model:** the drains, hunger categories, break timing, drug tolerance and the four added needs now follow the decompiled reference (round 13, `needs-mood.md`). The thought catalogue, mood smoothing and the chemical interest need are still missing. (3.5)
-4. **Combat model is custom** end to end: weapon stats, accuracy, armour, melee, cover, no burning. (3.11)
+4. **Combat model** (3.11): band accuracy, the shooter factor, the cover pass, the layered armour roll, melee dodge and stagger, and burning are done from the reference (combat round, `combat.md`). Still open: the weapon stat values, the intercept and stray-miss model, minimum range, stun, EMP, shields, and the fire growth rows of 3.8.
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)
 6. **Health depth:** 29 parts, simplified bleeding and immunity, limited chronic disease, surgery and medicine. (3.4)
 7. ~~**Skill model:** learning rates, decay, the XP curve, the daily cap and the XP per work tick and attack.~~ **Done** (round 14, `skills-traits.md`). Open: trait degrees and skill grants, trait and backstory data, passion conflicts. (3.6)

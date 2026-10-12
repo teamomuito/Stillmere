@@ -30,8 +30,11 @@ object SaveGame {
      * 2 days (was 4) and corpses in 2.5 (was 2.2), so the rot of items read from older saves (map items and job stacks, see
      * [migrateRot]) and the rot of food an eat job holds (see [heldRotFromOld]) is rescaled to keep the same time spent
      * (docs/fidelity/economy.md).
+     *
+     * 36 adds, at the end of each pawn record, the burn size of a fire on the pawn and the tick until which a melee hit keeps it
+     * staggered (see [writePawn] and docs/fidelity/combat.md). Earlier saves read both as zero: not burning, not staggered.
      */
-    private const val VERSION = 35
+    private const val VERSION = 36
 
     /** Spoil times before version 35, which saved rot is rescaled from. */
     private const val OLD_MEAT_SPOIL_DAYS = 4f
@@ -388,6 +391,7 @@ object SaveGame {
             for ((drug, tolerance) in p.drugTolerance) { o.writeInt(drug.ordinal); o.writeFloat(tolerance) }
         }
         if (version >= 33) for (x in p.xpToday) o.writeFloat(x)
+        if (version >= 36) { o.writeFloat(p.burnSize); o.writeLong(p.staggerUntil) }
     }
 
     fun read(data: ByteArray): Game {
@@ -662,6 +666,7 @@ object SaveGame {
             repeat(i.readInt()) { val drug = ItemType.entries[i.readInt()]; p.drugTolerance[drug] = i.readFloat() }
         }
         if (version >= 33) for (k in p.xpToday.indices) p.xpToday[k] = i.readFloat()
+        if (version >= 36) { p.burnSize = i.readFloat(); p.staggerUntil = i.readLong() }
         return p
     }
 }

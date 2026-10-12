@@ -55,7 +55,7 @@ class LegacySkillsMigrationTest {
     }
 
     @Test fun aVersionThirtyTwoSaveWrittenAgainIsVersionThirtyFour() {
-        assertEquals(35, versionOf(SaveGame.write(SaveGame.read(fixture))))
+        assertEquals(36, versionOf(SaveGame.write(SaveGame.read(fixture))))
     }
 
     @Test fun theDailyCounterSurvivesASaveAtVersionThirtyFour() {
@@ -101,7 +101,7 @@ class LegacySkillsMigrationTest {
     @Test fun theXpSurvivesASaveAtVersionThirtyFour() {
         val g = SaveGame.read(xpFixture)
         val bytes = SaveGame.write(g)
-        assertEquals(35, versionOf(bytes))
+        assertEquals(36, versionOf(bytes))
         val again = SaveGame.read(bytes)
         for (k in g.colonists.indices) {
             assertEquals("xp $k", g.colonists[k].xp.toList(), again.colonists[k].xp.toList())

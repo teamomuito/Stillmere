@@ -302,7 +302,9 @@ enum class DamageKind(val label: String, val sharp: Boolean, val bleed: Float, v
 
 enum class Weapon(
     val label: String, val ranged: Boolean, val damage: Float, val range: Float, val cooldown: Int, val accuracy: Float,
-    val kind: DamageKind, val burst: Int = 1, val armorPen: Float = 0f, val warmup: Int = 0, val aoe: Float = 0f,
+    val kind: DamageKind, val burst: Int = 1,
+    /** Hand-set armour penetration. Negative means not set: [penetrationOf] then uses the reference default (docs/fidelity/combat.md). */
+    val armorPen: Float = -1f, val warmup: Int = 0, val aoe: Float = 0f,
     /** Projectiles per burst that each roll to hit; [damage] is shared between them. */
     val pellets: Int = 1,
 ) {

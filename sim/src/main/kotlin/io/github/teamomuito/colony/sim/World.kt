@@ -73,7 +73,15 @@ fun Game.fireTick() {
                 st.count -= max(1, (st.count * 0.15f * f.intensity).toInt())
                 if (st.count <= 0) map.items.remove(i)
             }
-            for (p in pawns) if (p.alive && p.x == i % map.w && p.y == i / map.w) dealDamage(p, DamageKind.BURN, 3.5f * f.intensity)
+        }
+        // A pawn on a large fire may catch fire, at the cumulative chance over 150 ticks. The fire does no direct damage to pawns
+        // in the cell (RimWorld/Fire.cs:267-270; docs/fidelity/combat.md).
+        if (f.age % BURN_CHECK_TICKS == 0 && f.intensity > CELL_CATCH_MIN_SIZE) {
+            val fx = i % map.w; val fy = i / map.w
+            for (p in pawns) {
+                if (!p.alive || p.burnSize > 0f || p.x != fx || p.y != fy) continue
+                if (rng.chance(cumulativeCatchChance(p.flammability(), CELL_CATCH_TICKS))) catchFire(p, f.intensity * CELL_CATCH_SIZE_SHARE)
+            }
         }
         // Spread.
         if (f.age % tk(16) == 0) {
@@ -115,9 +123,9 @@ fun Game.explode(x: Int, y: Int, radius: Float, damage: Float, source: Pawn? = n
         val d = distance(x, y, p.x, p.y)
         if (d > radius) continue
         val fall = 1f - d / (radius + 0.5f)
-        dealDamage(p, DamageKind.BLAST, damage * fall, 0f, source)
-        dealDamage(p, DamageKind.BLAST, damage * 0.5f * fall, 0f, source)
-        if (fire) dealDamage(p, DamageKind.BURN, 4f * fall, 0f, source)
+        // Each thing is hit once per explosion, with the falloff for its cell (Verse/DamageWorker.cs:302, 316). An incendiary
+        // blast is a single burn hit, so a flame hit can set the pawn alight.
+        dealDamage(p, if (fire) DamageKind.BURN else DamageKind.BLAST, damage * fall, 0f, source)
     }
 }
 
@@ -574,7 +582,7 @@ fun Game.turretsTick() {
             repeat(w.burst) {
                 val hit = rng.chance(w.accuracy)
                 shots.add(Shot(b.x.toFloat(), b.y.toFloat(), best.x.toFloat(), best.y.toFloat(), tick + tk(6) + it * tk(2), hit))
-                if (hit) dealDamage(best, w.kind, w.damage * (0.85f + rng.float() * 0.3f), w.armorPen, null)
+                if (hit) dealDamage(best, w.kind, w.damage, penetrationOf(w), null)
             }
         }
     }

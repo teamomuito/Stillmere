@@ -94,9 +94,15 @@ class CombatPipelineTest {
             me.weaponItem = ItemType.W_RIFLE
             val target = g.enemy(g.homeX + 8, g.homeY)
             // Sandbags beside the target: cover counts only when it stands next to the one being shot at.
-            if (cover) g.map.setBuilding(Building(BuildDef.SANDBAGS, g.homeX + 7, g.homeY, true))
+            // Shots that the sandbags stop now damage them (docs/fidelity/combat.md), so they are put back before each shot.
+            // That keeps this test on the block chance alone.
+            repeat(200) {
+                if (cover && g.map.building[g.map.idx(g.homeX + 7, g.homeY)]?.built != true) {
+                    g.map.setBuilding(Building(BuildDef.SANDBAGS, g.homeX + 7, g.homeY, true))
+                }
+                g.shoot(me, target)
+            }
             // The target dies partway through, so compare hit rates over the shots actually taken.
-            repeat(200) { g.shoot(me, target) }
             return g.shots.count { it.hit } * 1000 / g.shots.size
         }
         val open = hitsWith(cover = false)
@@ -129,7 +135,9 @@ class CombatPipelineTest {
     }
 
     @Test fun aBetterShooterHitsMoreOften() {
-        fun hitsAtSkill(level: Int): Int {
+        // The target dies after a few hits (rifle damage is now deterministic, docs/fidelity/combat.md), so a raw hit count
+        // depends on how fast it falls. The hit rate over the shots taken is compared instead.
+        fun hitRateAtSkill(level: Int): Int {
             val g = arena(608)
             val me = g.place(g.colonists[0], g.homeX, g.homeY)
             me.weaponItem = ItemType.W_RIFLE
@@ -137,21 +145,29 @@ class CombatPipelineTest {
             val target = g.enemy(g.homeX + 10, g.homeY)
             // Shots now teach marksmanship (docs/fidelity/skills-traits.md), so the level is held for every shot.
             repeat(200) { me.skill[SkillType.MARKSMANSHIP.ordinal] = level; g.shoot(me, target) }
-            return g.shots.count { it.hit }
+            return g.shots.count { it.hit } * 1000 / g.shots.size
         }
-        val novice = hitsAtSkill(0)
-        val expert = hitsAtSkill(20)
-        assertTrue("novice $novice, expert $expert", expert > novice)
+        val novice = hitRateAtSkill(0)
+        val expert = hitRateAtSkill(20)
+        assertTrue("novice $novice per mille, expert $expert per mille", expert > novice)
     }
 
     @Test fun armorReducesDamageAndPenetrationReducesArmor() {
+        // The armour roll is made per hit (RimWorld/ArmorUtility.cs:58-88), so one hit can pass unchanged. The mean over
+        // 60 hits on fresh pawns is compared instead. The pawns are enemies, so the colonist difficulty factor does not apply.
         fun severityOf(vest: Boolean, pen: Float): Float {
             val g = arena(609)
-            val t = g.place(g.colonists[0], g.homeX, g.homeY)
-            if (vest) t.apparel.add(Worn(ItemType.A_RIBBED_VEST, Quality.NORMAL, ItemType.A_RIBBED_VEST.apparel!!.hp))
-            val torso = t.race.body.indexOfFirst { it.tag == PartTag.TORSO }
-            g.dealDamage(t, DamageKind.BULLET, 20f, pen, null, partHint = torso)
-            return t.injuries.sumOf { it.severity.toDouble() }.toFloat()
+            val torsoOf = g.newHuman(g.homeX, g.homeY, Faction.ENEMY)
+            val torso = torsoOf.race.body.indexOfFirst { it.tag == PartTag.TORSO }
+            var total = 0.0
+            repeat(60) { k ->
+                val t = if (k == 0) torsoOf else g.newHuman(g.homeX, g.homeY, Faction.ENEMY)
+                g.place(t, g.homeX, g.homeY)
+                if (vest) t.apparel.add(Worn(ItemType.A_RIBBED_VEST, Quality.NORMAL, ItemType.A_RIBBED_VEST.apparel!!.hp))
+                g.dealDamage(t, DamageKind.BULLET, 20f, pen, null, partHint = torso)
+                total += t.injuries.sumOf { it.severity.toDouble() }
+            }
+            return (total / 60.0).toFloat()
         }
         val bare = severityOf(vest = false, pen = 0f)
         val armored = severityOf(vest = true, pen = 0f)

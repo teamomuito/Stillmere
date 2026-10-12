@@ -104,7 +104,7 @@ internal fun refreshHealthCache(p: Pawn) {
     p.capCache[Cap.METABOLISM.ordinal] = metabolism.coerceIn(0f, 1f)
 }
 
-private fun Game.pickOuterPart(p: Pawn): Int {
+internal fun Game.pickOuterPart(p: Pawn): Int {
     val body = p.race.body
     var total = 0f
     for ((i, d) in body.withIndex()) if (!d.inner && !p.partMissing(i)) total += d.coverage
@@ -135,31 +135,48 @@ fun Game.dealDamage(
     var part = if (partHint >= 0) partHint else pickOuterPart(target)
     val def = target.race.body[part]
     var dmg = amount / max(0.6f, Math.sqrt(target.race.hpScale.toDouble()).toFloat()).let { if (target.race.isAnimal) 1f else it }
-    // Armor.
+    // Armor, layer by layer (Verse/ArmorUtility.cs:13-56). Covering apparel comes first, outermost layer first; natural armor
+    // after it. A layer takes a share of the damage that reaches it, then rolls against its rating after penetration. A roll can
+    // deflect the hit, or halve it and make a sharp hit blunt. See docs/fidelity/combat.md.
     val cover = if (def.cover != 0) def.cover else if (def.inner) target.race.body[def.parent].cover else 0
+    var k = kind
+    var deflected = false
+    // The rating is read once, from the kind the hit arrives with (Verse/ArmorUtility.cs:21). A halved sharp hit becomes blunt for
+    // the wound, but the later layers and the natural armor keep the sharp rating for the rest of the hit.
     val sharp = kind.sharp || kind == DamageKind.BLAST
-    val armor = max(0f, target.armorFor(cover, sharp) - armorPen)
-    if (armor > 0f) {
-        val roll = rng.float()
-        if (roll < armor * 0.5f && dmg * (1f - armor) < 2.5f) {
-            // Deflected.
-            for (w in target.apparel) w.hp -= dmg * 0.08f
-            return
-        }
-        dmg *= (1f - armor)
-        for (w in target.apparel) if ((w.type.apparel?.cover ?: 0) and cover != 0) w.hp -= dmg * 0.1f
-        target.apparel.removeAll { it.hp <= 0f }
+    val layers = target.apparel
+        .filter { w -> w.type.apparel?.let { (it.cover and cover) != 0 } == true }
+        .sortedByDescending { it.type.apparel?.slot?.ordinal ?: -1 }
+    for (w in layers) {
+        val rating = max(0f, w.armorRating(sharp) - armorPen)
+        w.hp -= dmg * APPAREL_DAMAGE_SHARE
+        val step = armorStep(dmg, rating, if (rating > 0f) rng.float() else 0f)
+        dmg = step.damage
+        if (step.halved && k.sharp) k = DamageKind.BRUISE
+        if (step.deflected) { deflected = true; break }
     }
+    if (!deflected) {
+        val rating = max(0f, target.naturalArmor(sharp) - armorPen)
+        val step = armorStep(dmg, rating, if (rating > 0f) rng.float() else 0f)
+        dmg = step.damage
+        if (step.halved && k.sharp) k = DamageKind.BRUISE
+        deflected = step.deflected
+    }
+    target.apparel.removeAll { it.hp <= 0f }
+    if (deflected) return
     // Harder or softer colonists on the difficulty setting: applies to the people the player commands.
     if (target.faction == Faction.PLAYER && !target.isAnimal) dmg *= difficulty.colonistDamage
-    if (dmg < 0.3f) return
-    if (Trait.THICK_HIDE in target.traits) dmg *= 0.75f
-    applyWound(target, part, kind, dmg, source)
-    // Penetration into organs.
-    if (!def.inner && (kind.sharp || kind == DamageKind.BLAST) && dmg >= def.hp * target.race.hpScale * 0.35f && rng.chance(0.55f)) {
-        val child = pickChild(target, part)
-        if (child >= 0) applyWound(target, child, kind, dmg * 0.55f, source)
+    if (dmg >= 0.3f) {
+        if (Trait.THICK_HIDE in target.traits) dmg *= 0.75f
+        applyWound(target, part, k, dmg, source)
+        // Penetration into organs.
+        if (!def.inner && (k.sharp || k == DamageKind.BLAST) && dmg >= def.hp * target.race.hpScale * 0.35f && rng.chance(0.55f)) {
+            val child = pickChild(target, part)
+            if (child >= 0) applyWound(target, child, k, dmg * 0.55f, source)
+        }
     }
+    // A flame hit that was not deflected may set the pawn alight (DamageWorker_Flame.cs:21-24).
+    if (k == DamageKind.BURN) flameIgnition(target)
     target.healthDirty = true
     checkDeath(target, source)
 }
