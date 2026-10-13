@@ -43,8 +43,15 @@ object SkillRules {
     const val DAILY_FULL_RATE_XP = 4000f
     const val SATURATED_FACTOR = 0.2f
 
-    /** Medicine XP factor when no medicine is used (RimWorld/Toils_Tend.cs:69). Per-medicine factors are XML data. */
+    /**
+     * Medicine XP factor with no medicine (RimWorld/Toils_Tend.cs:69, the default used when there is no medicine). It is also the
+     * floor of [medicineXpFactor], so no medicine and a medicine of potency 0 give the same factor.
+     */
     const val MEDICINE_XP_FACTOR_DEFAULT = 0.5f
+    /** Medicine potency times this is the medicine XP factor (Verse/ThingDef.cs:712, the medicine XP gain property). D. */
+    const val MEDICINE_XP_PER_POTENCY = 0.7f
+    /** Highest medicine XP factor, the upper bound of the clamp (Verse/ThingDef.cs:712). D. */
+    const val MEDICINE_XP_FACTOR_MAX = 1f
 
     /** Ticks per real second, so a game tick is a sixtieth of a second (Verse/GenTicks.cs:67-70). */
     private const val TICKS_PER_SECOND = 60f
@@ -100,8 +107,19 @@ object SkillRules {
     /** Seconds of a cycle in game ticks (Verse/GenTicks.cs:67-70: ticks / 60). */
     fun cycleSeconds(ticks: Int): Float = ticks / TICKS_PER_SECOND
 
-    /** XP for one medical tend: 500 for a human or 175 for an animal, times the medicine factor (RimWorld/Toils_Tend.cs:68-70). */
-    fun tendXp(animal: Boolean): Float = (if (animal) 175f else 500f) * MEDICINE_XP_FACTOR_DEFAULT
+    /**
+     * The medicine XP factor from the medicine's potency: potency x 0.7, clamped to 0.5 to 1 (Verse/ThingDef.cs:712, D). Sterile
+     * dressing (potency 1.0) gives 0.7. Leaf poultice (potency 0.6) gives 0.42 and is raised to the floor, 0.5. Potency 0 (no
+     * medicine) gives the floor, which is the reference's default (RimWorld/Toils_Tend.cs:69).
+     */
+    fun medicineXpFactor(potency: Float): Float =
+        (potency * MEDICINE_XP_PER_POTENCY).coerceIn(MEDICINE_XP_FACTOR_DEFAULT, MEDICINE_XP_FACTOR_MAX)
+
+    /**
+     * XP for one medical tend: 500 for a human or 175 for an animal, times the medicine XP factor (RimWorld/Toils_Tend.cs:68-70).
+     * [potency] is the medicine's potency, 0 with no medicine.
+     */
+    fun tendXp(animal: Boolean, potency: Float): Float = (if (animal) 175f else 500f) * medicineXpFactor(potency)
 
     /** A passion that a trait forces at generation. Which trait forces which skill is Stillmere's own pairing. */
     fun forcedPassion(t: Trait): SkillType? = if (t == Trait.STREET_SCRAPPER) SkillType.CLOSE_COMBAT else null

@@ -8,4 +8,5 @@ room.x=127
 room.y=125
 room.indoor=true
 room.size=9
-outdoor=8.111009
+# outdoor is the sim outdoor temperature at the fixture tick (16875, hour 6.75). Round 22 moved the coldest hour to 4.32 (was 3), which changes this value by the diurnal difference; it was 8.111009.
+outdoor=6.3693705

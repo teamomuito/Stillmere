@@ -28,6 +28,7 @@ class EconomyFidelityTest {
     // ------------------------------------------------------------------ construction and power
 
     @Test fun aBatteryHoldsOneThousandWattDays() {
+        // 1,000 Wd: the code default (D, RimWorld/CompProperties_Battery.cs:5). The battery XML may override it (UNVERIFIED).
         assertEquals(1000f, BATTERY_CAPACITY_WD, 0f)
     }
 

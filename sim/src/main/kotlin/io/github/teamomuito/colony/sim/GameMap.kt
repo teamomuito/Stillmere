@@ -786,8 +786,10 @@ class GameMap(val w: Int, val h: Int) {
 
         /**
          * Ore blotches on a [w] by [h] map. As in the reference (Verse/GenStep_Scatterer.cs lines 266-274), one blotch covers
-         * round(10,000 / density) cells, and the count is the area over that, rounded. The source rounds to the nearest integer, and the
-         * tie mode of that rounding is not in the tree, so the half-to-even rounding used here is UNVERIFIED (see docs/fidelity/map.md).
+         * round(10,000 / density) cells, and the count is the area over that, rounded. The source rounds to the nearest integer (D). The
+         * tie mode is V: the legacy Unity page for Mathf.RoundToInt says an exact half goes to the even integer
+         * (https://docs.unity3d.com/450/Documentation/ScriptReference/Mathf.RoundToInt.html, search snippet; the current page was not
+         * read), and kotlin.math.round is half to even. See docs/fidelity/map.md.
          */
         fun oreBlotchCount(w: Int, h: Int, hills: Hills?): Int {
             val cellsPerBlotch = round(10000f / oreBlotchesPer10k(hills))

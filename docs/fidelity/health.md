@@ -84,7 +84,7 @@ Notes:
 |---|---|---|
 | A hit picks an outer part with probability proportional to its coverage | `Game.pickOuterPart`, weights = `PartDef.coverage` | rule `UNVERIFIED`; test pins the sim's weights (`hitsLandOnOuterPartsInProportionToCoverage`) |
 | Internal parts can only be hit through their parent | Organs have coverage 0 and are reached only by penetration | `SECONDARY` ✔ |
-| Sharp or blast damage can pass into a child organ | Chance 0.55 if damage ≥ 35% of the outer part's HP; the organ takes 55% of the damage; child picked uniformly | `UNVERIFIED` (author's tuning; vanilla picks children by coverage) |
+| Sharp or blast damage can pass into a child organ | Chance 0.55 if damage ≥ 35% of the outer part's HP; the organ takes 55% of the damage; child picked uniformly | D in part: `Verse/HealthTuning.cs:24` declares `ChanceToAdditionallyDamageInnerSolidPart` 0.2, but its use is not in the tree, so the sim's 0.55 and 35% gate are not checked and are not changed (`UNVERIFIED`; vanilla picks children by coverage) |
 | Damage beyond a part's HP destroys it | `applyWound` → `destroyPart`; children go with it | rule `UNVERIFIED` |
 | Armor | Deflection roll and reduction by cover bit (`dealDamage`) | `UNVERIFIED`; armor is out of scope |
 
@@ -118,8 +118,8 @@ A body with no part in a role is not limited by it (value 1).
 
 | Capacity | Formula in the sim (`HealthRules`) | Vanilla reference | Status |
 |---|---|---|---|
-| **Consciousness** | `brain × (1 − 0.55·pain) × bloodLoss(>0.3: 1 − 1.4·(bloodLoss−0.3)) × (1 − 0.2·(1−pumping)) × (1 − 0.2·(1−breathing)) × (1 − 0.1·(1−filtration))`, then hediff multipliers; numbing forces 0 | Brain-driven; blood pumping has 20% importance with no allowed defect and 100% max | pumping weight 0.2 `SECONDARY` ✔; breathing 0.2 and filtration 0.1 weights `UNVERIFIED`; the pain and blood-loss terms `UNVERIFIED` |
-| **Moving** | `legs × (0.75 + 0.25·feet) × (0.9 + 0.1·toes)`, × hediffs, × (1 − 0.2·pain); forced to 0 with no working legs | One missing of two legs: half | structure `UNVERIFIED`. Consciousness, breathing and pumping also feed Moving in vanilla (`SECONDARY`); the sim does not apply them directly, only through the downed rule ✘ |
+| **Consciousness** | `brain × (1 − 0.55·pain) × bloodLoss(>0.3: 1 − 1.4·(bloodLoss−0.3)) × (1 − 0.2·(1−pumping)) × (1 − 0.2·(1−breathing)) × (1 − 0.1·(1−filtration))`, then hediff multipliers; numbing forces 0 | Brain-driven; blood pumping has 20% importance with no allowed defect and 100% max | pumping weight 0.2 `SECONDARY` ✔; breathing 0.2 and filtration 0.1 weights D (`RimWorld/PawnCapacityWorker_Consciousness.cs:18-20`); the pain term is D in form at `:12` (a subtraction of up to 0.4, not `1 - 0.55 x pain`, so the sim's form differs and is not changed); the blood-loss term is not in the vanilla consciousness code (`UNVERIFIED`) |
+| **Moving** | `legs × (0.75 + 0.25·feet) × (0.9 + 0.1·toes)`, × hediffs, × (1 − 0.2·pain); forced to 0 with no working legs | One missing of two legs: half | structure D (`RimWorld/PawnCapacityWorker_Moving.cs:15-31`: limb efficiency with a 0.4 limb threshold, pelvis and spine factors, breathing and pumping at weight 0.2, consciousness cap); the sim's form differs and is not changed. Consciousness, breathing and pumping also feed Moving in vanilla (`SECONDARY`); the sim does not apply them directly, only through the downed rule ✘ |
 | **Manipulation** | `hands × (0.6 + 0.4·fingers) × 0.7 + arms × 0.3`, × hediffs, × (1 − 0.2·pain); 1 if the body has no hands | Depends on arms, hands, fingers (and consciousness) | roles `SECONDARY`, weights `UNVERIFIED`; consciousness factor not applied ✘ |
 | **Sight** | mean of eyes, × hediffs | One eye lost: −50% | `SECONDARY` ✔ |
 | **Hearing** | mean of ears, × hediffs | Damaged or missing ears reduce it | `SECONDARY` ✔ (direction only) |
@@ -147,10 +147,10 @@ neither is wired. Consciousness should multiply Moving and Manipulation directly
 
 | Rule | Sim | Vanilla reference | Status |
 |---|---|---|---|
-| Pain from a wound | `severity × kind.pain × 0.014 / max(0.5, √healthScale)` | per-severity factor, softened by body size | `UNVERIFIED` (the sim scales by √ and uses per-kind factors; I recall a flat per-severity figure and a linear scale) |
+| Pain from a wound | `severity × kind.pain × 0.014 / max(0.5, √healthScale)` | per-severity factor, softened by body size | D form: vanilla is severity x `injuryProps.painPerSeverity` (XML) / HealthScale, linear (`Verse/Hediff_Injury.cs:137`), not `√`; the per-kind values are XML (`UNVERIFIED`); the sim's `√` form differs and is not changed |
 | Scars and missing parts hurt | no | n/a | `UNVERIFIED` |
 | Illness and drug pain | `hediff.kind.pain × severity` | n/a | `UNVERIFIED` |
-| Pain → consciousness | linear, `1 − 0.55·pain` | stepped by pain stage | `UNVERIFIED`: the stage thresholds were not found |
+| Pain → consciousness | linear, `1 − 0.55·pain` | subtraction of up to 0.4, from pain 0.1 (D, `RimWorld/PawnCapacityWorker_Consciousness.cs:12`) | D in form; the sim's constants differ and are not changed |
 | Pain shock threshold | **0.80** (changed from 0.85) | default 80%; effective bounds 30%–95% | `SECONDARY` ✔ |
 | Tender frame | threshold **−0.50** (changed from a ×1.4 pain multiplier) → 0.30 | Tender frame −50% | `SECONDARY`; I read it as percentage points, in line with the other listed offsets. If vanilla means relative, the answer is 0.40 |
 | Thick hide | pain ×0.7, damage ×0.75 | n/a | `UNVERIFIED`, unchanged |
@@ -160,22 +160,22 @@ neither is wired. Consciousness should multiply Moving and Manipulation directly
 
 | Rule | Sim | Status |
 |---|---|---|
-| Bleed rate of a wound | `kind.bleed × severity × 1.35e-6` per tick (×1.7 inside organs; bruise and crush ×0.1) | `UNVERIFIED` |
-| Tended wounds | `bleed × (1 − tendQuality) × 0.06` (`HealthRules.bleedRate`) | `UNVERIFIED`; I recall tended wounds not bleeding at all |
-| Clotting | wound bleed shrinks per step by `dt/34000` untended, `dt/12000` tended, never more than half per step | `UNVERIFIED` |
-| Bleed-out builds | `bloodLoss += Σbleed × dt` | `UNVERIFIED` |
-| Blood recovery | 0.36/day if food > 0.2, else 0.10/day, when nothing bleeds | `UNVERIFIED` |
+| Bleed rate of a wound | `kind.bleed × severity × 1.35e-6` per tick (×1.7 inside organs; bruise and crush ×0.1) | D form: `Verse/Hediff_Injury.cs:170-175` is severity x `injuryProps.bleedRate` (XML) x race factor x part bleed factor; the values are XML (`UNVERIFIED`); the sim's 1.35e-6 and 1.7 are not in the vanilla code |
+| Tended wounds | `bleed × (1 − tendQuality) × 0.06` (`HealthRules.bleedRate`) | D: a tended wound does not bleed in vanilla (`Verse/Hediff_Injury.cs:158-160`); the sim's 0.06 trickle differs and is not changed |
+| Clotting | wound bleed shrinks per step by `dt/34000` untended, `dt/12000` tended, never more than half per step | D: vanilla has no such clotting; a wound stops bleeding at age `90000 + 90000 x` (a lerp on severity 1 to 30) ticks (`Verse/Hediff_Injury.cs:179-188`, `Verse/HealthTuning.cs:36`); the sim's rule differs and is not changed |
+| Bleed-out builds | `bloodLoss += Σbleed × dt` | D form: `Verse/HediffGiver_Bleeding.cs:8-10` adds rate x 0.001 per 60 ticks while the total is at least 0.1 (`HealthTuning.cs:26`); the sim's per-tick units are not compared |
+| Blood recovery | 1/3 per day, with no food gate, when nothing bleeds (round 22; was 0.36 if food > 0.2, else 0.10/day) | D: `Verse/HediffGiver_Bleeding.cs:14` (0.00033333333 per 60 ticks) has no food gate, so the sim has none (`HealthRules.bloodRecoveryPerDay`) |
 | Death from bleed-out | at 1.0 | `SECONDARY` ✔ (lethal severity 100%) |
 | Bleed-out stages | labels minor, moderate, severe, extreme; thresholds not found | labels `SECONDARY`, thresholds `UNVERIFIED`; the sim has no staged hediff, only the consciousness term above 0.3 |
 
-Tests: `bleedingIsStoppedByTendingAndFadesByClotting`, `lostBloodComesBackSlowerWhenHungry`,
+Tests: `bleedingIsStoppedByTendingAndFadesByClotting`, `lostBloodComesBackAtOneThirdADayWhateverTheFood`,
 `woundsMakeBlood_OneHundredPercentBloodLossKills`.
 
 ### Infection
 
 | Rule | Sim | Status |
 |---|---|---|
-| Start | each tick, for an untended (or poorly tended, quality < 0.3) wound of severity > 2 whose damage type can infect: chance `kind.infect × 1.54 / day`, ×1.5 outdoors, ×0.3 in an infirmary cot, ×`(1 − q) × 0.5` if tended; initial infection 0.04 | `UNVERIFIED` |
+| Start | each tick, for an untended (or poorly tended, quality < 0.3) wound of severity > 2 whose damage type can infect: chance `kind.infect × 1.54 / day`, ×1.5 outdoors, ×0.3 in an infirmary cot, ×`(1 − q) × 0.5` if tended; initial infection 0.04 | D, shape differs: vanilla rolls once per wound when it is added (`Verse/HediffComp_Infecter.cs:55-67`, chance from XML, x0.1 for animals), then after 15000 to 45000 ticks (`HealthTuning.cs:74`) runs `CheckMakeInfection` (`:102-135`), with a tend-quality curve 0.7 to 0.4 (`:21-25`) and a severity curve 0.1 at 1 to 1.0 at 12 (`:27-31`); the sim's start rule is not changed |
 | Progression | infection grows `1.1/day × (1 − 0.8·q)`; immunity grows `0.9/day × (1 + 0.6·q + 0.3 if resting)`; when immunity exceeds 1.1× infection the infection is pushed down | `UNVERIFIED` |
 | Treatment | tending subtracts `0.35 × q` from the infection and raises `q`-dependent growth suppression and immunity | `UNVERIFIED` |
 | Death | infection ≥ 1.0 | `UNVERIFIED` |
@@ -189,8 +189,8 @@ Tests: `infectionStartsRarerWithCareAndInTheHospital`, `infectionGrowthFightsImm
 
 | Rule | Sim | Status |
 |---|---|---|
-| Healed sharp wounds can leave a scar | 18% chance for sharp damage kinds; bruises never scar | `UNVERIFIED` |
-| A scar's effect | permanent, no pain, no damage to the part | `UNVERIFIED`; I recall vanilla scars keeping a little severity |
+| Healed sharp wounds can leave a scar | 18% chance for sharp damage kinds; bruises never scar | D: vanilla is 0.02 x part factor x props factor x a curve (4 to 0, 14 to 1) on non-delicate parts, rolled when the injury is finalised (`Verse/HediffComp_GetsPermanent.cs:57-68`, `HealthTuning.cs:56-62`); the sim's 18% differs and is not changed |
+| A scar's effect | permanent, no pain, no damage to the part | D (`Verse/HediffComp_GetsPermanent.cs:76, 83-87`): a permanent wound heals only down to a floor drawn between 1 and half its severity, and keeps its pain category; the sim's no-pain scar differs and is not changed |
 | Destroyed part | becomes a "missing" record, permanent; stump bleeds, tended stumps bleed little | rule `UNVERIFIED` |
 | Limb crafting | `Implant`: wooden shank 0.55, gaff grip 0.5, servo limb and strider 1.3, optic lens 1.25, coil listener 1.2, pump core 1.3 | efficiencies `UNVERIFIED`; whether "gaff grip" is a base-game item is `UNVERIFIED` |
 
@@ -229,11 +229,13 @@ up on their own, never go back down, and after 15 days every wound is healed, bl
 
 | Item | Potency | Max tend quality | Status |
 |---|---|---|---|
-| Sterile dressing (`MEDS_INDUSTRIAL`) | 1.0 | 1.0 | `SECONDARY` ✔ |
-| Leaf poultice (`MEDS_HERBAL`) | 0.6 | 0.7 | `UNVERIFIED` (potency was the sim's existing value; the cap is new) |
-| No medicine | 0.3 | 0.7 | `UNVERIFIED` (new; was a 0.45 factor) |
+| Sterile dressing (`MEDS_STERILE_DRESSING`) | 1.0 | 1.0 | `SECONDARY` ✔ |
+| Leaf poultice (`MEDS_LEAF_POULTICE`) | 0.6 | 0.7 | V: potency 60% and maximum tend quality 70% (https://rimworldwiki.com/wiki/Herbal_medicine, search snippet, secondary); the potency was the sim's existing value and the cap is new |
+| No medicine | 0.3 | 0.7 | D: `RimWorld/TendUtility.cs:10-12` (`NoMedicinePotency` 0.3, `NoMedicineQualityMax` 0.7); it was a 0.45 factor |
 | Raw mirewort | not a medicine (potency 0); a caravan doctor that carries it is treated as using no medicine | | `UNVERIFIED` |
 | Glitterworld (ultratech) medicine | not in the sim | 1.6 / 1.3 | `SECONDARY`; base-game item, recorded as a gap |
+
+The same potency sets the doctor's Healing XP per tend: the medicine XP factor is potency x 0.7, clamped to 0.5 to 1 (D, `Verse/ThingDef.cs:712`), so sterile dressing gives 0.7 and leaf poultice 0.5. With no medicine the factor is 0.5 (`RimWorld/Toils_Tend.cs:69`). Constants and sources: `skills-traits.md`, "Constants adopted" (round 23).
 
 ### Tend quality
 
@@ -253,10 +255,10 @@ q = clamp(q, 0, maxTendQuality of the medicine)
 | Doctor skill stat | level 0 → 0.20, 6 → 0.80, 10 → 1.10, 18 → 1.50, 20 → 1.55 | `SECONDARY`; levels between anchors are linearly interpolated, which is `UNVERIFIED` |
 | Self-tend factor | 0.7 | `SECONDARY` ✔ |
 | Random spread | ±25% | `SECONDARY` ✔ |
-| Infirmary cot offset | +0.10 | only infirmary cots have an offset: `SECONDARY`; the 0.10 magnitude is `UNVERIFIED` |
+| Infirmary cot offset | +0.10 | only infirmary cots have an offset: `SECONDARY`; the offset is added to the base quality from the bed's stat (`RimWorld/TendUtility.cs:101-105`); the 0.10 magnitude is XML (`UNVERIFIED`) |
 | Manipulation factor `0.6 + 0.4·manip` | | `UNVERIFIED`, kept from the old code |
 | Doctor skill also affects tend speed and surgery success | | `SECONDARY`; the sim applies skill to tend quality and surgery success, not tend speed |
-| Default doctor (nobody tending) | skill 2 | `UNVERIFIED` |
+| Default doctor (nobody tending) | skill 2 | D form differs: with no doctor, vanilla uses a tend-quality stat of 0.75 (`RimWorld/TendUtility.cs:14, 99`), not a skill; the sim's skill 2 is kept (`UNVERIFIED`) |
 
 Because the old formula was the author's tuning (about 0.37 for a skill-6 doctor with sterile dressings), this
 change roughly doubles tend quality for skilled doctors. That is a deliberate gameplay shift toward the wiki's
@@ -272,13 +274,13 @@ Tests: `doctorSkillFollowsTheDocumentedCurve`, `tendQualityIsSkillTimesPotency`,
 
 | Rule | Sim (`HealthRules.healPerDay`) | Status |
 |---|---|---|
-| Untended wound | 3.2 HP/day | `UNVERIFIED` (I recall a single natural rate that tending does not change) |
-| Tended wound | `8 × (0.55 + q)` HP/day | `UNVERIFIED` |
-| Resting in a bed | ×1.35 | `UNVERIFIED` |
+| Untended wound | 3.2 HP/day | D: vanilla heals 8 per day for the pawn, x HealthScale, one random non-permanent injury per 600 ticks, plus 4 when not standing and the bed's XML heal (`Verse/Pawn_HealthTracker.cs:1123-1147`); the sim's 3.2 is per wound and differs (balance decision, not changed) |
+| Tended wound | `8 × (0.5 + q)` HP/day (round 22; was 0.55) | D: `Verse/Pawn_HealthTracker.cs:1158-1159` (`LerpDouble(0, 1, 0.5, 1.5, q)`) |
+| Resting in a bed | ×1.35 | D form differs: lying adds +4 and the bed's XML heal (`Verse/Pawn_HealthTracker.cs:1129-1136`), added, not multiplied; not changed |
 | Infirmary cot | ×1.15 (stacks with bed rest), infection start ×0.3, tend offset +0.10 | `UNVERIFIED` |
 | Bruises | ×1.5 | `UNVERIFIED` |
 | Burns | ×0.7 | `UNVERIFIED` |
-| Starving (food < 0.05) | ×0.3 | `UNVERIFIED` |
+| Starving (food < 0.05) | ×0.3 | D differs: vanilla stops natural and tended healing while `Starving`, which is food at 0 (`Verse/Pawn_HealthTracker.cs:1123, 1153`; `RimWorld/Need_Food.cs:19, 35`); the sim's threshold and factor are not changed (owner decision) |
 | A wound is gone at severity ≤ 0.3 (or becomes a scar) | | `UNVERIFIED` |
 
 Tests, one per rule: `untendedWoundsHealAtTheBaseRate`, `tendedWoundsHealFasterWithBetterTending`,
@@ -292,7 +294,7 @@ part (non-engineered), or an engineered part on any matching part. Artificial pa
 
 | Rule | Sim | Status |
 |---|---|---|
-| Success chance | `0.5 + 0.03·skill (+0.1 infirmary cot, +0.3 amputation)`, clamped 0.30–0.98; needs skill ≥ 3 | `UNVERIFIED`. The wiki says medicine potency and doctor skill both scale surgery success (`SECONDARY`); the sim ignores potency ✘ |
+| Success chance | `0.5 + 0.03·skill (+0.1 infirmary cot, +0.3 amputation)`, clamped 0.30–0.98; needs skill ≥ 3 | D mechanism: quality x surgeon stat `MedicalSurgerySuccessChance` (`RimWorld/SurgeryOutcomeComp_SurgeonSuccessChance.cs:15`) x bed stat (`RimWorld/SurgeryOutcomeComp_BedAndRoomQuality.cs:19`), the stat values are XML. V: a wiki skill table, 10% at skill 0 to 110% at 20 (https://rimworldwiki.com/wiki/Medical_Surgery_Success_Chance), conflicts with a mirror of the same page (20% at 0, 99% at 20); not changed. The wiki says medicine potency and doctor skill both scale surgery success (`SECONDARY`); the sim ignores potency ✘ |
 | Medicine consumed | none | `UNVERIFIED`; I recall surgery consuming a medicine item ✘ |
 | Failure | two cuts of 6 on the part | `UNVERIFIED` |
 | Operations on injuries (treating or removing a wound) | none | `UNVERIFIED`; recorded as a gap |

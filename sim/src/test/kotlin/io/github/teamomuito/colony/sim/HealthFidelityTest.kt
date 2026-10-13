@@ -305,8 +305,9 @@ class InjuryConditionTest {
         assertEquals("never more than half per step", 0.5e-5f, HealthRules.clot(1e-5f, true, 100_000f), 1e-9f)
     }
 
-    @Test fun lostBloodComesBackSlowerWhenHungry() {
-        assertTrue(HealthRules.bloodRecoveryPerDay(true) > HealthRules.bloodRecoveryPerDay(false))
+    @Test fun lostBloodComesBackAtOneThirdADayWhateverTheFood() {
+        // D: the source has no food gate (Verse/HediffGiver_Bleeding.cs:14), so the fed and unfed rates are the same. Round 22.
+        assertEquals(1f / 3f, HealthRules.bloodRecoveryPerDay(), 1e-6f)
     }
 
     @Test fun woundsMakeBlood_OneHundredPercentBloodLossKills() {
@@ -391,8 +392,8 @@ class HealingRuleTest {
     @Test fun untendedWoundsHealAtTheBaseRate() = assertEquals(3.2f, heal(), 0f)
 
     @Test fun tendedWoundsHealFasterWithBetterTending() {
-        assertEquals(8f * 0.55f, heal(tended = true, q = 0f), EPS)
-        assertEquals(8f * 1.55f, heal(tended = true, q = 1f), EPS)
+        assertEquals(8f * 0.5f, heal(tended = true, q = 0f), EPS)
+        assertEquals(8f * 1.5f, heal(tended = true, q = 1f), EPS)
         assertTrue(heal(tended = true, q = 0.5f) > heal())
     }
 

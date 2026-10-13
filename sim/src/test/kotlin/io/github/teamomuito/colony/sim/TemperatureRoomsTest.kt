@@ -65,10 +65,11 @@ class TemperatureRoomsTest {
 
     @Test fun outdoorTemperatureFollowsDayAndNight() {
         val hours = (0 until 24).map { it to temp(22, it.toFloat()) }
-        assertEquals("coldest at 03:00", 3, hours.minByOrNull { it.second }!!.first)
-        assertEquals("warmest at 15:00", 15, hours.maxByOrNull { it.second }!!.first)
-        assertEquals("swing of +/-7 C", 14.0, (temp(22, 15f) - temp(22, 3f)).toDouble(), 0.001)
-        assertEquals("dry biomes swing +/-10 C", 20.0, (temp(22, 15f, Biome.DESERT) - temp(22, 3f, Biome.DESERT)).toDouble(), 0.001)
+        assertEquals("coldest at 04:19 (round 22, was 03:00): the base game coolest point is day fraction 0.18, 4.32 h at longitude 0", 4, hours.minByOrNull { it.second }!!.first)
+        assertEquals("warmest at 16:19 (round 22, was 15:00): 12 hours after the coolest point", 16, hours.maxByOrNull { it.second }!!.first)
+        assertEquals("swing of +/-7 C", 14.0, (temp(22, 16.32f) - temp(22, 4.32f)).toDouble(), 0.001)
+        assertEquals("desert swings +/-7 C too: one daily amplitude for every biome (D)", 14.0, (temp(22, 16.32f, Biome.DESERT) - temp(22, 4.32f, Biome.DESERT)).toDouble(), 0.001)
+        assertEquals("arid swings +/-7 C too: one daily amplitude for every biome (D)", 14.0, (temp(22, 16.32f, Biome.ARID) - temp(22, 4.32f, Biome.ARID)).toDouble(), 0.001)
         // The cycle repeats every day.
         assertEquals(temp(22, 6f), temp(23, 6f) - (Climate.seasonalBase(Biome.TEMPERATE, 23) - Climate.seasonalBase(Biome.TEMPERATE, 22)), 0.001f)
     }

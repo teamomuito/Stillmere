@@ -78,9 +78,9 @@ class TimeModelTest {
 
     @Test fun outdoorTemperatureSwingsThroughTheDay() {
         val g = timeTestColony(3)
-        g.tick = 3L * TICKS_PER_HOUR      // the diurnal curve bottoms out at 03:00
+        g.tick = 10800L                   // 04:19, where the diurnal curve bottoms out (Climate.COLDEST_HOUR 4.32 h at 2,500 ticks an hour)
         val cold = g.outdoorTemp()
-        g.tick = 15L * TICKS_PER_HOUR     // and peaks at 15:00
+        g.tick = 40800L                   // 16:19, twelve hours later, where it peaks
         val warm = g.outdoorTemp()
         assertTrue("afternoon ($warm) warmer than night ($cold)", warm > cold)
     }

@@ -73,8 +73,9 @@ object NeedRules {
     }
 
     /**
-     * Beauty need level for a room's average beauty per cell. The base level 0.5 is UNVERIFIED: the code default is at
-     * RimWorld/NeedDef.cs:45, but the reference's XML base is not checked (reference row 213 is ambiguous).
+     * Beauty need level for a room's average beauty per cell, from RimWorld/Need_Beauty.cs:95. The base level 0.5 is D: the code
+     * default is at RimWorld/NeedDef.cs:45. The beauty need's XML override is not in the tree, so that part is
+     * UNVERIFIED (docs/fidelity/needs-mood.md, row "Beauty need level").
      */
     fun beautyLevel(roomBeauty: Float): Float = (0.5f + 0.1f * roomBeauty).coerceIn(0f, 1f)
 

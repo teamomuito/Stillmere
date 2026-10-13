@@ -110,14 +110,14 @@ here is therefore UNVERIFIED or C, never D.
 | Band values, medium and long | accuracy x 0.9; accuracy x 0.7 | none | C |
 | Minimum aim chance | 0.0201 | `Verse/ShootTuning.cs:17` (row 431); `Verse/ShotReport.cs:64-66, 173` | D |
 | Shooter factor is `f ^ distance` | exponent is distance in cells | `Verse/ShotReport.cs:168` (row 460) | D |
-| Shooter base `f` | `0.96 + 0.002 x marksmanship`, capped at 1 (`Combat.kt` `shooterAccuracy`) | the stat is read at `Verse/ShotReport.cs:167` and is XML | C; base UNVERIFIED |
-| Pawn band stats (touch, short, medium, long) | not applied (treated as 1.0) | `Verse/ShotReport.cs:169-172` (XML stats) | UNVERIFIED |
+| Shooter base `f` | `0.96 + 0.002 x marksmanship`, capped at 1 (`Combat.kt` `shooterAccuracy`) | `f` is the XML stat `ShootingAccuracyPawn` (`Verse/ShotReport.cs:167`), and the hit factor is `f` to the power of distance (`:160-172`, D) | C; base UNVERIFIED |
+| Pawn band stats (touch, short, medium, long) | not applied (treated as 1.0) | `Verse/ShotReport.cs:169-172` (bands at 3, 12, 25 and 40 tiles, D; the stats are XML) | UNVERIFIED |
 | Shooter factor only for verbs that can go wild | not modelled: every pawn shot takes it | `Verse/ShotReport.cs:90-93` | C (difference) |
 | Target size factor | body size clamped to 0.5 to 2 | `Verse/ShotReport.cs:129-135` (row 448) | D |
 | Prone target at 4.5 cells or more | x 0.5 (`Ai.kt` `aimChance`) | `Verse/ShotReport.cs:38-41`; `Verse/ShootTuning.cs:19-21` (row 449) | D |
 | Execution, downed target at 3.9 cells or less | x 7.5 (`Ai.kt` `aimChance`) | `Verse/ShotReport.cs:50-53`; `Verse/ShootTuning.cs:23-25` (row 449) | D |
 | Steady aim (trait) | x 1.12 (`Ai.kt:73`) | none | C |
-| Fog | x 0.85 (`Ai.kt:74`) | the reference's weather multiplier is XML (`Verse/ShotReport.cs:119`) | C; value UNVERIFIED |
+| Fog | x 0.85 (`Ai.kt:74`) | the weather multiplier is `CurWeatherAccuracyMultiplier` (`Verse/ShotReport.cs:119`, D); its fog value is XML | C; value UNVERIFIED |
 | Quick trigger (trait) | x 0.92 (`Ai.kt:75`) | none | C |
 | Suppressed shooter | x 0.7 (`Ai.kt:76`) | none | C |
 | Sight factor floor | sight capacity at least 0.2 (`Ai.kt:77`) | none | C |
@@ -130,7 +130,7 @@ here is therefore UNVERIFIED or C, never D.
 | Cover distance factor | x 0.3333 under 1.9 cells; x 0.66666 under 2.9 cells | `Verse/CoverUtility.cs:89-97` (lines 92 and 96) | D |
 | Overall block | 1 - product of (1 - block) | `Verse/CoverUtility.cs:42` (row 456) | D |
 | Full-fill base block | 0.75 | `Verse/CoverUtility.cs:106` (row 457) | D |
-| Non-full cover base | the building's cover value; sandbags 0.55 (kept) | `Verse/CoverUtility.cs:108` (the fill percent); `BuildDef.SANDBAGS.cover` is existing | C; vanilla fill percent UNVERIFIED |
+| Non-full cover base | the building's cover value; sandbags 0.55 (kept) | `Verse/CoverUtility.cs:104-108` (the fill is the def's `fillPercent`, XML; a full-fill category is 0.75, D); `BuildDef.SANDBAGS.cover` is existing | C; vanilla fill percent UNVERIFIED |
 | Cover absorbs a shot by weight | a cover building picked with weight equal to its block chance | `Verse/Verb_LaunchProjectile.cs:167-178` (row 458); `Verse/ShotReport.cs:249-256` | D |
 | Cover read again per pellet | a cover shot apart stops no more pellets | none (see plan item 5) | C |
 | Damage a cover building takes | the pellet's damage | none | C |

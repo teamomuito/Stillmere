@@ -323,7 +323,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
         }
         p.healthDirty = true
     } else if (p.bloodLoss > 0f) {
-        p.bloodLoss = max(0f, p.bloodLoss - HealthRules.bloodRecoveryPerDay(p.food > 0.2f) / TICKS_PER_DAY * dt)
+        p.bloodLoss = max(0f, p.bloodLoss - HealthRules.bloodRecoveryPerDay() / TICKS_PER_DAY * dt)
         p.healthDirty = true
     }
     if (p.dead) return
@@ -419,7 +419,7 @@ fun Game.tendPawn(doctor: Pawn?, patient: Pawn, med: ItemType?) {
     }
     for (h in patient.hediffs) if (h.kind.needsTend) { h.tended = true; h.tendQuality = q; h.age = 0; any = true }
     if (any) patient.healthDirty = true
-    doctor?.gainXp(SkillType.HEALING, SkillRules.tendXp(patient.isAnimal))
+    doctor?.gainXp(SkillType.HEALING, SkillRules.tendXp(patient.isAnimal, med?.potency ?: 0f))
 }
 
 fun Game.die(p: Pawn, cause: String, source: Pawn? = null) {
