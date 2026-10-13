@@ -142,7 +142,7 @@ berry bushes, feral mirewort, brambles, wildlife herds, a flat start area.
 * **Grass ground and grass cover** are in (round 18, `grass.md`): grass ground is a terrain with fertility 1.0 (UNVERIFIED), and the cover grows, is harvested for hay from 65 percent growth, and regrows. Still missing: animals grazing it (3.10), grass spread, flowers, bushes, most wild plants.
 * **Caves** are generated on hill tiles (round 19, `caves.md`): tunnels through the rock, with natural roofs, gravel floor and openings onto the surface. Only colonies on large hills can have them (about 4 percent of starts). Still missing: the cave floor's water and gravel patches, cave hives, and cave-ins (`JobDrivers.kt:444` states cave-ins are not modelled). The base game's pocket-map exits and other cave content are DLC and excluded. Steam geysers and map-edge features are still missing.
 * **Ruins** are generated on colony maps (round 20, `ruins.md`): square ruins of stone or steel walls with a stone floor, walls damaged by the vanilla destroy rule, rough rock where walls fell, and 3 to 10 loot stacks per ruin from a Stillmere loot table. Battle maps get none. Terrain, ore and roofs are unchanged; plants are cleared only inside the footprints. The save format is unchanged (version 39). Still missing: the monument shapes, furniture and doors, filth rubble (rough rock stands in), and the ruin count and loot table, which are UNVERIFIED (vanilla values are XML).
-* **Roofs.** Only a natural roof flag exists. There is no roof designation, no building of roofs, and no roof collapse.
+* **Roofs.** Built roofs, roof collapse and roofless rooms are in the sim (3.3, `roofs.md`). The app has a Build roof tool; removing a roof is still missing.
 * **Ore as vanilla places it:** the subsoil auger reads the ore under its own cell, but ore only exists inside rock, which cannot be built on. See 3.9 (defect).
 * Rock chunks on the surface, mining yields and mine work are custom (`Ore.work` 1000 to 2200, plain rock 1000).
 
@@ -184,10 +184,11 @@ get roofs on each cell of the rooms that were indoor under the old rule, so no r
 `Desig.ROOF` and `JobType.BUILD_ROOF` are new (appended, so saved job types keep their ordinals). Crush damage goes through the sim RNG.
 Tests: `RoofsTest.kt` (rule, support radius, collapse, crush, building, save) and `LegacyRoofMigrationTest.kt`; the room tests in
 `TemperatureRoomsTest.kt`, `GameTest.kt` and `ColonyMapSizeTest.kt` now roof their rooms or check version 38 (listed in `roofs.md`).
-All 750 sim tests pass with 0 failures (22 in `RoofsTest`, 6 in `LegacyRoofMigrationTest`), confirmed by one `./gradlew :sim:test --console=plain` run (`roofs.md`, Status).
+All 826 sim tests pass with 0 failures (23 in `RoofsTest`, 6 in `LegacyRoofMigrationTest`), confirmed by one `./gradlew :sim:test --console=plain` run (`roofs.md`, Status).
 
-**Still open for roofs:** the app has no build-roof command yet (the sim accepts `designate(x, y, Desig.ROOF)`), so rooms built by
-players are outdoors until roofed; the remove-roof designation; trees that block a roof are skipped, not cut first; the 3 by 3 block is roofed to a fixed point, not vanilla's single pass (not adopted); the crush does not
+**App (this round):** the Orders menu has a Build roof tool. Tap or drag marks cells with `Desig.ROOF` through the same `designate` call as the other order tools, a marked cell reads "Marked: roof", and built roofs are drawn with a faint tint apart from natural roof (`roofs.md`, "The app"). Not built here: CI must confirm.
+
+**Still open for roofs:** the remove-roof designation, in the sim and the app (not available); trees that block a roof are skipped, not cut first; the 3 by 3 block is roofed to a fixed point, not vanilla's single pass (not adopted); the crush does not
 destroy buildings or plants; natural roof is kept when its group loses support, where vanilla drops a natural roof that is not thick (not
 adopted, a decision recorded in `roofs.md`); the built roof's cost, thin or thick flag, and which defs hold a roof are `UNVERIFIED`.
 
@@ -640,7 +641,7 @@ Per `CLAUDE.md`: flagged, not deleted.
 ## 7. Top 10 gaps
 
 1. ~~**Time base (24,000 vs 60,000 ticks per day)**~~ **Done** (`7e402c9`): 60,000 ticks per day. (3.1)
-2. **Map: new colonies are 250 x 250 (round 6); grass ground and covers are in (round 18, `grass.md`); caves are generated on hill tiles (round 19, `caves.md`); ruins are generated on colony maps (round 20, `ruins.md`).** Roofs and roof collapse are in (3.3, `roofs.md`); the app has no roof command yet. (3.2, 3.3, 3.9)
+2. **Map: new colonies are 250 x 250 (round 6); grass ground and covers are in (round 18, `grass.md`); caves are generated on hill tiles (round 19, `caves.md`); ruins are generated on colony maps (round 20, `ruins.md`).** Roofs and roof collapse are in (3.3, `roofs.md`); the app has a Build roof tool but no remove-roof command yet. (3.2, 3.3, 3.9)
 3. **Needs and mood model:** the drains, hunger categories, break timing, drug tolerance and the four added needs now follow the decompiled reference (round 13, `needs-mood.md`). The thought catalogue, mood smoothing and the chemical interest need are still missing. (3.5)
 4. **Combat model** (3.11): band accuracy, the shooter factor, the cover pass, the layered armour roll, melee dodge and stagger, and burning are done from the reference (combat round, `combat.md`). Still open: the weapon stat values, the intercept and stray-miss model, minimum range, stun, EMP, shields, and the fire growth rows of 3.8.
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)

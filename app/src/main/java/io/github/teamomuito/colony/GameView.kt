@@ -36,6 +36,7 @@ sealed class Tool(val label: String, val paints: Boolean) {
     object Harvest : Tool("Harvest plants", true)
     object Deconstruct : Tool("Deconstruct", true)
     object Repair : Tool("Repair", true)
+    object Roof : Tool("Build roof", true)
     object CancelOrders : Tool("Cancel orders", true)
     object Hunt : Tool("Hunt animals", true)
     object Tame : Tool("Tame animals", true)
@@ -288,6 +289,8 @@ class GameView(context: Context) : View(context) {
             if (m.natRoof[i] && t != Terrain.ROCK) { fill.color = 0x30101018; c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
             val fl = m.floor[i]
             if (fl != null) sprites.floor(c, fl, x, y, sx, sy, s)
+            // A built roof, apart from the natural roof shading above: a faint slate tint over the floor.
+            if (m.roof[i] && !m.natRoof[i]) { fill.color = 0x2E5A6E82; c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
             if (m.snow[i] > 0.05f) { fill.color = Color.argb((m.snow[i] * 190).toInt(), 240, 246, 255); c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
             val z = m.zoneAt(i)
             if (z != null) {
@@ -367,6 +370,12 @@ class GameView(context: Context) : View(context) {
                 }
                 Desig.DECON -> { fill.color = 0x55E05050; c.drawRect(sx, sy, sx + s, sy + s, fill) }
                 Desig.REPAIR -> { fill.color = 0x5550A0E0; c.drawRect(sx, sy, sx + s, sy + s, fill) }
+                Desig.ROOF -> {
+                    fill.color = 0x4490B8E0; c.drawRect(sx, sy, sx + s, sy + s, fill)
+                    stroke.color = 0xFF90B8E0.toInt(); stroke.strokeWidth = 3f
+                    c.drawLine(sx + s * 0.15f, sy + s * 0.5f, sx + s * 0.5f, sy + s * 0.2f, stroke)
+                    c.drawLine(sx + s * 0.5f, sy + s * 0.2f, sx + s * 0.85f, sy + s * 0.5f, stroke)
+                }
             }
         }
 
@@ -570,6 +579,7 @@ class GameView(context: Context) : View(context) {
             c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill)
         }
         if (m.natRoof[i] && m.terrain[i] != Terrain.ROCK) { fill.color = 0x30101018; c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
+        if (m.roof[i] && !m.natRoof[i]) { fill.color = 0x2E5A6E82; c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
         if (m.snow[i] > 0.05f) { fill.color = Color.argb((m.snow[i] * 190).toInt(), 240, 246, 255); c.drawRect(sx, sy, sx + s + 1, sy + s + 1, fill) }
         val z = m.zoneAt(i)
         if (z != null) {

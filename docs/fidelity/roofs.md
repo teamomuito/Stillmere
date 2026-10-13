@@ -31,16 +31,16 @@ No identifier, comment or string from the decompiled source is copied here or in
 
 ## Status
 
-Result: all 750 sim tests pass: 0 failures, 0 errors, 0 skipped. Confirmed by one run of the full suite in the fourth review,
-`./gradlew :sim:cleanTest :sim:test --console=plain`, which ended `BUILD SUCCESSFUL in 12m 8s`. The run went past the 10-minute limit of one
-tool call, so it was followed in the foreground to its end; the build itself was not cut short. Its 74 result files
-(`sim/build/test-results/test`) sum to 750 tests, 0 failures, 0 errors, 0 skipped. `RoofsTest` has 22 tests and `LegacyRoofMigrationTest`
-has 6. This round changed comments only, plus two assertion messages in `RoofsTest` (C became D in the text). No value, rule or assertion
-changed, so the behaviour is that of the previous run. No change to the save format in this round.
+Result: all 826 sim tests pass: 0 failures, 0 errors, 0 skipped, in one run of `./gradlew :sim:test --console=plain` that ended
+`BUILD SUCCESSFUL in 15m 8s` (exit 0). Its 79 result files (`sim/build/test-results/test`, all written by that run) hold the 826 tests.
+`RoofsTest` has 23 tests (one new this round: the roof designation the app makes) and `LegacyRoofMigrationTest` has 6. The fourth review
+recorded 750 tests in 74 files. This round's sim change is that one test. No rule, value, or save field changed. The app (`app/`) was
+not built: there is no Android SDK here, so CI must confirm the build. No change to the save format in this round.
 
 Implemented in `sim/` on branch `ccr-41984ede-stlmp4`: `Roofs.kt` (rules, block roofing), `GameMap.kt` (roof grid, room rule, holder
 removal), `JobDrivers.kt` and `Jobs.kt` (build job), `Game.kt` (designation, end-of-step crush), `SaveGame.kt` (version 38, migration).
-Not committed.
+The app side of this round: `GameView.kt` (the Build roof tool, the roof tint and mark), `MainActivity.kt` (the tool's tap and drag, the
+status text), `Panels.kt` (the Orders entry). Not committed.
 
 ## Scope
 
@@ -50,7 +50,8 @@ Not committed.
    that is `4 * open < cells`. It is outdoor once the open cells reach the quarter rounded up. This replaces the old rule (at most
    700 cells, or a natural-roof majority).
 3. **Build roof**: a designation (`Desig.ROOF`) and a construction job (`JobType.BUILD_ROOF`). A roof needs a roof holder within
-   6.9 cells, linked to it through roofed cells.
+   6.9 cells, linked to it through roofed cells. The app's **Build roof** tool (Orders menu) sets the designation on each tapped or
+   dragged cell, through `Game.designate(x, y, Desig.ROOF)` (see "The app"). Removing a roof is not available.
 4. **Roof collapse**: removing a roof holder (a built wall or door, or mined rock) drops the built roofs that are no longer held.
    Crush damage to each pawn under a collapsing roof, drawn from the sim RNG. The collapse itself draws nothing.
 5. **Roofless rooms** follow from 2 and 4: a room whose open cells reach a quarter of its cells, rounded up, uses the outdoor temperature
@@ -90,6 +91,9 @@ Not committed.
 | Placeworker needing a thick roof | not used in Stillmere | `RimWorld/Placeworker_OnlyUnderThickRoof.cs`. Not in the reference table | not adopted | no Stillmere def uses it |
 | Thick-roof outdoors need, indoors need, sun array and rain effects | use roofed cells | see `docs/fidelity/needs-mood.md` and `docs/fidelity/economy.md`, which carry their own tags | n/a here | numbers unchanged; they now follow the roof grid |
 | Beauty under natural roof (-0.1) | kept | `Rooms.kt` (`NATURAL_ROOF_BEAUTY`). The reference table's per-cell beauty row (section 3.3, row 106) states that vanilla's cell beauty has no natural-roof term; this row does not re-cite it | not adopted | a 3.3 rooms-stat row, not roofs |
+| App: Build roof tool | Orders menu entry "Build roof" (`Panels.kt`, `orderTools`). Tap or drag marks each cell with `Desig.ROOF` through `g.designate`, the same call the other order tools make (`MainActivity.kt`, `onArea`, the `Tool.Roof` branch). Removing a roof is not offered | Not in the reference table. The mark is accepted by the sim's existing rule: a passable cell that is not roofed (`Game.kt:425`, `designate`) | C | adopted in the app; not built here (CI must confirm). The tool only marks cells. Whether a cell is roofed is decided by the sim's rules, which are unchanged |
+| App: marked roof | Cell status text "Marked: roof" (`MainActivity.kt`, the `Desig` branch for `Desig.ROOF`). On the map, a light blue fill with a roof chevron (`GameView.kt`, the designation branch for `Desig.ROOF`) | Not in the reference table. A visual choice; no vanilla value is used | C | adopted; visual only, no effect on the sim |
+| App: built roof tint | A roofed cell that is not natural roof (`roof` set, `natRoof` clear) gets a faint slate tint, `0x2E5A6E82` (ARGB, alpha 46 of 255). It is drawn over the floor, in the detail view and in the flat view (`GameView.kt`). Natural roof keeps its own shading, `0x30101018`, unchanged | Not in the reference table. A visual choice; no vanilla value is used | C | adopted; visual only. Lighting is unchanged: `drawLighting` (`GameView.kt`) still gives natural roof a fixed 0.5 and every other cell `dark * 0.68`, so a built roof is lit as before |
 | Rock objects and natural roofs at map generation | thin and thick thresholds | Thick: `RimWorld/GenStep_RocksFromGrid.cs:59` (x 1.14; the 0.7 is at `:55`), reference table section 3.2, "Rock objects and natural roofs" row. Thin: `:63` (0.7 x 1.04; checked in the clone). The table row cites `:59` for both values, so `:63` has no row | D (thick, `:59`; thin, `:63`) | not adopted: map generation (3.2, `map.md`) |
 
 ### Note on the connectivity test
@@ -221,12 +225,27 @@ Written from version 38 on, as one more flag after the snow of each cell. Versio
   reach `holderRemoved`. So a save between steps never holds a pending crush.
 * No clock is read.
 
+## The app (this round)
+
+* **Build roof tool.** `Tool.Roof` ("Build roof") in `GameView.kt`, listed in the Orders menu after Repair (`Panels.kt`). Tap or drag
+  marks each cell with `Desig.ROOF` through `g.designate`, as the other order tools do (`MainActivity.kt`, `onArea`). The tool is a
+  paint tool, so the tap and the drag both reach `onArea`. Cancel orders clears a roof mark like any other.
+* **Mark and status text.** A marked cell reads "Marked: roof" in the cell status (`MainActivity.kt`, next to the other marks). On the
+  map, the mark is a light blue fill with a roof chevron (`GameView.kt`).
+* **Drawing.** A built roof (`roof` set, `natRoof` clear) gets a faint slate tint over its floor, in the detail and the flat view. Natural
+  roof keeps its shading, unchanged. Both are visual only: they change no sim value, no save and no lighting.
+* **Not changed.** The roof rules, the sim's rule for a `Desig.ROOF` mark (`Game.kt:425`), the roof jobs, and the save format. Removing a
+  roof (the remove-roof designation) is still not available in the app or the sim.
+* **Not built here.** The app cannot be compiled in this environment (no Android SDK). The edits follow the patterns in the same files.
+  The `when` expressions over `Tool` all have an `else`, so the new object needs no other branch. CI must confirm the build.
+
 ## Tests
 
-* `RoofsTest.kt` (new, 22 tests): the quarter rule and its edges, the 75 percent boundary, natural roof in the share, the support radius (six
+* `RoofsTest.kt` (new, 23 tests): the quarter rule and its edges, the 75 percent boundary, natural roof in the share, the support radius (six
   cells held, seven not), collapse on a holder's removal (strip, natural roof, outside the radius, a door), the crush roll (same seed,
   same damage; crush kind), building a designated room to indoors through `Game.step`, the 3 by 3 block roofed to a fixed point (the
-  cells above and beside the centre are roofed in the same job; a tree cell in the block stays unroofed), the save round trip, and a
+  cells above and beside the centre are roofed in the same job; a tree cell in the block stays unroofed), the designation the app's roof
+  tool makes (open ground takes the mark; rock and a roofed cell are refused; cancelling clears the mark), the save round trip, and a
   version 37 save loading with roofs on its indoor rooms.
 * `LegacyRoofMigrationTest.kt` (new): fixture `colony_v37.sav`; every room keeps its status on load; roofed state is unchanged.
 
@@ -244,8 +263,9 @@ Existing tests changed, and the reason (no expected number changed, except the v
 * Plants other than trees that block a roof in vanilla are not modelled: Stillmere's plant types carry only a tree flag, and the
   vanilla flag's plant list is definition data (`UNVERIFIED`).
 * Collapse does not destroy buildings or plants under it, and does not cascade.
-* The app has no build-roof command yet: the sim accepts `designate(x, y, Desig.ROOF)`. Without a roof command in the app, rooms
-  built by players are outdoor until roofed, and the app does not draw roofs. The app is not built here.
+* The app has a Build roof tool (Orders menu, tap or drag) that marks cells with `Desig.ROOF`, and it draws built roofs and the marks
+  (see "The app"). Removing a roof is not available in the app or the sim (the remove-roof designation, above). The app is not built
+  here: CI must confirm the build.
 * The holder list (walls, doors, rock) is Stillmere's choice (C). The support radius is vanilla (D). The 3 by 3 block is roofed to a
   fixed point (C), not vanilla's single pass, which is not adopted (see "Corrections in this round").
 * The build roof cost, the thick or thin flag of the built roof, and the holder flag of natural rock are definition data, not in the
