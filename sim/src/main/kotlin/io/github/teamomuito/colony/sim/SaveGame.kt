@@ -12,10 +12,10 @@ object SaveGame {
      *
      * 26 to 31 renamed some text that is saved: backstory titles inside [Pawn.backstory], thought labels, one incident name, the
      * temporary event name, and (version 28) the pirate camp texts: site names in [World.sites] and the labels of pending fights in
-     * [BattlePlan.label]. Saves before each rename are translated when read (see [LegacyNames]). Three kinds of saved text are never
-     * translated, because each one is a record of a past event: graveyard entries in [Game.graveyard], which keep the death cause they
-     * were written with (only new deaths write the current causes), log lines in [Game.log], and caravan last-event notes in
-     * [Caravan.lastEvent]. The layout did not change. Decision recorded in docs/fidelity/names.md (section 2).
+     * [BattlePlan.label]. Saves before each rename are translated when read (see [LegacyNames]). The death causes in
+     * [Game.graveyard], the log lines in [Game.log] and the caravan last-event notes in [Caravan.lastEvent] hold renamed wording
+     * too, and they are translated on read by [LegacyNames.graveyardEntry], [LegacyNames.logLine] and [LegacyNames.caravanNote].
+     * The layout did not change, so these translations do not bump the version (docs/fidelity/names.md, section 2).
      *
      * 32 adds, at the end of each pawn record: the outdoors and indoors needs, the zero-rest counter, the break timers and
      * cooldown, and drug tolerance (see [writePawn] and docs/fidelity/needs-mood.md). Earlier saves read these as their defaults.
@@ -434,10 +434,9 @@ object SaveGame {
         val flare = i.tickAt(version); val toxic = i.tickAt(version); val eclipse = i.tickAt(version)
         val hx = i.readInt(); val hy = i.readInt(); val wind = i.readFloat()
         val killed = i.readInt(); val earned = i.readInt(); val hints = i.readInt()
-        // Graveyard entries are read exactly as they were saved, in every version. Each one is a record of a past death, so the
-        // causes that earlier versions wrote stay as they were. Only new deaths write the current causes. Decision recorded in
-        // docs/fidelity/names.md (section 2). LegacyNames does not translate graveyard entries.
-        val grave = List(i.readInt()) { i.readUTF() }
+        // Graveyard entries are translated on read: the cause in each entry gets the current wording when the save is older than the
+        // rename of that cause (LegacyNames.graveyardEntry, docs/fidelity/names.md section 2). The layout is the same, so no bump.
+        val grave = List(i.readInt()) { LegacyNames.graveyardEntry(i.readUTF(), version) }
         val cur = i.readInt()
         val done = List(i.readInt()) { Research.entries[i.readInt()] }
         val prog = List(i.readInt()) { Research.entries[i.readInt()] to i.readFloat() }
@@ -571,8 +570,8 @@ object SaveGame {
             repeat(i.readInt()) {
                 val c = Caravan(i.readInt(), i.readUTF(), i.readInt())
                 c.destination = i.readInt(); c.progress = i.readFloat().fromOldBase(version); c.resting = i.readBoolean(); c.goingHome = i.readBoolean()
-                // lastEvent is a record of a past battle, so it is read as saved and not translated (names.md section 2).
-                c.lastEvent = i.readUTF(); c.forageNote = i.readBoolean()
+                // The last-event note names a battle label, which may be a renamed pirate name (LegacyNames.caravanNote).
+                c.lastEvent = LegacyNames.caravanNote(i.readUTF(), version); c.forageNote = i.readBoolean()
                 repeat(i.readInt()) { c.route.add(i.readInt()) }
                 c.inventory.addAll(i.readStock(version))
                 if (version >= 16) c.inBattle = i.readBoolean()
@@ -580,10 +579,9 @@ object SaveGame {
                 g.caravans.add(c)
             }
         }
-        // Log lines are read exactly as they were saved, in every version, like graveyard entries: each one records a past event.
-        // LegacyNames does not translate them. Decision recorded in docs/fidelity/names.md (section 2).
+        // Log lines are translated on read, wording only: names and the rest of each line stay as saved (LegacyNames.logLine).
         g.log.clear()
-        repeat(i.readInt()) { g.log.add(LogEntry(i.tickAt(version), i.readUTF(), i.readInt())) }
+        repeat(i.readInt()) { g.log.add(LogEntry(i.tickAt(version), LegacyNames.logLine(i.readUTF(), version), i.readInt())) }
         if (version >= 16) {
             if (i.readBoolean()) g.pendingBattle = i.readPlan(version)
             if (i.readBoolean()) {

@@ -2,9 +2,12 @@
 
 Scope: gap report section 2.2 (`gap-report.md`), plus every label that the author recognises as a RimWorld item, building, research topic, trait, backstory title, event, creature, implant, skill, hediff or thought name. This file records names only. It holds no RimWorld text, descriptions or art. Old Stillmere labels that were RimWorld names appear here, in the test data under `sim/src/test/resources/legacy/`, and in code only as CRC-32 values (section 4). Vanilla names recalled for the audit are not Stillmere labels (open item 11).
 
-Status: **rounds 12, 13 and 14 changes are in the working tree on branch `ccr-41984ede-stlmp4`. Not committed.** Round 14 (section 18) checks the
+Status: **rounds 12 to 16 changes are in the working tree on branch `ccr-41984ede-stlmp4`. Not committed.** Round 16 (section 20) answers the
+review of round 15: it makes sections 0, 2, 3, 6 (6.1 to 6.5), 9 and 19 agree with the translation of graveyard causes, log lines and caravan
+notes, corrects the git history facts, and adds the missing rows to the fixtures table. Sections 11 to 18 are summaries of earlier rounds. Where
+one of them says that graveyard causes, log lines or caravan notes are kept as saved, section 2 and section 19 supersede it. Round 14 (section 18) checks the
 verdict in `names-verdict.md` against the tree, finds findings A and B already fixed, and changes the new text of the five lower-case adult titles
-to lower case. Round 13 checks the verdict on round 12 against the tree (section 17): the code, the tables and the tests already hold the fixes the verdict asked for, and round 13 corrects the wording of section 2 and section 6.1 about the bare pirate name and strengthens one test. Round 12 answers the review of round 11, findings A and B (section 16): the lower-case adult titles of T13 and T14 have keys, and the pirate camp texts saved in site names and pending-fight labels are translated. Round 11 answered the verdict on round 10 (section 15), round 10 the review of round 9 (section 14), and round 9 the review of round 8 (section 13). The save version is still 31. Graveyard entries, log lines and caravan last-event notes are kept as saved (section 2). The save fixtures under `sim/src/test/resources/legacy/` and the new files are untracked. The commit step adds them with `git add -A` (section 9, item 1).
+to lower case. Round 13 checks the verdict on round 12 against the tree (section 17): the code, the tables and the tests already hold the fixes the verdict asked for, and round 13 corrects the wording of section 2 and section 6.1 about the bare pirate name and strengthens one test. Round 12 answers the review of round 11, findings A and B (section 16): the lower-case adult titles of T13 and T14 have keys, and the pirate camp texts saved in site names and pending-fight labels are translated. Round 11 answered the verdict on round 10 (section 15), round 10 the review of round 9 (section 14), and round 9 the review of round 8 (section 13). Round 15 does not change the save version (`SaveGame.VERSION` is 40 at `HEAD`). Round 15 (section 19) translates graveyard causes, log lines and caravan last-event notes below the version of each rename (section 2). The save fixtures under `sim/src/test/resources/legacy/` and the new files are tracked at `HEAD`, except the round 15 rows of `old_text_cases.tsv`, which are not yet committed (section 9, item 1).
 
 Rounds 3 to 7 are marked `r3` to `r7` in the tables. Older rounds have no mark.
 
@@ -13,10 +16,7 @@ Rounds 3 to 7 are marked `r3` to `r7` in the tables. Older rounds have no mark.
 **Goal.** Remove the RimWorld names from Stillmere's labels, code and text, and keep every old save readable. A renamed label that a save
 file holds must still load under its new name, so the migration in `LegacyNames` covers each renamed label that is saved.
 
-**Exception (decision, rounds 11 and 12).** Three kinds of saved text are kept as saved and are not translated, because each one is a record
-of a past event: **graveyard entries** (the death causes, rows G01-G09 of section 3), **log lines** and **caravan last-event notes** (round
-12). An old save shows the wording it was written with. The reasons are in section 2. The owner has not yet confirmed this exception (section
-9, items 23, 24 and 27).
+**Exception (decision, round 15; supersedes the exception of rounds 11 and 12).** Renamed text that a saved log line, caravan last-event note or death cause holds is translated on read, below the version of its rename (section 2). The kept exception: a saved log line keeps an embedded item, building, creature, plant, drug or research label, and the disease labels whose round is not recorded, because the names migration does not key them (section 9, items 29 and 30). The owner has not yet confirmed the translation (section 9, items 23, 24, 27, 28 and 29).
 
 **Scope.** The goal named three thought labels, and the migration covers more. Each renamed label below is saved and must still load from an
 old save, so each one has a translation. The scope is:
@@ -30,56 +30,33 @@ old save, so each one has a translation. The scope is:
 * **1 incident name**, I01 (`THRUMBO`, saved by name, read as `SKYHORN_VISIT` below version 26).
 * **3 pirate camp texts**, S01-S03 (section 3), renamed in version 28 (round 4, section 6.1): the camp's site name (`<faction> camp`), the
   label of a pending fight against a camp, and the label of an ambush by a pirate band. Round 12 adds them (section 16).
+* **Round 15: renamed text in saved log lines, caravan last-event notes and death causes.** The keys are S04 (the bare pirate name), L01-L36
+  (sentences, raid labels, and the chronic and disease labels that log lines write) and G01-G09 (the death causes, which are also the disease
+  labels in `caught` lines). They are listed in section 3 and translated below their versions (section 2).
 
-The scope is a decision (round 9, restated in rounds 10, 11 and 12). The owner has not yet confirmed it (section 9, item 18).
+The scope is a decision (round 9, restated in rounds 10 to 12, and extended in round 15 by the rows of the last bullet). The owner has not yet confirmed it (section 9, item 18).
 
 ## 1. Rules used
 
 * **Renamed:** a label that RimWorld coined or uses in a distinctive form: a designation for a trait, research topic, implant, drug, plant, creature, scenario, thought, event, backstory title, skill, hediff, item, building or weapon whose RimWorld name is not an ordinary word. A label is also renamed when it fails the near-copy rule below.
 * **Kept (generic):** an ordinary English word, or a real-world object, food, material, biome, animal, disease or phenomenon, used in its ordinary sense (section 7). A kept label is UNVERIFIED as RimWorld wording unless its row says otherwise.
 * **Near-copy rule.** A new label must share neither its head word (its last word) nor its first word with the RimWorld label it replaces. Examples that fail: "Greatbow" to "Tall bow" (same head word), and "Electric stove" to "Electric range" (same first word, head swapped for a synonym). Round 7 checked every (old, new) pair of sections 3 and 6 by script (section 8). Two template forms do not count as a shared first word: the verb of a thought label ("Ate ...", "Played ...") and the drug template ("<drug> high", "<drug> addiction"). This exception is an owner decision (open item 16).
-* **Saved text** is translated on load when it is one of the saved labels: thought labels, backstory titles, the temporary event name, one incident name and the pirate camp texts (section 2). Display text that is not saved, such as building, item, research and trait names and their descriptions, needs no translation when it is renamed. Graveyard entries, log lines and caravan last-event notes are saved and are kept as saved (section 2).
+* **Saved text** is translated on load when it is one of the saved labels: thought labels, backstory titles, the temporary event name, one incident name and the pirate camp texts (section 2). Display text that is not saved, such as building, item, research and trait names and their descriptions, needs no translation when it is renamed. Graveyard causes, log lines and caravan last-event notes are saved, and they are translated for their renamed wording below the version of each rename (section 2).
 * **Enums are saved by ordinal.** A renamed constant keeps its position. Round 7 renamed constants again (section 5.2); each keeps its position, and `NamesTest` pins the ordinals.
 * **Incident constants are saved by name.** Only `Incident.THRUMBO` was renamed (`SKYHORN_VISIT`), with a translation (section 4). The other incident constants keep their names (open item 6).
 * **Identifiers.** A constant that echoes a RimWorld label phrase is renamed (sections 5.1 and 5.2). Generic words stay in identifiers, for example `TURRET`, `TRAP_SPIKE`, `CONDUIT` and `BATTERY` (open item 9). Player-visible text and comments use the new words.
 
 ## 2. Save compatibility
 
-* **Current version: 31** (`SaveGame.VERSION`). Round 8 renamed three backstory titles (`Orphan`, `Field medic`, `Drifter`) and, for new deaths, the causes that versions 25 to 30 wrote into the graveyard. The version went from 30 to 31. Round 9 stopped translating graveyard entries: an old entry is kept as saved (decision below). The version stays 31, because the three titles still need it. The field layout did not change. Round 7 (version 29 to 30) renamed four thought labels and one temporary event name (section 6.4).
-* **Gates.** Backstory titles are read for every save below 31; each title table applies below its own version (titles renamed in versions 26 and 27, and the three titles renamed in version 31). Incident names are translated for saves below 26 (`LegacyNames.incidentName`). `SaveGame` calls that function for saves below 28, and the function returns the saved name from version 26 on, so the effective gate is 26. Thought labels are read through the table of each version group: below 26, 27, 28, 29 and 30. The temporary event name is read below 29 (E01-E03) and below 30 (E04). Graveyard entries, log lines and caravan last-event notes are never translated (rounds 9, 11 and 12, section 2). Site names and pending-fight labels (S01-S03) are read below 28, the version of round 4 (`LegacyNames.siteName` and `LegacyNames.battleLabel`, called from `SaveGame` for every site and both pending plans). Thought labels and the temporary event name are not translated in saves written by version 30, because they are read only below 30. Each table holds the final name, so a save that passes several gates ends at the current name.
-* **What is saved as text and was renamed:** backstory titles (`Pawn.backstory`), thought labels (`Thought.label`), the temporary event name (`tempEventName`), one incident name (saved by name), the pirate camp texts (the site names in `World.sites`, `<faction> camp`, and the labels of pending fights in `BattlePlan.label`, round 12), and the death causes written into the graveyard (`Game.graveyard`, one string per death: `<name> - <cause> (day <n>)`). Only new deaths write the renamed causes. A saved graveyard entry is never translated (decision below). Enum labels are not saved. Log lines are saved as text and are kept as saved, as graveyard entries are (decision of rounds 10 and 11, below; open item 23). Caravan last-event notes (`Caravan.lastEvent`) are saved as text and are kept as saved, as a record of a past battle (decision of round 12, below; open item 27). The bare pirate faction name (`Rough-Knife gang`) is never saved on its own: factions are not written to a save, and `World.generate` rebuilds them from the seed on load (`SaveGame.kt`, the read site of `World.generate`). The old name reaches a save only inside the camp texts (S01-S03, keyed), the caravan note and the log lines, and the last two are kept as saved. So the key for the site name is for `<faction> camp`, not for the bare name (section 16, finding B).
+* **Current version: 40** (`SaveGame.VERSION`, set by later work; the names migration last changed it in round 8, to 31). Round 8 renamed three backstory titles (`Orphan`, `Field medic`, `Drifter`) and, for new deaths, the causes that versions 25 to 30 wrote into the graveyard. The version went from 30 to 31. Round 9 had stopped translating graveyard entries; round 15 translates them again, below version 31 (decision below). The version stayed 31 through round 14, because the three titles still need it. The field layout did not change. Round 7 (version 29 to 30) renamed four thought labels and one temporary event name (section 6.4).
+* **Gates.** Backstory titles are read for every save below 31; each title table applies below its own version (titles renamed in versions 26 and 27, and the three titles renamed in version 31). Incident names are translated for saves below 26 (`LegacyNames.incidentName`). `SaveGame` calls that function for saves below 28, and the function returns the saved name from version 26 on, so the effective gate is 26. Thought labels are read through the table of each version group: below 26, 27, 28, 29 and 30. The temporary event name is read below 29 (E01-E03) and below 30 (E04). Graveyard causes, log lines and caravan last-event notes are translated below the version of each rename (round 15, section 2). Site names and pending-fight labels (S01-S03) are read below 28, the version of round 4 (`LegacyNames.siteName` and `LegacyNames.battleLabel`, called from `SaveGame` for every site and both pending plans). Thought labels and the temporary event name are not translated in saves written by version 30, because they are read only below 30. Each table holds the final name, so a save that passes several gates ends at the current name.
+* **What is saved as text and was renamed:** backstory titles (`Pawn.backstory`), thought labels (`Thought.label`), the temporary event name (`tempEventName`), one incident name (saved by name), the pirate camp texts (the site names in `World.sites`, `<faction> camp`, and the labels of pending fights in `BattlePlan.label`, round 12), and the death causes written into the graveyard (`Game.graveyard`, one string per death: `<name> - <cause> (day <n>)`). Only new deaths write the renamed causes. A saved graveyard entry is translated in its cause only (decision below). Enum labels are not saved. Log lines are saved as text and are translated for their renamed wording (decision of round 15, below; open item 23). Caravan last-event notes (`Caravan.lastEvent`) are saved as text and are translated for a renamed label in them (decision of round 15, below; open item 27). The bare pirate faction name (`Rough-Knife gang`) is not a saved field of its own: factions are not written to a save, and `World.generate` rebuilds them from the seed on load (`SaveGame.kt`, the read site of `World.generate`). The old name reaches a save inside the camp texts (S01-S03, keyed) and inside saved log lines. The raid log line writes `of <faction>` (`Events.kt`, the raid line that calls `say`), so a raid line can hold the bare name; S04 keys it, below version 28. A caravan note holds only a battle label (S02 and S03), never the bare name on its own. So the key for the site name is for `<faction> camp`, and S04 is the key for the bare name where a saved log line holds it (section 16, finding B; section 19).
 * **Fixtures.** Round 7 generated `colony_v29.sav` from the round-6 code (version 29) before any round 7 change, with a temporary test that was deleted afterwards. `LegacyNamesMigrationTest` reads it.
-* **Fixtures (round 8).** `colony_v30.sav` was generated from the round-7 working tree (version 30) before the version 31 change, by a temporary test (`Game(4242L)`, `startNewColony(QUIET_ENCLAVE)`), and the test was deleted. `colony_v25_graves.sav` was generated from the code at git `HEAD` (version 25), in a `git archive` copy, by a temporary test (`Game(4242L)`, `startNewColony(LOST_TRIBE)`) that added the version-25 death causes to the graveyard. Both are untracked.
+* **Fixtures (round 8).** `colony_v30.sav` was generated from the round-7 working tree (version 30) before the version 31 change, by a temporary test (`Game(4242L)`, `startNewColony(QUIET_ENCLAVE)`), and the test was deleted. `colony_v25_graves.sav` was generated from the code at git `HEAD` (version 25), in a `git archive` copy, by a temporary test (`Game(4242L)`, `startNewColony(LOST_TRIBE)`) that added the version-25 death causes to the graveyard. Both are tracked at `HEAD`.
 
-**Decision: graveyard entries are kept as saved (round 9; restated in rounds 10 and 11; not yet confirmed by the owner, open item 24).**
-`Game.graveyard` holds one string per death. Each entry is a record of a past death, so `SaveGame.read` reads every entry exactly as it was
-saved, in every version. Round 8 had translated the causes below version 31 (rows G01-G09). Round 9 reverses that: the translation and its
-nine keys are removed from `LegacyNames.kt`. The read site in `SaveGame.kt` carries a comment that records the decision. The death causes
-that the current code writes are `exposure` and `overheating` (`Mood.kt`) and `bleed-out` and the lowercased lethal hediff labels
-(`chest cough`, `boil sickness`, `marsh fever`, `heavy drowse`, `starved frame`, `toxin load`, from `Health.kt`). They have no key in
-`LegacyNames`, and they need none: graveyard text is never translated, in either direction. Consequences:
+**Decision: graveyard causes are translated below version 31 (round 15; open item 24).** `Game.graveyard` holds one string per death, `<name> - <cause> (day <n>)`. The cause is the text that was written when the death happened. The old causes (rows G01-G09) were renamed in version 31, so `LegacyNames.graveyardEntry` translates the cause of each entry that a save below 31 holds, and keeps the name and the day. The gate is the version whose rename changed the text. A save below it was written while the old text was in use, and a save at 31 or later holds the current text. The gate is not the last `VERSION` in git. `git log -S` on the old cause texts lists `a9c032b`, the first commit that holds them (`die(p, "hypothermia")`), and `eb9784c`, the rename (`die(p, "exposure")`, with `VERSION` at 31). `git log -S` lists no commit between `a9c032b` and `eb9784c`, so the cause texts stay in the tree from `a9c032b` to `eb9784c^`. `d7d16c9` (`VERSION` 25) is one of those commits, and the last one is `eb9784c^`, whose `VERSION` is 25. Versions 26 to 30 were never committed, so git cannot show what they wrote. Section 2 of round 8 says that versions 25 to 30 wrote the old causes into the graveyard, and the rename commit's message says that saves from versions 25 to 30 are migrated. Whichever version wrote them, a save below 31 may hold them, so the gate is 31 (open item 28). A cause inside a log line (`has died (<cause>)` and `died on the road (<cause>)`) is translated by the same keys. A cause that names a pirate camp (`lost in the wilds after <label>`) is translated below version 28.
 
-* A save written by versions 25 to 30 shows its old causes as they were written (`hypothermia`, `heatstroke`, `blood loss`, `flu`, `plague`,
-  `malaria`, `sleeping sickness`, `malnutrition`, `toxic buildup`).
-* A new death writes the current causes (`exposure`, `overheating`, `bleed-out`, `chest cough`, `boil sickness`, `marsh fever`, `heavy drowse`,
-  `starved frame`, `toxin load`), so one graveyard can hold both kinds of entry.
-* The version number is not changed by this decision. Version 31 stays, because the three backstory titles of round 8 still need it.
-* Tests: `LegacyNamesMigrationTest.aVersion25GraveyardKeepsEveryDeathCauseAsItWasSaved` reads `colony_v25_graves.sav` and checks each entry
-  against its expectation line. `everyOldDeathCauseInTheCaseFileIsInTheVersion25GraveyardAsSaved` checks all nine G rows of the case file.
-  `anOldGraveyardEntryInAVersion30SaveLoadsUnchanged` writes and reads them through a version 30 save.
-  `anOldGraveyardStringStillLoadsUnchangedWhenItIsSavedNow` (round 11) writes an entry that holds an old cause through the current version
-  and reads it back unchanged. `aVersion30GraveyardIsReadWithItsCurrentCausesUnchanged` checks the current causes of `colony_v30.sav`.
-
-**Decision: log lines are kept as saved (round 10; restated in round 11).** `g.log` holds one text per line, and each line is a record of a
-past event, as a graveyard entry is. `SaveGame.read` reads every log line exactly as it was saved, in every version, and `LegacyNames` has no
-key for a log line. An old save therefore keeps the wording of its event lines, including any line that names a renamed label. Those lines
-are the temporary-event messages, the spoiled-stomach lines, the pyre-house line, the fume-cloud line and the corona-surge line. The read
-site in `SaveGame.kt` carries a comment that records the decision. Test: `LegacyNamesMigrationTest.anOldLogLineIsKeptAsSavedAndNotTranslated`
-writes the four old temporary-event labels of the case file into a version 30 save as log lines, and reads them back unchanged. The
-statement "log lines are not saved" was wrong and is withdrawn: they are saved, and they are kept as saved. This extends the graveyard
-decision to log lines, so the owner should confirm it (section 9, item 23).
-
-The rows G01-G09 stay in section 3 as the record of those old texts. Their status is "not translated".
+**Decision: log lines are translated below the version of each rename (round 15; open item 23).** A saved log line holds its wording, and some of that wording was renamed: sentences (for example the solar flare, eclipse and mechanoid texts), raid labels, the chronic and disease labels that `caught`, `recovered from` and `developed` lines write, and the pirate names. `LegacyNames.logLine` replaces each renamed text it finds in a line, as a whole word, and keeps everything else, including every name and number. Each text has the version of its rename in section 3 (rows L01-L36 and S01-S04). A line with no renamed text is read as saved. Kept as saved, and listed as open items 29 and 30: an item, building, creature, plant, drug or research label embedded in a line, the drug item names in `is now addicted to` lines, the disease labels `gut worms` and `muscle parasites` (no recorded round), the thrumbo and firefoam popper sentences (no recorded round), and the version 29 wording of the volcanic winter line (not recorded).
 
 **Decision: pirate camp texts are translated (round 12; not yet confirmed by the owner, open item 26).** A pirate camp's name is saved as
 text. A site's name is `<faction> camp` (`Site.name`, written by `SaveGame`), because `Factions.kt` and `Quests.kt` build it from the faction
@@ -87,13 +64,10 @@ name. A fight against a camp is saved with its label, `the <site name>` (`Carava
 saved with `<faction> bandits`. The old pirate faction name therefore sits in saved text, and the rename of round 4 reaches it. These are
 live labels: the camp stays on the world map, and the pending fight is named in the battle prompt. They are translated like backstory titles,
 not kept like a record. The keys are S01 (site name), S02 (camp label) and S03 (ambush label), read below version 28. The faction name itself
-is not saved: `World.generate` rebuilds the factions from the seed on load, so it always shows the current name, and no key is needed for it.
+is not saved as a field: `World.generate` rebuilds the factions from the seed on load, so the faction always shows the current name. A saved raid
+log line can still hold the old faction name, and S04 (the bare name, round 15) keys that text below version 28 (section 2).
 
-**Decision: caravan last-event notes are kept as saved (round 12; open item 27).** `Caravan.lastEvent` holds a sentence about the last battle,
-such as a retreat from a camp. It records a past event, as a log line does, so `SaveGame.read` reads it as saved, and `LegacyNames` has no key
-for it. A key would have to cover each sentence template as well as each label, so the record decision is the simpler one. Tests:
-`LegacyNamesMigrationTest.aVersion27SaveWithAPirateCampReadsTheCampAndTheFightUnderTheNewNames` checks that the fixture's last event is unchanged,
-and `aVersion27SaveWrittenAgainKeepsTheCampTextsAndTheLastEvent` checks it again after a round trip.
+**Decision: caravan last-event notes are translated (round 15; open item 27).** `Caravan.lastEvent` holds a sentence about the last battle: `Retreated from <label>.`, `Defeated <label>.` or `Driven off from <settlement>.`. `LegacyNames.caravanNote` applies the same whole-word translation as `logLine` to the whole note. In practice only a battle label matches in a note (rows S02 and S03, below version 28), so the rest of the sentence is kept. A version 27 save with `Retreated from the Rough-Knife gang camp.` now reads `Retreated from the Rough-Blade gang camp.`.
 
 ### Fixtures (`sim/src/test/resources/legacy/`)
 
@@ -107,13 +81,13 @@ and `aVersion27SaveWrittenAgainKeepsTheCampTextsAndTheLastEvent` checks it again
 | `colony_v27.sav`, `colony_v27_expect.txt` (r4) | Five colonists with version 27 text. | Written by the version 27 code (before the round 4 renames), by a temporary test. |
 | `colony_v28.sav`, `colony_v28_expect.txt` (r6) | Five colonists with the version 28 thought labels and two incidents. | Written by a temporary generator (`Game(4242L)`, `startNewColony(QUIET_ENCLAVE)`, `SaveGame.write`) from the version-28 working tree, which had 100 by 100 maps. The generator was deleted. |
 | `colony_v29.sav`, `colony_v29_expect.txt` (r7) | Five colonists with version 29 labels (`Hearty feast`, `Engineered upgrades`, `Deep talk` and `Shared a joke` among them), the temporary event `ash-veil winter`, and two incidents (`SKYHORN_VISIT`, `ANIMAL_JOINS`). | Written by the version 29 code before any round 7 change, by a temporary test (`Game(4242L)`, `startNewColony(QUIET_ENCLAVE)`, thoughts added with `addThought`, `SaveGame.write`). The test was deleted. The map is 250 by 250 (the version 29 default). |
-| `colony_v30.sav`, `colony_v30_expect.txt` (r8) | Five colonists with the version 30 labels, the temporary event `smoke pall`, two incidents, and a graveyard with the version 30 causes (`exposure`, `overheating`, `bleed-out`, and a `lost in captivity` entry). The lower-case adult titles that HEAD writes are in it, so the version 31 translation applies to them. | Written by the version 30 working tree before the version 31 change, by a temporary generator. The generator was deleted. |
-| `colony_v25_graves.sav`, `colony_v25_graves_expect.txt` (r8) | A graveyard with the version 25 death causes (read unchanged since round 9, section 2) (`hypothermia`, `heatstroke`, `blood loss`, `flu`, `plague`, `malaria`, `sleeping sickness`, `malnutrition`, `toxic buildup`), and two that were not renamed (`starvation`, `lost in captivity`). Five colonists. | Written by the code at git `HEAD` (version 25), by a temporary generator in a `git archive` copy. The generator was deleted. |
+| `colony_v30.sav`, `colony_v30_expect.txt` (r8) | Five colonists with the version 30 labels, the temporary event `smoke pall`, two incidents, and a graveyard whose causes already have the current wording (`exposure`, `overheating`, `bleed-out`), plus a `lost in captivity` entry. Section 2 says version 30 wrote the old causes, so this file does not show them; they are tested in memory (`anOldGraveyardEntryIsTranslatedBelowVersion31AndKeptFromVersion31On`). The lower-case adult titles that HEAD writes are in it, so the version 31 translation applies to them. | Written by the version 30 working tree before the version 31 change, by a temporary generator. The generator was deleted. |
+| `colony_v25_graves.sav`, `colony_v25_graves_expect.txt` (r8) | A graveyard with the version 25 death causes (translated when read, round 15, section 2) (`hypothermia`, `heatstroke`, `blood loss`, `flu`, `plague`, `malaria`, `sleeping sickness`, `malnutrition`, `toxic buildup`), and two that were not renamed (`starvation`, `lost in captivity`). Five colonists. | Written by the code at git `HEAD` (version 25), by a temporary generator in a `git archive` copy. The generator was deleted. |
 | `colony_v25_adults.sav`, `colony_v25_adults_expect.txt` (r12) | Five colonists. Colonists 0 and 1 hold old childhood titles and the lower-case adult titles that HEAD writes (T21 and T20, from T14 and T13). | Written with the current layout and the header set to 25 (`SaveGame.write(g, 25)`), by a temporary generator (`Game(4242L)`, `startNewColony(QUIET_ENCLAVE)`). The generator was deleted. The layout did not change, so only the header differs from a version 25 save. |
 | `colony_v27_sites.sav`, `colony_v27_sites_expect.txt` (r12) | One pirate camp (its site name), a pending fight against it (its label), and a caravan whose last event names the camp. | Written with the current layout and the header set to 27 (`SaveGame.write(g, 27)`), by a temporary generator, as above. The generator was deleted. |
-| `old_text_cases.tsv` | Each old name: id, version of the rename (`since`), kind, old text, new text. Rows T01-T21, H01-H28, I01, S01-S03, P01-P03, U01-U02, E01-E04 and G01-G09. | Written for the tests. Old names are allowed here. |
+| `old_text_cases.tsv` | Each old name: id, version of the rename (`since`), kind, old text, new text. Rows T01-T21, H01-H28, I01, S01-S04, L01-L36, P01-P03, U01-U02, E01-E04 and G01-G09 (round 15 added S04 and L01-L36). | Written for the tests. Old names are allowed here. |
 
-The temporary generators were not kept in the repository. Every file in this folder is untracked, so the commit step must add all of them (section 9, item 1).
+The temporary generators were not kept in the repository. Every file in this folder is tracked at `HEAD`, except the round 15 rows of `old_text_cases.tsv`, which are not yet committed (section 9, item 1).
 
 ## 3. Save translation table
 
@@ -156,6 +130,7 @@ Each old name is stored in code as the CRC-32 of its UTF-8 bytes (`java.util.zip
 | S01 | site | 28 (r4) | Rough-Knife gang camp | `3ACB053F` | Rough-Blade gang camp |
 | S02 | battle | 28 (r4) | the Rough-Knife gang camp | `243182D6` | the Rough-Blade gang camp |
 | S03 | battle | 28 (r4) | Rough-Knife gang bandits | `5A42498F` | Rough-Blade gang bandits |
+| S04 | faction | 28 (r4) | Rough-Knife gang | `4063F098` | Rough-Blade gang |
 | H17 | thought | 29 (r6) | Ate raw food | `CAF9643C` | Gulped raw fare |
 | H18 | thought | 29 (r6) | Ate without a table | `64806904` | Floor meal |
 | H19 | thought | 29 (r6) | Kind words | `7F7B9506` | Warm talk |
@@ -179,15 +154,51 @@ Each old name is stored in code as the CRC-32 of its UTF-8 bytes (`java.util.zip
 | T19 | title | 31 (r8) | drifter | `DB69E9DF` | roadwalker |
 | T20 | title | 27 (r12) | beast tamer | `4BFBA253` | stockman |
 | T21 | title | 27 (r12) | pirate deckhand | `8A144754` | sloop hand |
-| G01 | death cause | 31 (r8); kept as saved from r9 | hypothermia | `D0452977` | exposure |
-| G02 | death cause | 31 (r8); kept as saved from r9 | heatstroke | `8BA046D5` | overheating |
-| G03 | death cause | 31 (r8); kept as saved from r9 | blood loss | `553BECCD` | bleed-out |
-| G04 | death cause | 31 (r8); kept as saved from r9 | flu | `5A3CCF98` | chest cough |
-| G05 | death cause | 31 (r8); kept as saved from r9 | plague | `47B06389` | boil sickness |
-| G06 | death cause | 31 (r8); kept as saved from r9 | malaria | `B2021990` | marsh fever |
-| G07 | death cause | 31 (r8); kept as saved from r9 | sleeping sickness | `A18A0D05` | heavy drowse |
-| G08 | death cause | 31 (r8); kept as saved from r9 | malnutrition | `C66372D0` | starved frame |
-| G09 | death cause | 31 (r8); kept as saved from r9 | toxic buildup | `35F3E398` | toxin load |
+| G01 | death cause | 31 (r8); translated below 31 (r15) | hypothermia | `D0452977` | exposure |
+| G02 | death cause | 31 (r8); translated below 31 (r15) | heatstroke | `8BA046D5` | overheating |
+| G03 | death cause | 31 (r8); translated below 31 (r15) | blood loss | `553BECCD` | bleed-out |
+| G04 | death cause | 31 (r8); translated below 31 (r15) | flu | `5A3CCF98` | chest cough |
+| G05 | death cause | 31 (r8); translated below 31 (r15) | plague | `47B06389` | boil sickness |
+| G06 | death cause | 31 (r8); translated below 31 (r15) | malaria | `B2021990` | marsh fever |
+| G07 | death cause | 31 (r8); translated below 31 (r15) | sleeping sickness | `A18A0D05` | heavy drowse |
+| G08 | death cause | 31 (r8); translated below 31 (r15) | malnutrition | `C66372D0` | starved frame |
+| G09 | death cause | 31 (r8); translated below 31 (r15) | toxic buildup | `35F3E398` | toxin load |
+| L01 | log | 27 (r3) | The mechanoid cluster has awoken! | `2CA87CD6` | The iron swarm has awoken! |
+| L02 | raid | 27 (r3) | Mechanoids | `7173095B` | Iron swarm |
+| L03 | log | 27 (r3) | A mechanoid ship has crashed | `BA006905` | An iron hulk has crashed |
+| L04 | log | 27 (r3) | A psychic drone assaults | `EEDD3DC6` | A mind hum assaults |
+| L05 | log | 27 (r3) | A psychic soothe calms | `1FF83583` | A mind balm calms |
+| L06 | log | 27 (r3) |  has gone manhunter | `78E10C89` |  has gone rogue |
+| L07 | log | 28 (r4) | The crematorium burned the body of | `5487903F` | The pyre house burned the body of |
+| L08 | log | 28 (r4) | Toxic fallout! Stay indoors; crops will wither. | `18326A61` | Fume cloud! Stay indoors; crops will wither. |
+| L09 | log | 28 (r4) | The toxic fallout has settled. | `3DCEB71C` | The fume cloud has settled. |
+| L10 | raid | 29 (r6) | Sappers | `440D82C1` | Tunnelers |
+| L11 | raid | 29 (r6) | A siege force | `7EDEB114` | A shelling party |
+| L12 | raid | 29 (r6) | Raiders in drop pods | `3B16A8B2` | Raiders in landers |
+| L13 | log | 29 (r6) | A heat wave is sweeping in! | `78409214` | A scorching spell is sweeping in! |
+| L14 | log | 29 (r6) | A cold snap has hit. Keep warm and protect your crops! | `0B5974E1` | A deep chill has hit. Keep warm and protect your crops! |
+| L15 | log | 29 (r6) | The eclipse is over. | `DD645A87` | The shadow passage is over. |
+| L16 | log | 29 (r6) | An eclipse blots out the sun. | `9BF1C1A3` | A shadow passage blots out the sun. |
+| L17 | log | 29 (r6) | A cargo pod crashed nearby with | `B175C334` | A supply capsule crashed nearby with |
+| L18 | log | 29 (r6) | An infestation! | `6A0FF30D` | A pest bloom! |
+| L19 | log | 29 (r6) | A short circuit! A battery exploded. | `5A57779E` | A grid fault! A battery exploded. |
+| L20 | log | 29 (r6) | Blight destroyed | `01C82663` | Crop mildew destroyed |
+| L21 | log | 29 (r6) | A meteorite crashes into the ground nearby, scattering metal. | `524D699C` | A falling stone crashes into the ground nearby, scattering metal. |
+| L22 | log | 29 (r6) | An aurora lights the night sky. Everyone is moved. | `22FA7E43` | A sky curtain lights the night sky. Everyone is moved. |
+| L23 | log | 29 (r6) | A wildfire has broken out to the | `19D1DF79` | A grassland burn has broken out to the |
+| L24 | log | 29 (r6) | A trade caravan | `82B13289` | A peddler convoy |
+| L25 | log | 29 (r6) | Volcanic ash darkens the sky: a volcanic winter begins. | `34CF9AF4` | Volcanic ash darkens the sky: a smoke pall begins. |
+| L26 | hediff | 29 (r6) | bad back | `C403439D` | spine strain |
+| L27 | hediff | 29 (r6) | arthritis | `54135569` | stiff joints |
+| L28 | hediff | 29 (r6) | cataract | `B3FD6A0B` | clouded lens |
+| L29 | hediff | 29 (r6) | hearing loss | `AB003025` | dulled hearing |
+| L30 | hediff | 29 (r6) | dementia | `0B3E374F` | memory fade |
+| L31 | hediff | 29 (r6) | anesthetic | `0AF06D8D` | numb sleep |
+| L32 | log | 30 (r7) |  got food poisoning | `A1532339` |  got a spoiled stomach |
+| L33 | log | 30 (r7) | The solar flare has ended; power is back. | `0C67795E` | The corona surge has ended; power is back. |
+| L34 | log | 30 (r7) | A solar flare knocks out all electrical power! | `4D69701D` | A corona surge knocks out all electrical power! |
+| L35 | log | 30 (r7) | A violent thunderstorm hits. | `41589C51` | A violent lightning squall hits. |
+| L36 | hediff | 30 (r7) | food poisoning | `BC74826A` | spoiled stomach |
 
 T17 and T19 are the lower-case forms of T16 and T18. HEAD writes an adult colonist's title in lower case (open item 3), so saves from
 versions 25 to 30 hold these forms, and each has its own CRC-32 key. The old-text column holds only the title text (round 10).
@@ -202,13 +213,14 @@ new texts were capitalised, which no new colony writes, so a colonist from an ol
 capitalised rows (T01-T11, T13-T16, T18) are unchanged. `LegacyNamesMigrationTest.aMigratedLowerCaseAdultTitleIsTheTextTheCurrentCodeWritesForAnAdult`
 checks each lower-case row against the adult titles of `Backstories`, lower-cased.
 
-The G rows are the death causes of the graveyard. They are not translated: the column "Changed in" gives the version that wrote the new
-cause, and the old cause is kept as saved (section 2).
+The G rows are the death causes of the graveyard. Each one is translated below version 31 (section 2). The column "Changed in" gives the
+version that wrote the new cause.
 
 Rows `T07`-`T14`, `H04`-`H09` were renamed in version 27. Rows `H10`-`H16` and `S01`-`S03` were renamed in version 28 (round 4). Rows `T20` and `T21` (round 12) are the lower-case forms of `T13` and `T14`, renamed in version 27. Rows `H17`-`H24` and
 `E01`-`E03` were renamed in version 29 (round 6). Rows `H25`-`H28` and `E04` were renamed in version 30 (round 7). Row `H13` and `H14`
 were renamed again in version 30 (their version-28 names were `Hearty feast` and `Engineered upgrades`; the table keeps their
-current names). The others were renamed in version 26. Rows `T15`-`T19` (version 31) and `G01`-`G09` (version 31, graveyard) were renamed in round 8. Round 9 keeps the `T` rows translated and stops translating the `G` rows: graveyard entries are kept as saved (section 2).
+current names). The others were renamed in version 26. Rows `T15`-`T19` (version 31) and `G01`-`G09` (version 31, graveyard) were renamed in round 8. Round 9 stopped translating the `G` rows; round 15 translates them again (section 2). Rows `S04` and `L01`-`L36` (round 15) hold the bare pirate
+name, the log wording, the raid labels, and the chronic and disease labels that log lines write. They were renamed in versions 27 to 30.
 
 A label is listed under the version whose rename changed it. A save below that version is translated by that row's table, and the
 table gives the final name, so a save that is several versions old still reaches the current name.
@@ -221,10 +233,13 @@ computed with `zlib.crc32`, which computes the same CRC-32 as `java.util.zip.CRC
 
 Round 8 added 14 keys: T15-T19 in `titles31` and G01-G09 in `causes31`, which made 61. Round 9 removed the nine `causes31` keys, because graveyard entries are no longer translated (section 2). `LegacyNames.kt` now holds 52 keys: the 47 from rounds 5 to 7 and the five keys T15-T19 of round 8. A round 9 count of the `0x` keys in `LegacyNames.kt` gives 52. A script (round 8) read the keys and compared them with `old_text_cases.tsv`: 61 of 61 keys match a row, and no key is unused. Rows P01-P03 and U01-U02 hold no key. They are test-only rows, listed in the table after this section (round 10). The round 8 keys were computed with `zlib.crc32`.
 
+Round 15 adds the renamed-text table `renamed` in `LegacyNames.kt`: 49 rows, S01-S04, L01-L36 and G01-G09. Each row holds the CRC-32 and the
+length of its old text, its version of rename and its current text. S01-S03 and G01-G09 repeat the CRC-32 values of the earlier tables, so no
+old text is written in code. `LegacyNamesMigrationTest` checks the table against `old_text_cases.tsv` (rows S04, L01-L36 are added there).
 Round 12 added 5 keys: T20 and T21 in `titles27` (the lower-case forms of T13 and T14), and S01 in `siteNames28`, with S02 and S03 in
 `battleLabels28` (the pirate camp texts). `LegacyNames.kt` now holds 57 keys: the 52 of round 9 and these five. A script (round 12) read the
 keys, computed the CRC-32 of each row's old text with `zlib.crc32`, and checked the new text: 57 of 57 keys match a row, no key is unused,
-and the only rows with no key are G01-G09 (kept as saved) and the test-only rows P01-P03 and U01-U02.
+and at round 12 the only rows with no key were G01-G09 (kept as saved at round 12; round 15 translates them) and the test-only rows P01-P03 and U01-U02.
 
 **Test-only rows (no CRC-32 key, round 10).** These rows are in `old_text_cases.tsv` and are read by `LegacyNamesMigrationTest`. No
 table above lists them, so they are listed here (verdict item 7).
@@ -576,13 +591,13 @@ Adult titles not listed here were kept (section 7).
 | Thought (saved, r3) | Mellow | Hushed calm | 27 | RimWorld drug thought. M, UNVERIFIED | C |
 | Drug (r3) | Toxic buildup (hediff) | Toxin load | not saved as text; its death text is G09 (round 8) | RimWorld hediff. M, UNVERIFIED | C |
 | Damage (r3) | Toxic burn | Acid scald | not saved as text | RimWorld damage name. M, UNVERIFIED | C |
-| Disease (r3) | Gut worms | Intestinal flukes (r7; "Gut flukes" was shared first word) | not saved as text | RimWorld disease. M, UNVERIFIED | C |
-| Disease (r3) | Muscle parasites | Tissue larvae | not saved as text | RimWorld disease. M, UNVERIFIED | C |
-| Raid (r3) | Mechanoids (raid label) | Iron swarm | not saved | RimWorld term. M, UNVERIFIED | C |
-| Event (r3) | The mechanoid cluster has awoken | The iron swarm has awoken | not saved | RimWorld term. M, UNVERIFIED | C |
-| Event (r3) | A mechanoid ship has crashed | An iron hulk has crashed | not saved | RimWorld term. M, UNVERIFIED | C |
+| Disease (r3) | Gut worms | Intestinal flukes (r7; "Gut flukes" was shared first word) | not saved as text; kept as saved in `caught` log lines (no recorded round, open item 30) | RimWorld disease. M, UNVERIFIED | C |
+| Disease (r3) | Muscle parasites | Tissue larvae | not saved as text; kept as saved in `caught` log lines (no recorded round, open item 30) | RimWorld disease. M, UNVERIFIED | C |
+| Raid (r3) | Mechanoids (raid label) | Iron swarm | saved in log lines: row L02, translated below 27 (round 15; section 2) | RimWorld term. M, UNVERIFIED | C |
+| Event (r3) | The mechanoid cluster has awoken | The iron swarm has awoken | saved in log lines: row L01, translated below 27 (round 15; section 2) | RimWorld term. M, UNVERIFIED | C |
+| Event (r3) | A mechanoid ship has crashed | An iron hulk has crashed | saved in log lines: row L03, translated below 27 (round 15; section 2) | RimWorld term. M, UNVERIFIED | C |
 | Alert (r3) | (manhunter!) | (rogue!) | not saved | RimWorld mechanic. M, UNVERIFIED | C |
-| Event text (r3) | has gone manhunter | has gone rogue | not saved | RimWorld mechanic. M, UNVERIFIED | C |
+| Event text (r3) | has gone manhunter | has gone rogue | saved in log lines: row L06, translated below 27 (round 15; section 2) | RimWorld mechanic. M, UNVERIFIED | C |
 
 Hediffs for the drug highs keep the drug word and the template from section 1 (`HUSHMOSS_HIGH`, `LUCID_HIGH`, `PALE_DUST_HIGH`,
 `WHITE_RUSH_HIGH`, `SURGE_TONIC_HIGH`, `DAWN_TABLET_HIGH`, and their `_ADDICTION` forms).
@@ -757,7 +772,7 @@ cloud has settled.", and the alert "Fume cloud"); the hint about electricity nam
 study desk is idle"; "Build a research bench to start researching" becomes "Build a study desk to start researching"; "needs a precision
 lab bench" becomes "needs a precision lab"; the crematorium log line becomes "The pyre house burned the body of ..."; the faction line
 "Build a trade beacon first." becomes "Build a summons flare first."; the implant help text names Research "Limb crafting or Augmentation";
-the app's help and dialogs say "infirmary cots"; the pirate gang "Rough-Knife gang" becomes "Rough-Blade gang". The saved texts that hold the old gang name are the camp texts S01-S03 (section 2), which are translated below version 28; the bare name is never saved (section 2).
+the app's help and dialogs say "infirmary cots"; the pirate gang "Rough-Knife gang" becomes "Rough-Blade gang". The saved texts that hold the old gang name are the camp texts S01-S03 (section 2), translated below version 28, and the raid log line, which writes the faction name. That line is keyed by S04 (round 15), also translated below version 28. The bare name is not saved as a field of its own (section 2).
 
 **Saved thought labels** (r4, versions below 28 are translated; rows H10-H16 in section 3): Ate insect meat, Ate human flesh, Ate human
 flesh (loved it), Gourmand's feast, Bionic upgrades, Optimist, Pessimist.
@@ -793,7 +808,7 @@ that named the peg leg and prosthetics (now the wooden shank and limb crafting),
 
 ### 6.3 Round 6 renamed labels
 
-Round 6 (`r6`) renamed the labels below. The skill names are the RimWorld skill list, which a WebSearch snippet lists (https://rimworldwiki.com/wiki/Skills, V, confirmed by a WebSearch snippet in round 7). The hediff, thought and event names are the author's recollection of RimWorld wording, so their origin is M, UNVERIFIED; the review did not check them against a source, and this round did not either. The new names are C. Thought labels and the temporary event name are saved text with a version 29 translation (H17-H24 and E01-E03 in section 3). Skill and hediff labels are not saved.
+Round 6 (`r6`) renamed the labels below. The skill names are the RimWorld skill list, which a WebSearch snippet lists (https://rimworldwiki.com/wiki/Skills, V, confirmed by a WebSearch snippet in round 7). The hediff, thought and event names are the author's recollection of RimWorld wording, so their origin is M, UNVERIFIED; the review did not check them against a source, and this round did not either. The new names are C. Thought labels and the temporary event name are saved text with a version 29 translation (H17-H24 and E01-E03 in section 3). Skill labels are not saved. Hediff labels are not saved, except where a log line writes them: the chronic labels of rows L26-L31 and the food poisoning label of row L36 are translated in log lines (round 15; section 2).
 
 | Kind | Old label | New label | Saved? | Origin | Tag |
 |---|---|---|---|---|---|
@@ -809,25 +824,25 @@ Round 6 (`r6`) renamed the labels below. The skill names are the RimWorld skill 
 | Skill | Medicine | Healing | no (index) | V, https://rimworldwiki.com/wiki/Skills | C |
 | Skill | Social | Rapport | no (index) | V, https://rimworldwiki.com/wiki/Skills | C |
 | Skill | Intellectual | Scholarship | no (index) | V, https://rimworldwiki.com/wiki/Skills | C |
-| Hediff | Flu | Chest cough | not translated, G04 (graveyard, round 8) | M, UNVERIFIED | C |
-| Hediff | Plague | Boil sickness | not translated, G05 (graveyard, round 8) | M, UNVERIFIED | C |
-| Hediff | Malaria | Marsh fever | not translated, G06 (graveyard, round 8) | M, UNVERIFIED | C |
-| Hediff | Sleeping sickness | Heavy drowse | not translated, G07 (graveyard, round 8) | M, UNVERIFIED | C |
-| Hediff | Food poisoning | Spoiled stomach | no | M, UNVERIFIED | C |
+| Hediff | Flu | Chest cough | translated, G04 (round 8; section 2) | M, UNVERIFIED | C |
+| Hediff | Plague | Boil sickness | translated, G05 (round 8; section 2) | M, UNVERIFIED | C |
+| Hediff | Malaria | Marsh fever | translated, G06 (round 8; section 2) | M, UNVERIFIED | C |
+| Hediff | Sleeping sickness | Heavy drowse | translated, G07 (round 8; section 2) | M, UNVERIFIED | C |
+| Hediff | Food poisoning | Spoiled stomach | log lines only: row L36, translated below 30 (round 15; section 2) | M, UNVERIFIED | C |
 | Hediff | Hypothermia | Cold core | no (the hediff label); its death text is G01 | M, UNVERIFIED | C |
 | Hediff | Heatstroke | Sunstruck | no (the hediff label); its death text is G02 | M, UNVERIFIED | C |
-| Hediff | Malnutrition | Starved frame | not translated, G08 (graveyard, round 8) | M, UNVERIFIED | C |
+| Hediff | Malnutrition | Starved frame | translated, G08 (round 8; section 2) | M, UNVERIFIED | C |
 | Hediff | Blood loss | Bleed-out | no (the hediff label); its death text is G03 | M, UNVERIFIED | C |
 | Hediff | Drunk | Brew haze | no | M, UNVERIFIED | C |
 | Hediff | Alcohol tolerance | Brew resistance | no | M, UNVERIFIED | C |
 | Hediff | Alcohol addiction | Brew dependence | no | M, UNVERIFIED | C |
 | Hediff | Withdrawal | Craving ache | no | M, UNVERIFIED | C |
-| Hediff | Bad back | Spine strain | no | M, UNVERIFIED | C |
-| Hediff | Arthritis | Stiff joints | no | M, UNVERIFIED | C |
-| Hediff | Cataract | Clouded lens | no | M, UNVERIFIED | C |
-| Hediff | Hearing loss | Dulled hearing | no | M, UNVERIFIED | C |
-| Hediff | Dementia | Memory fade | no | M, UNVERIFIED | C |
-| Hediff | Anesthetic | Numb sleep | no | M, UNVERIFIED | C |
+| Hediff | Bad back | Spine strain | log lines only: row L26 (round 15; section 2) | M, UNVERIFIED | C |
+| Hediff | Arthritis | Stiff joints | log lines only: row L27 (round 15; section 2) | M, UNVERIFIED | C |
+| Hediff | Cataract | Clouded lens | log lines only: row L28 (round 15; section 2) | M, UNVERIFIED | C |
+| Hediff | Hearing loss | Dulled hearing | log lines only: row L29 (round 15; section 2) | M, UNVERIFIED | C |
+| Hediff | Dementia | Memory fade | log lines only: row L30 (round 15; section 2) | M, UNVERIFIED | C |
+| Hediff | Anesthetic | Numb sleep | log lines only: row L31 (round 15; section 2) | M, UNVERIFIED | C |
 | Thought | Ate raw food | Gulped raw fare | yes, H17-H24 | M, UNVERIFIED | C |
 | Thought | Ate without a table | Floor meal | yes, H17-H24 | M, UNVERIFIED | C |
 | Thought | Kind words | Warm talk | yes, H17-H24 | M, UNVERIFIED | C |
@@ -839,30 +854,30 @@ Round 6 (`r6`) renamed the labels below. The skill names are the RimWorld skill 
 | Temporary event | heat wave | scorching spell | yes, E01-E03 | M, UNVERIFIED | C |
 | Temporary event | cold snap | deep chill | yes, E01-E03 | M, UNVERIFIED | C |
 | Temporary event | volcanic winter | ash-veil winter, then smoke pall (r7) | yes, E03 (v29), E04 (v30) | M, UNVERIFIED | C |
-| Event (alert) | Solar flare | Corona surge | no | M, UNVERIFIED | C |
-| Event (weather label) | Thunderstorm | Lightning squall | no | M, UNVERIFIED | C |
-| Event (log text) | Heat wave | Scorching spell | no | M, UNVERIFIED | C |
-| Event (log text) | Cold snap | Deep chill | no | M, UNVERIFIED | C |
-| Event (log text) | Volcanic winter | Ash-veil winter | no | M, UNVERIFIED | C |
-| Event (log text) | Infestation | Pest bloom | no | M, UNVERIFIED | C |
-| Event (log text) | Short circuit | Grid fault | no | M, UNVERIFIED | C |
-| Event (log text) | Blight | Crop mildew | no | M, UNVERIFIED | C |
-| Event (log text) | Wildfire | Grassland burn | no | M, UNVERIFIED | C |
-| Event (log text) | Eclipse | Shadow passage | no | M, UNVERIFIED | C |
-| Event (log text) | Trade caravan | Peddler convoy | no | M, UNVERIFIED | C |
-| Event (log text) | Cargo pod | Supply capsule | no | M, UNVERIFIED | C |
-| Event (log text) | Aurora | Sky curtain | no | M, UNVERIFIED | C |
-| Event (log text) | Meteorite | Falling stone | no | M, UNVERIFIED | C |
+| Event (alert) | Solar flare | Corona surge | no for the alert; log lines L33 and L34 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (weather label) | Thunderstorm | Lightning squall | log lines: row L35 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Heat wave | Scorching spell | log lines: row L13 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Cold snap | Deep chill | log lines: row L14 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Volcanic winter | Ash-veil winter | log lines: row L25 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Infestation | Pest bloom | log lines: row L18 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Short circuit | Grid fault | log lines: row L19 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Blight | Crop mildew | log lines: row L20 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Wildfire | Grassland burn | log lines: row L23 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Eclipse | Shadow passage | log lines: rows L15 and L16 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Trade caravan | Peddler convoy | log lines: row L24 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Cargo pod | Supply capsule | log lines: row L17 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Aurora | Sky curtain | log lines: row L22 (round 15; section 2) | M, UNVERIFIED | C |
+| Event (log text) | Meteorite | Falling stone | log lines: row L21 (round 15; section 2) | M, UNVERIFIED | C |
 | Raid kind (comment) | Assault (raid kind 0) | Rush | no | M, UNVERIFIED | C |
-| Raid kind (raid text) | Sappers | Tunnelers | no | M, UNVERIFIED | C |
-| Raid kind (comment; raid text 'A shelling party') | Siege (raid kind 2) | Shelling camp | no | M, UNVERIFIED | C |
-| Raid kind (raid text 'Raiders in landers') | Drop pods (raid kind 3) | Landers | no | M, UNVERIFIED | C |
-| Death cause | hypothermia | exposure | not translated, G01 (round 8) | M, UNVERIFIED | C |
-| Death cause | heatstroke | overheating | not translated, G02 (round 8) | M, UNVERIFIED | C |
+| Raid kind (raid text) | Sappers | Tunnelers | log lines: row L10 (round 15; section 2) | M, UNVERIFIED | C |
+| Raid kind (comment; raid text 'A shelling party') | Siege (raid kind 2) | Shelling camp | log lines: row L11 (round 15; section 2) | M, UNVERIFIED | C |
+| Raid kind (raid text 'Raiders in landers') | Drop pods (raid kind 3) | Landers | log lines: row L12 (round 15; section 2) | M, UNVERIFIED | C |
+| Death cause | hypothermia | exposure | translated, G01 (round 8; section 2) | M, UNVERIFIED | C |
+| Death cause | heatstroke | overheating | translated, G02 (round 8; section 2) | M, UNVERIFIED | C |
 
 ### 6.4 Round 7 renamed labels
 
-Round 7 renamed the labels below. The thought labels and the temporary event names are saved text (section 3, rows H13, H14, H25-H28, E03 and E04). The others are not saved. The **Why** column gives the near-copy failure, or the echo that made the label a RimWorld name.
+Round 7 renamed the labels below. The thought labels and the temporary event names are saved text (section 3, rows H13, H14, H25-H28, E03 and E04). The others are not saved, except that a saved log line can hold one of them, and then its row says so (round 15; section 2). The **Why** column gives the near-copy failure, or the echo that made the label a RimWorld name.
 
 | Kind | Old label | New label | Saved? | Origin | Tag | Why |
 |---|---|---|---|---|---|---|
@@ -871,10 +886,10 @@ Round 7 renamed the labels below. The thought labels and the temporary event nam
 | Thought | Deep talk | Candid exchange | yes, H25 | M, UNVERIFIED | C | RimWorld social interaction name, recalled. |
 | Thought | Shared a joke | Friendly ribbing | yes, H26 | M, UNVERIFIED | C | RimWorld social thought, recalled. |
 | Temporary event | ash-veil winter (the r6 name of `volcanic winter`) | smoke pall | yes, E03 and E04 | M, UNVERIFIED (RimWorld event `volcanic winter`) | C | Head word "winter" matched "volcanic winter". |
-| Event (alert and log text) | Solar flare | Corona surge | no | M, UNVERIFIED | C | Alert and log text in `Events.kt`. |
-| Event (weather log text) | Thunderstorm | Lightning squall | no | M, UNVERIFIED | C | Log text in `Events.kt`. |
-| Hediff (log text) | Food poisoning | Spoiled stomach | no | M, UNVERIFIED | C | Log text ("got a spoiled stomach") in `JobDrivers.kt` and `Caravans.kt`. The hediff is `SPOILED_STOMACH` (section 6.3). |
-| Death cause | Blood loss | Bleed-out | not translated, G03 (round 8) | M, UNVERIFIED | C | Graveyard text in `Health.kt`. The hediff is `BLEED_OUT` (section 6.3). |
+| Event (alert and log text) | Solar flare | Corona surge | log lines: rows L33 and L34 (round 15; section 2). The alert is not saved | M, UNVERIFIED | C | Alert and log text in `Events.kt`. |
+| Event (weather log text) | Thunderstorm | Lightning squall | log lines: row L35 (round 15; section 2) | M, UNVERIFIED | C | Log text in `Events.kt`. |
+| Hediff (log text) | Food poisoning | Spoiled stomach | log lines: rows L32 and L36 (round 15; section 2) | M, UNVERIFIED | C | Log text ("got a spoiled stomach") in `JobDrivers.kt` and `Caravans.kt`. The hediff is `SPOILED_STOMACH` (section 6.3). |
+| Death cause | Blood loss | Bleed-out | translated, G03 (round 8; section 2) | M, UNVERIFIED | C | Graveyard text in `Health.kt`. The hediff is `BLEED_OUT` (section 6.3). |
 | Disease | Gut flukes (r3 label of `Gut worms`) | Intestinal flukes | no | M, UNVERIFIED | C | Shared first word "Gut" with "Gut worms". |
 | Trait | Slow study (the r4 label of `Slow learner`) | Late bloomer | no | M, UNVERIFIED | C | Shared first word "Slow" with "Slow learner". |
 | Plant | Meadow grass (the r3 label of `Hay grass`) | Sward | no | M, UNVERIFIED | C | Shared head word "grass" with "Hay grass". |
@@ -891,11 +906,11 @@ Round 8 renamed the labels below, which the review found were kept as possible R
 | Backstory title (childhood) | Orphan | Unclaimed child | yes, T15 (version 31) | M, UNVERIFIED | C | Possible RimWorld title (open item 10). Renamed on the precaution of section 1; no search confirmed or ruled it out. |
 | Backstory title (adult) | Field medic | Battlefield bandager | yes, T16 and T17 (version 31) | M, UNVERIFIED | C | Possible RimWorld title (open item 10). Shares no head or first word with the old title. |
 | Backstory title (adult) | Drifter | Roadwalker | yes, T18 and T19 (version 31) | M, UNVERIFIED | C | Possible RimWorld title (open item 10). |
-| Death cause | hypothermia, heatstroke, blood loss | exposure, overheating, bleed-out | not translated, G01-G03 (version 31) | M, UNVERIFIED | C | Death texts from `Mood.kt` and `Health.kt` (section 6.3). The lethal hediff path can also write another name for the same hediff; a graveyard entry holds one text, so the `Mood.kt` name is used for the old text. |
-| Death cause (lethal illness label, lower-cased) | flu, plague, malaria, sleeping sickness, malnutrition, toxic buildup | chest cough, boil sickness, marsh fever, heavy drowse, starved frame, toxin load | not translated, G04-G09 (version 31) | M, UNVERIFIED | C | `Health.kt` uses the lethal hediff label, lower-cased, as the cause of death. The labels are the section 6.3 names. |
+| Death cause | hypothermia, heatstroke, blood loss | exposure, overheating, bleed-out | translated, G01-G03 (round 8; section 2) | M, UNVERIFIED | C | Death texts from `Mood.kt` and `Health.kt` (section 6.3). The lethal hediff path can also write another name for the same hediff; a graveyard entry holds one text, so the `Mood.kt` name is used for the old text. |
+| Death cause (lethal illness label, lower-cased) | flu, plague, malaria, sleeping sickness, malnutrition, toxic buildup | chest cough, boil sickness, marsh fever, heavy drowse, starved frame, toxin load | translated, G04-G09 (round 8; section 2) | M, UNVERIFIED | C | `Health.kt` uses the lethal hediff label, lower-cased, as the cause of death. The labels are the section 6.3 names. |
 
 **Round 9 decisions on this section (review items 6 and 8).** The graveyard causes are no longer translated (section 2), so the rows
-G01-G09 read "not translated". The three backstory titles stay renamed. The review rule keeps a generic title unless it is recalled as
+G01-G09 read "not translated" (round 9; round 15 translates them again, section 2). The three backstory titles stay renamed. The review rule keeps a generic title unless it is recalled as
 RimWorld wording. This round `Orphan`, `Field medic` and `Drifter` could not be recalled as RimWorld backstory titles with confidence, and a
 search of the wiki's childhood-backstory list did not confirm any of them. Its nearest hit was `Abandoned Child`, a RimWorld childhood title,
 which shares the head word "child" with the new title `Unclaimed child`. Reverting the three titles would undo the version 31 rename and its
@@ -936,7 +951,7 @@ Each label in this section is an ordinary English word, or a real-world object, 
 * **Old identifiers (round 7).** A grep for every old constant of sections 5 to 5.2 finds none in `sim/` or `app/`. The new names of section 5.2 are used in `app/` (10 references).
 * **Key check (round 7).** A script compared the 47 keys in `LegacyNames.kt` with `old_text_cases.tsv`. Each key is the CRC-32 of the UTF-8 bytes of its old text, and each maps to the new text in the same row: 47 of 47 match, and no key is unused (section 3).
 * **Near-copy check (round 7).** A script compared each (old, new) pair of sections 3, 6, 6.1, 6.2, 6.3 and 6.4 by head word and first word. It flagged 59 pairs. Most of them are intermediate names: the table rows give the name the label had in its round, and a later round changed it again (sections 6.1 and 6.2). A second check compared the current labels (the new labels that are still string literals in `sim/src/main`) with the RimWorld names. It flagged only the thought templates ("Ate ...", "Played ..."), which section 1 excludes, and `Gut flukes`, which was renamed. The other round 7 renames (section 6.4: `Hearty feast`, `Engineered upgrades`, `Deep talk`, `Shared a joke`, `ash-veil winter`, `Slow study`, `Meadow grass`, `Molotov`) were found by applying the same rule by hand. Close synonym pairs that pass the rule are listed in open item 16.
-* **Saves.** `LegacyNamesMigrationTest` reads the version 25 (outside and HEAD-generated), 26, 27, 28 and 29 fixtures, the version 30 fixture and the version 25 graveyard fixture, and checks the translated titles, thoughts, temporary events, incidents and graveyard causes. Saving writes version 31. `ColonyMapSizeTest` is new (untracked, not in git `HEAD`). It checks that a save keeps the map size it stores.
+* **Saves.** `LegacyNamesMigrationTest` reads the version 25 (outside and HEAD-generated), 26, 27, 28 and 29 fixtures, the version 30 fixture and the version 25 graveyard fixture, and checks the translated titles, thoughts, temporary events, incidents and graveyard causes. Saving writes version 31. `ColonyMapSizeTest` is new and is tracked at `HEAD`. It checks that a save keeps the map size it stores.
 * **Docs scan (round 7).** `README.md` and `docs/fidelity/*.md` (except this file) were searched for the old labels. The old names were changed where they named a RimWorld label: the gap report (the temperature event names, while the offsets +16, -17 and -13 are unchanged, the food hediff row, the raid kinds, the README quote in section 4), `health.md` (`anesthetic`, and the `blood loss` hediff, now `bleed-out`) and `README.md` (`Manhunter packs`, `ash-veil winters`, `crashed mechanoid ships`). Generic words were kept (for example `Medicine`, `Social`, `Animals`, `Plants`, `Mining`, and `withdrawal` as a drug effect).
 * **App.** `app/` is not compiled (no Android SDK). Its references to the renamed constants were changed by the same word-boundary rule.
 * **Tests.** `./gradlew :sim:test --console=plain` on the round 7 tree: 490 tests, 0 failures, 0 errors (`BUILD SUCCESSFUL`). The count includes the new `NamesTest` and `LegacyNamesMigrationTest` cases.
@@ -987,7 +1002,7 @@ Each label in this section is an ordinary English word, or a real-world object, 
 
 ## 9. Open items
 
-1. **Not committed; untracked fixtures.** The change set is not committed (the request said not to commit). Every file in `sim/src/test/resources/legacy/` is untracked and must be added with it: `colony_v25.sav`, `colony_v25_expect.txt`, `colony_v25_head.sav`, `colony_v25_head_expect.txt`, `colony_v25_thoughts.sav`, `colony_v25_thoughts_expect.txt`, `colony_v26.sav`, `colony_v26_expect.txt`, `colony_v27.sav`, `colony_v27_expect.txt`, `colony_v28.sav`, `colony_v28_expect.txt`, `colony_v29.sav`, `colony_v29_expect.txt`, `colony_v30.sav`, `colony_v30_expect.txt`, `colony_v25_graves.sav`, `colony_v25_graves_expect.txt`, `colony_v25_adults.sav`, `colony_v25_adults_expect.txt`, `colony_v27_sites.sav`, `colony_v27_sites_expect.txt` and `old_text_cases.tsv`. Round 11 was asked not to commit, so these stay untracked. The commit step runs `git add -A`, which takes them together with `docs/fidelity/names.md`, `LegacyNames.kt`, `LegacyNamesMigrationTest.kt`, `NamesTest.kt` and `ColonyMapSizeTest.kt`. No `.gitignore` rule excludes any of them (`git check-ignore` finds none).
+1. **Not committed: the change set of rounds 12 to 16 (the request said not to commit).** The fixtures in `sim/src/test/resources/legacy/` are tracked at `HEAD`, except `old_text_cases.tsv`, whose round 15 rows are not yet committed. The fixture set that `LegacyNamesMigrationTest` reads is: `colony_v25.sav`, `colony_v25_expect.txt`, `colony_v25_head.sav`, `colony_v25_head_expect.txt`, `colony_v25_thoughts.sav`, `colony_v25_thoughts_expect.txt`, `colony_v26.sav`, `colony_v26_expect.txt`, `colony_v27.sav`, `colony_v27_expect.txt`, `colony_v28.sav`, `colony_v28_expect.txt`, `colony_v29.sav`, `colony_v29_expect.txt`, `colony_v30.sav`, `colony_v30_expect.txt`, `colony_v25_graves.sav`, `colony_v25_graves_expect.txt`, `colony_v25_adults.sav`, `colony_v25_adults_expect.txt`, `colony_v27_sites.sav`, `colony_v27_sites_expect.txt` and `old_text_cases.tsv`. The uncommitted files are `docs/fidelity/names.md`, `docs/fidelity/gap-report.md`, `LegacyNames.kt`, `SaveGame.kt`, `LegacyNamesMigrationTest.kt` and `old_text_cases.tsv`. `git status` lists no untracked file, and no `.gitignore` rule excludes any file in this folder (`git check-ignore` finds none).
 2. **Version 26 fixture.** Round 4 wrote `colony_v26.sav` with the current layout and the header set to 26 (section 2). The code that wrote version 26 was never committed, so this is not a file that the version 26 code wrote. The layout did not change, so the file has the same shape.
 3. **Lower-case adult titles.** The cause is known. HEAD's `Game.kt:190` writes `adult.title.lowercase()` for every randomly made colonist, so new saves hold lower-case adult titles. Round 12 keyed the lower-case forms of T13 and T14 (T20 and T21), so every renamed adult title loads under its new name in either case. Round 14 maps each lower-case key to a lower-case new title (section 3), so a migrated adult title has the same form as a new colonist's (before round 14 the migrated form was capitalised). Owner decision: keep the lower case, or capitalise new colonists' titles (this changes new saves' text only). If the owner capitalises new colonists' titles, the five lower-case rows (T12, T17, T19, T20 and T21) must also change to the capitalised new text, and the tests that expect the lower-case forms must change with them.
 4. **`colony_v25_thoughts.sav` provenance.** It came from a generator outside this repository and **cannot be regenerated from the repo**. Its rows are also covered by `colony_v25_head.sav`, which the HEAD procedure regenerates. The owner may delete the outside file once that is accepted; the existing tests read it.
@@ -996,34 +1011,43 @@ Each label in this section is an ordinary English word, or a real-world object, 
 7. **Trait descriptions and effect texts.** Round 4 rewrote every trait description in original wording. The numbers in the effects are unchanged. The descriptions were not compared with RimWorld's wording.
 8. **Origins not confirmed.** Boomalope, Pit fighter, Space-born tinker, Wake-up, Psychoid, Psychic drone, Psychic soothe, Deep talk, Shared a joke, Hearty feast, Engineered upgrades, volcanic winter, Molotov, Slow learner and the thought labels of section 6 are M, UNVERIFIED. The difficulty origin has no wiki URL. The rimworldwiki.com host does not resolve from this sandbox, so only search snippets are cited (section 10).
 9. **Identifiers.** Round 7 renamed the constants of section 5.2. Constants that still echo a RimWorld label phrase, but whose words are ordinary, are kept: `TURRET`, `TRAP_SPIKE`, `TRAP_DEADFALL`, `FAB_BENCH`, `SCULPTOR_TABLE`, `STONECUTTER`, `SHAPING_RIG`, `CONDUIT`, `BATTERY`, `SOLAR_PANEL`, `ADV_ARMOR`, `MAKE_MEDS` (the "Compound a dose" recipe), `TSHIRT`, `PANTS`, `JACKET`, `TRIBAL`, `SURGERY`, `VENTILATION`, `BASIC_MELEE`, `SMG`, `LMG`, `SNIPER`, `BOLT_RIFLE`, `HAY`, `FLAT`, `STONE_CHUNK`, `ELECTRIC_COOKING`, `Diet.CARNIVORE`, `ItemCat.MEDICINE`, the `NO_MEDICINE_*` constants, and Stillmere's own names (`GHOSTWEAVE_*`, `RIBBED_*`, `HARDALLOY_BLADES`, `SHUTTER_DOORS`, `TRENCH_ARMOR`, `BRIGANDINE`, `EXOSUIT`, `SKYFALL_BATTERY`). Whether generic words stay is an owner decision.
-10. **Saved labels: the three titles renamed in round 8 (decision, not yet confirmed by the owner).** `Orphan`, `Field medic` and `Drifter` were renamed in round 8 (section 6.5), as a precaution. Round 9 could not recall them as RimWorld backstory titles with confidence, and a search did not confirm them. The review rule keeps a generic title unless it is recalled as RimWorld wording, and on that rule the three names would stay. The renames are kept instead, because reverting them would undo the version 31 rename and its tested translation rows T15-T19. Rounds 10 and 11 (task item 8) restate the same decision and the same reasons (section 6.5). The owner should confirm that choice. The thoughts Drug use, Insulted by, Cheerful, Gloomy, Looks bad and Lonely are kept as ordinary words (UNVERIFIED). Log lines are kept as saved (section 2, item 23).
+10. **Saved labels: the three titles renamed in round 8 (decision, not yet confirmed by the owner).** `Orphan`, `Field medic` and `Drifter` were renamed in round 8 (section 6.5), as a precaution. Round 9 could not recall them as RimWorld backstory titles with confidence, and a search did not confirm them. The review rule keeps a generic title unless it is recalled as RimWorld wording, and on that rule the three names would stay. The renames are kept instead, because reverting them would undo the version 31 rename and its tested translation rows T15-T19. Rounds 10 and 11 (task item 8) restate the same decision and the same reasons (section 6.5). The owner should confirm that choice. The thoughts Drug use, Insulted by, Cheerful, Gloomy, Looks bad and Lonely are kept as ordinary words (UNVERIFIED). Renamed wording in saved log lines is translated below the version of each rename (section 2, item 23).
 11. **Vanilla reference names.** The gap report's vanilla columns and fidelity notes name RimWorld items, raids and events for comparison. They are recalled benchmarks, not Stillmere labels, and they are not in code. Where the gap report named a RimWorld label that the code no longer uses, it now refers to this file (round 7). The owner may ask for the rest to be removed.
 12. **Map size.** `Game.MAP_SIZE` is 250, so a new colony is 250 by 250. Saves keep the width and height they store, so no save is resized (section 8). The colony test helpers build `Game.MAP_SIZE` colonies (`GameTest.newGame`, `JobAiTest.newGame`, `CombatModelTest.arena`, `CombatPipelineTest.arena` and `SkillsTraitsTest.arena`). Four seed-dependent tests were given setups that do not depend on the layout near home, and keep their seeds (map.md, Tests). The explicit-size generator tests keep the sizes they test (100, 120 by 90 and 150). The owner may want those seeds re-checked at 250 by 250.
 13. **Social kinds.** The social kinds (`chitchat`, `insult`, `argument`, `joke`, `compliment`, `kind`, `deep`) in `Social.kt` are internal names. `kind` and `deep` may echo RimWorld interaction names (UNVERIFIED). Owner decision. The two thought labels of those interactions that were RimWorld-like were renamed in round 7 (section 6.4).
 14. **Attribution in `README.md` (decision, rounds 9, 10 and 11; not yet confirmed by the owner).** Line 12 keeps the sentence that says the project was built with Claude, an AI assistant by Anthropic. Round 8 had removed it, and round 9 restores the committed sentence (review item 7). Round 11 keeps it again (task item 7; section 8). The reason is that the sentence is the project's own disclosure of how it was made. It is not attribution on a commit or a pull request, which is all the commit-identity rule covers. Open point for the owner: `CLAUDE.md` says "Never write Claude, Anthropic, or AI attribution anywhere" and then names commits and pull request descriptions. This round reads the rule as the narrower of the two. If the owner reads "anywhere" literally, the sentence must go.
-15. **Commit.** Round 7 did not commit. The fixtures (item 1) and the change set are untracked; they must be committed on `ccr-41984ede-stlmp4` by the owner or the next step.
+15. **Commit.** The change set of rounds 12 to 16 is not committed. The fixtures are tracked (item 1), and the change set must be committed on `ccr-41984ede-stlmp4` by the owner or the next step.
 16. **Near-copy borderline pairs.** These pass the rule (no shared head word or first word), but both words are near-synonyms, so a reviewer may still call them close copies: `Log-burning engine` (Wood-fired generator), `Infirmary cot` (Hospital bed), `Pole lantern` (Standing lamp), `Palisade watch` (Colonial guard), `Sour cask` (Fermenting barrel), `Exo casque` (Powered helmet), `Pulse pike` (Charge lance), `Servo limb` (Bionic arm), `Gulped raw fare` (Ate raw food), `Mind hum` (Psychic drone) and `Mind balm` (Psychic soothe). Also the thought-template exception of section 1: the labels that begin "Ate" or "Played" share that verb with their RimWorld label. Owner decision: keep, or change.
 17. **Stale rows in the history tables.** Sections 6 to 6.2 keep the rows of earlier rounds. A row that says a constant is "kept" but names a constant that a later round renamed now says so ("renamed in a later round; section 5"). Round 7 found 23 such rows and annotated them.
-18. **Scope (decided in round 9; restated in rounds 10 to 12).** The goal named three thought labels. Section 0 states the migration scope and its list: 28 thought labels (H01-H28), 21 backstory-title rows (T01-T21, 16 titles ignoring case), the temporary event names E01-E04, one incident name and three pirate camp texts (S01-S03). Each of them is saved and must load from an old save. The death causes (G01-G09), the log lines and the caravan last-event notes are not in the migration, because they are kept as saved (section 2, and items 23, 24 and 27). The scope is not yet confirmed by the owner. The review's count of 14 backstory titles covers T01-T14 only.
+18. **Scope (decided in round 9; restated in rounds 10 to 12; extended in round 15).** The goal named three thought labels. Section 0 states the migration scope and its list: 28 thought labels (H01-H28), 21 backstory-title rows (T01-T21, 16 titles ignoring case), the temporary event names E01-E04, one incident name, three pirate camp texts (S01-S03), and, from round 15, the bare pirate name (S04), the log wording and labels (L01-L36) and the death causes (G01-G09). Each of them is saved and must load from an old save. The death causes, the log lines and the caravan last-event notes are in the migration: each renamed text in them is translated below the version of its rename (section 2, and items 23, 24 and 27). The scope is not yet confirmed by the owner. The review's count of 14 backstory titles covers T01-T14 only.
 19. **V tags without a URL (closed in round 10).** Forty table rows in `gap-report.md` (16), `temperature-rooms.md` (10), `time.md` (10) and `needs-mood.md` (4) carry a V tag with no inline URL. They predate round 8. Round 8 re-sourced only the rows the review named (map size, hearth stew nutrition, outdoor temperature). Round 10 gave each of these rows a URL in the same cell, or changed it to M, UNVERIFIED (section 10). Round 11 re-checked every table row of the four docs by script: no V cell lacks a URL in its row. The weakest V sources are the legend-page URLs of section 10, which were not searched in round 11 and were not read. A reviewer may ask for them to become M, UNVERIFIED.
 20. **Map size source.** The search for the default map size (250 by 250) returned only third-party guides about RimWorld Odyssey, which is DLC. Round 9 searched again and found the same kind of result: one guide and one forum comment, with no Ludeon or wiki page. The vanilla map sizes are therefore M, UNVERIFIED for base game.
 21. **Near-copy observation (round 9).** `Unclaimed child` shares the head word "child" with `Abandoned Child`, a RimWorld childhood title that a round 9 search returned. The near-copy rule (section 1) checks the label that is replaced, so the rule is met, but a reviewer may judge the two as close. Decide together with item 10. A different new title costs no save change (T15 translates the old saved text to whatever the table holds).
 22. **New titles not searched.** `Battlefield bandager` and `Roadwalker`, the round 8 replacements, were not searched in round 9. Their origin is M, UNVERIFIED, like the other new titles.
-23. **Log lines (decision, rounds 10 and 11).** Kept as saved, for the same reason as graveyard entries (section 2). The review did not name log
-    lines. This extends the graveyard decision to them, so the owner should confirm the extension. The verdict on round 10 asked for either
-    a migration or a withdrawal of the claim "log lines are not saved". Round 11 withdraws the claim and keeps the decision.
-24. **Decisions given in the round 11 task.** The graveyard decision (section 2), the log decision (item 23), the scope list (item 18), the
-    README decision (item 14) and the title reasoning (item 10) came from the task, not from the owner. They are recorded as decisions,
-    pending owner confirmation.
-25. **Commit.** Round 11 was asked not to commit, so the untracked files are still untracked (items 1 and 15). The commit step must add them,
-    for example with `git add -A`.
+23. **Log lines (decision, round 15; supersedes rounds 10 and 11).** Renamed wording in a saved log line is translated below the version of
+    each rename (section 2, rows L01-L36 and S01-S04). The owner should confirm the translation. The round 10 and 11 decision to keep log lines
+    as saved is withdrawn.
+24. **Graveyard causes (decision, round 15; supersedes rounds 9, 10 and 11).** Each cause in a saved graveyard entry is translated below version 31
+    (section 2, rows G01-G09). The scope list (item 18), the README decision (item 14) and the title reasoning (item 10) came from the task, not
+    from the owner. They are recorded as decisions, pending owner confirmation.
+25. **Commit.** Round 11 was asked not to commit. The fixtures are tracked (item 1), and the uncommitted change set is the one that item 1 names.
 26. **Pirate camp texts (decision, round 12).** The site names of pirate camps and the labels of fights against them, or against a pirate
     band, are saved with the old pirate faction name. They are live labels, so they are translated below version 28 (S01-S03, section 2).
     This is the same kind of text as a backstory title, not a record. The owner should confirm it, given that log lines and graveyard
-    entries are kept as saved (items 23 and 24).
-27. **Caravan last-event notes (decision, round 12).** `Caravan.lastEvent` is a sentence about the last battle, and it can hold the old
-    pirate faction name. It is kept as saved, as a record of a past event (section 2). The owner should confirm this. If the owner prefers a
-    translation, each sentence template needs a key, not only each label.
+    entries are translated too (items 23 and 24).
+27. **Caravan last-event notes (decision, round 15; supersedes round 12).** `Caravan.lastEvent` can hold a renamed pirate label. The label is
+    translated below version 28 (rows S02 and S03), and the sentence around it is kept, so the templates `Retreated from` and `Defeated` need no
+    key. The owner should confirm this.
+28. **Gate of the death causes (decision, round 15).** The gate is 31, the version of the rename. `git log -S` on the old cause texts lists
+    `a9c032b` (first written) and `eb9784c` (renamed, `VERSION` 31). The last commit that holds them is `eb9784c^`, at `VERSION` 25, because
+    versions 26 to 30 were never committed; section 2 gives the reasoning. The owner should confirm the gate.
+29. **Embedded labels in log lines (decision, round 15).** A saved log line that names an item, building, creature, plant, drug or research label
+    keeps that label as saved, because the L rows key only sentences, raid labels, the chronic and disease labels, and the pirate names. The drug
+    item names in `is now addicted to` lines are in this group. The owner should decide whether these labels need keys.
+30. **Log text with no recorded round (decision, round 15).** The thrumbo sentence (renamed to skyhorn) and the firefoam popper sentence (renamed to
+    quench vent) have no round in section 6, so they are kept as saved. The disease labels `gut worms` and `muscle parasites` in `caught` lines
+    are kept too: section 6 gives their renames without a round (`Gut worms`, then `Gut flukes`, then `Intestinal flukes`). The version 29 wording
+    of the volcanic winter line is not recorded, so a version 29 save keeps that wording.
 
 ## 10. Source of the V tags
 
@@ -1338,3 +1362,76 @@ file is dated before the round 12 edits to `LegacyNames.kt`, its line numbers do
 * `git` state: nothing is committed. The fixtures and the new files are untracked, as in section 9 item 1.
 
 **Not done.** Committing (the task says not to). Owner confirmation of decisions items 3, 10, 14, 18, 23, 24, 26 and 27 remains open.
+
+## 19. Round 15 summary (graveyard causes, log lines and caravan notes)
+
+The task: translate the old death causes, caravan last-event notes and log lines into the current wording when a save is read, each one
+gated on the version of its rename. The change is in the working tree of branch `ccr-41984ede-stlmp4` and is not committed.
+
+* **Code (`LegacyNames.kt`).** The table `renamed` holds 49 rows: S01-S04 (version 28), L01-L36 (versions 27 to 30) and G01-G09 (version
+  31). A row holds the CRC-32 and the UTF-8 length of its old text, the version of its rename (`since`) and the current text. `renamedText`
+  scans a saved text byte by byte. At each position it takes the longest row whose bytes match and that applies to the save's version (the save
+  is below `since`), as a whole word, and replaces it. Everything else is copied, so names and numbers stay as saved. `graveyardEntry` applies
+  it to the cause of `<name> - <cause> (day <n>)` only. `logLine` and `caravanNote` apply it to the whole text. The exact-match functions
+  (`siteName`, `battleLabel`, `thoughtLabel` and the others) are unchanged.
+* **Read sites (`SaveGame.kt`).** The graveyard list, each caravan's `lastEvent`, and the log read after `g.log.clear()`. The writer is
+  unchanged.
+* **Gates.** S01-S04 and L07-L09 below 28. L01-L06 below 27. L10-L31 below 29. L32-L36 below 30. G01-G09 below 31. A save at or past a
+  row's version keeps that text.
+* **Save version: not bumped.** Translation on read does not change what a save holds, so `SaveGame.VERSION` stays 40 (task rule).
+* **The gate for the death causes.** `git log -S` on the old cause texts lists `a9c032b` (first written) and `eb9784c` (renamed, `VERSION` 31).
+  `git log -S` lists no commit between `a9c032b` and `eb9784c`, so the cause texts stay in the tree from `a9c032b` to `eb9784c^`, and the last of them, `eb9784c^`, has `VERSION` 25. Commit
+  `d7d16c9` (also `VERSION` 25) is one of those commits, not the last, so the round 15 statement that it was the last was wrong (section 20).
+  Versions 26 to 30 were never committed, so the last committed header is not the version that wrote the causes. Section 2 of round 8 says
+  versions 25 to 30 wrote them, so the gate is 31 (open item 28). The other gates follow the same rule: each is the version of the round that
+  renamed the text, as recorded in section 6.
+* **Checked against git.** The 49 CRC-32 values and lengths were computed from the old texts. Each text was checked with a case-insensitive
+  substring search (`git grep -i -F`) over `sim/src/main`, leaving out `LegacyNames.kt`, which holds the new texts. A substring search shows
+  that a text occurs in the source; it does not show that the code writes it. Case is ignored, so the lower-case forms (T12, T17, T19, T20,
+  T21, G05 to G09 and L26 to L31) match the capitalised labels in the source (for example `Bad back` and `Toxic buildup` in `Body.kt`).
+  The old text of each row occurs in the source at `eb9784c^`, and the new text in the rename commit `eb9784c`, except these rows:
+  * P01 and P02: the backstory is built at run time as `"<childhood title>, <adult title, lower-cased>"` (`Game.kt`, line 190 at `eb9784c^`).
+    Neither the old nor the new text is a literal.
+  * S01 to S03: built at run time from the faction name, as `"<faction> camp"` (`Factions.kt`, line 82), `the <site name>` (`Caravans.kt`,
+    line 356) and `"<faction> bandits"` (`Caravans.kt`, line 313), all at `eb9784c^`. Neither the old nor the new text is a literal. The
+    faction name is: the old S04 text is in `WorldMap.kt` (line 131 at `eb9784c^`), and the new one in the rename commit.
+  * H27, H28 and E04 (old texts only): `Hearty feast`, `Engineered upgrades` and `ash-veil winter` occur in no commit of the main source.
+    Version 29 wrote them (`colony_v29_expect.txt`), and version 29 was never committed (section 2).
+  The table's old texts are the strings in `old_text_cases.tsv`. The rows S04 and L01-L36 were added to that file in this round;
+  G01-G09 and S01-S03 were there before.
+* **Not translated, kept as saved (open items 29 and 30).** Item, building, creature, plant, drug and research labels inside a log line (for
+  example the drug item names in `is now addicted to`), the thrumbo sentence and the firefoam popper sentence (no recorded round), the disease
+  labels `gut worms` and `muscle parasites` (no recorded round), and the version 29 wording of the volcanic winter line.
+* **Tests (`LegacyNamesMigrationTest`, 53 tests, all passing).** New: `aVersion25GraveyardIsTranslatedCauseByCause` (reads
+  `colony_v25_graves.sav`), `everyOldDeathCauseInTheCaseFileIsTranslatedInTheVersion25Graveyard`,
+  `anOldGraveyardEntryIsTranslatedBelowVersion31AndKeptFromVersion31On` (version 30 and version 31 saves), `aGraveyardCauseWithADashInTheNameTranslatesOnlyTheCause`,
+  `aGraveyardCauseOrLogLineWithNoRenamedWordingIsKept`, `aDeathCauseInALogLineIsTranslatedLikeAGraveyardCause`,
+  `aBattleLabelInACauseTranslatesFromVersion27AndNotFromVersion28`, `aCaravanNoteNamingAPirateCampIsTranslatedOnlyBelowVersion28`,
+  `aSavedLogLineIsTranslatedOnlyBelowTheVersionOfItsRename` (every row of the case file, below and at its version) and
+  `aSaveWithOldLogLinesReadsThemTranslatedBelowTheirVersionOnly` (a version 29 save and a version 31 save). Changed: the version 25 and version 30
+  graveyard tests, the version 27 sites test (its caravan note is now translated) and the kept-as-saved log test, renamed
+  `aLogLineWhoseWordingMatchesNoRenamedTextIsKeptAsSaved`.
+* **Test data.** `old_text_cases.tsv` gained 37 rows: S04 and L01-L36. Old texts stay in the test data and in names.md only.
+* **Full suite.** `./gradlew :sim:test --console=plain`: BUILD SUCCESSFUL in 16 minutes 4 seconds, 825 tests, 0 failures, 0 errors, 0 skipped.
+  Re-run after the review fixes (the test file's comments and literals, the names.md checks and the v30 fixture description; no test was added or removed): BUILD SUCCESSFUL in 15 minutes 5 seconds, 825 tests, 0 failures, 0 errors, 0 skipped, with `LegacyNamesMigrationTest` at 53 of 53.
+* **Documents.** This file (sections 0, 2, 3, 6, 9 and 19), `gap-report.md` (the status sentence in section 11, and a round 15 bullet).
+  `README.md` line 12 is unchanged, as the task requires.
+* **Owner confirmation pending.** Items 23, 24, 27, 28, 29 and 30. Item 18 (the scope list) and item 14 (the README decision) were already open.
+
+## 20. Round 16 summary (review of round 15)
+
+The review of round 15 named the statements below. Each is corrected where it stands. The Kotlin code is unchanged. The only source change is a comment in `LegacyNamesMigrationTest.kt` (the header's description of `colony_v25_graves.sav`, which said its causes are read unchanged).
+
+* **Caravan notes and log lines (sections 2, 9 and the scope in section 0).** Section 2 said caravan notes and log lines are kept as saved. It now says they are translated below the version of each rename, and it says what `caravanNote` and `logLine` do. Section 9 items 10 and 18 said the same, and item 18 now lists the scope as the code has it (S04, L01-L36, G01-G09 added).
+* **Death causes and the git history (sections 2, 9 item 28, 19).** `git log -S` on the old cause texts lists `a9c032b` (first written) and `eb9784c` (renamed, `VERSION` 31). It does not list `d7d16c9` as the last commit. `git log -S` lists no commit between `a9c032b` and `eb9784c`, so the cause texts stay in the tree up to `eb9784c^`, the last commit before the rename, which is at `VERSION` 25. Section 2 now states the gate rule: a save below the version of the rename holds the old text, and the gate is 31.
+* **The bare pirate name (sections 2, 3 and 6.1).** Section 2 said the bare name is never saved on its own, and that the caravan note and log lines are kept as saved. The raid log line writes `of <faction>` (`Events.kt`, the raid line), so it holds the bare name, and S04 keys it below version 28. A caravan note holds only a battle label (S02 and S03). The faction paragraph of section 2 now says the same.
+* **Log-line labels marked as not saved (sections 6, 6.3, 6.4, 6.5).** The rows for the raid labels (`Mechanoids`, `Sappers`, `A siege force`, `Raiders in drop pods`), the mechanoid event texts, `has gone manhunter`, the event texts that log lines write (heat wave, cold snap, volcanic winter, infestation, short circuit, blight, wildfire, eclipse, trade caravan, cargo pod, aurora, meteorite, solar flare, thunderstorm), the chronic hediffs (bad back, arthritis, cataract, hearing loss, dementia, anesthetic) and food poisoning now name their log-line row (L01-L03, L06, L10-L25, L26-L31, L32-L36) and say the gate. The disease labels `gut worms` and `muscle parasites` are marked as kept as saved in `caught` lines (open item 30). The alert rows stay not saved. The 6.3 intro and the 6.4 intro say what is saved in log lines.
+* **Fixtures table (section 2).** The `old_text_cases.tsv` row now lists S01-S04, L01-L36, P01-P03, U01-U02, E01-E04 and G01-G09, which is what the file holds.
+* **Section 3.** The round-12 key count now says "at round 12" for the rows with no key.
+* **Test comment.** `LegacyNamesMigrationTest.kt`: the header line for `colony_v25_graves.sav` now says its causes are translated on read (section 2).
+* **Gap report.** `gap-report.md` section 11 has a round 16 bullet with the same facts.
+* **Fixtures and new files are tracked (sections 2, 3, 8 and 9, items 1, 15 and 25).** The current-state statements called them untracked, and
+  `git ls-files` lists every fixture and new file at `HEAD`. The uncommitted files are the round 12 to 16 change set, and the round 15 rows
+  of `old_text_cases.tsv`. The dated checks of rounds 10 to 17 keep their own wording.
+
+Tests: `./gradlew :sim:test --console=plain` on the working tree after these edits: BUILD SUCCESSFUL in 14 minutes 49 seconds. From the JUnit XML in `sim/build/test-results/test`: 825 tests, 0 failures, 0 errors, 0 skipped. `LegacyNamesMigrationTest` has 53 tests, all passing. The save version is not changed (`SaveGame.VERSION` is 40, as at `HEAD`). Nothing is committed.

@@ -70,3 +70,40 @@ G06	31	cause	malaria	marsh fever
 G07	31	cause	sleeping sickness	heavy drowse
 G08	31	cause	malnutrition	starved frame
 G09	31	cause	toxic buildup	toxin load
+S04	28	faction	Rough-Knife gang	Rough-Blade gang
+L01	27	log	The mechanoid cluster has awoken!	The iron swarm has awoken!
+L02	27	raid	Mechanoids	Iron swarm
+L03	27	log	A mechanoid ship has crashed	An iron hulk has crashed
+L04	27	log	A psychic drone assaults	A mind hum assaults
+L05	27	log	A psychic soothe calms	A mind balm calms
+L06	27	log	 has gone manhunter	 has gone rogue
+L07	28	log	The crematorium burned the body of	The pyre house burned the body of
+L08	28	log	Toxic fallout! Stay indoors; crops will wither.	Fume cloud! Stay indoors; crops will wither.
+L09	28	log	The toxic fallout has settled.	The fume cloud has settled.
+L10	29	raid	Sappers	Tunnelers
+L11	29	raid	A siege force	A shelling party
+L12	29	raid	Raiders in drop pods	Raiders in landers
+L13	29	log	A heat wave is sweeping in!	A scorching spell is sweeping in!
+L14	29	log	A cold snap has hit. Keep warm and protect your crops!	A deep chill has hit. Keep warm and protect your crops!
+L15	29	log	The eclipse is over.	The shadow passage is over.
+L16	29	log	An eclipse blots out the sun.	A shadow passage blots out the sun.
+L17	29	log	A cargo pod crashed nearby with	A supply capsule crashed nearby with
+L18	29	log	An infestation!	A pest bloom!
+L19	29	log	A short circuit! A battery exploded.	A grid fault! A battery exploded.
+L20	29	log	Blight destroyed	Crop mildew destroyed
+L21	29	log	A meteorite crashes into the ground nearby, scattering metal.	A falling stone crashes into the ground nearby, scattering metal.
+L22	29	log	An aurora lights the night sky. Everyone is moved.	A sky curtain lights the night sky. Everyone is moved.
+L23	29	log	A wildfire has broken out to the	A grassland burn has broken out to the
+L24	29	log	A trade caravan	A peddler convoy
+L25	29	log	Volcanic ash darkens the sky: a volcanic winter begins.	Volcanic ash darkens the sky: a smoke pall begins.
+L26	29	hediff	bad back	spine strain
+L27	29	hediff	arthritis	stiff joints
+L28	29	hediff	cataract	clouded lens
+L29	29	hediff	hearing loss	dulled hearing
+L30	29	hediff	dementia	memory fade
+L31	29	hediff	anesthetic	numb sleep
+L32	30	log	 got food poisoning	 got a spoiled stomach
+L33	30	log	The solar flare has ended; power is back.	The corona surge has ended; power is back.
+L34	30	log	A solar flare knocks out all electrical power!	A corona surge knocks out all electrical power!
+L35	30	log	A violent thunderstorm hits.	A violent lightning squall hits.
+L36	30	hediff	food poisoning	spoiled stomach
