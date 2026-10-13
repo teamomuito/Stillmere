@@ -75,7 +75,7 @@ limits and the save of room temperatures are there, each with its source. In bri
 (0.00017 per unit weight per cell, far-side rule with half weight to the outdoors through rock), a door closes its share of the gap on each
 pass (every 34 ticks open, 375 closed), an unroofed cell and a thin roof exchange with the outdoors (0.0007 and 0.00005 per tick), a thick
 roof pulls a warm room toward 15 C, a door cell reads the mean of its sides, and room temperatures are clamped to -273.15 to 1000 C.
-A heater or cooler still adds 14 heat units, as before.
+A heater adds 35.62 heat units (Stillmere's choice, C, `heat-exchange.md`, "Heater output"); a cooler still adds -14 (unchanged).
 
 The earlier constants of this section (`EXCHANGE` 0.048, `MAX_RATE`, door conductance 3, rock conductance 0.3 toward a ground temperature
 of (outdoor + 14) / 2, and the -60 to 80 C clamp) no longer exist in the code.
@@ -102,8 +102,9 @@ see `heat-exchange.md`).
 * Season order and a hand-calculated day mean (temperate, day 22: 20.733 C); day/night extremes at 03:00 and 15:00 and a 14 C swing.
 * Room detection on a 10x6 plan: with a door the rooms have 16 and 12 cells and the door belongs to neither; an opening gives one
   room of 29; a wall keeps them apart; an outside door keeps a room indoor; a broken outer wall makes it outdoor.
-* A closed 3x3 room with a powered heater holds 19 to 23 C at 14 C outdoors (it swings 19.4 to 21.2); at 0 C it settles near 8 C; a cooler
-  holds a 30 C room near 21 C. These values come from the vanilla rates and the built roof, not the old constants.
+* A closed 3x3 room with a powered heater (output 35.62) swings 19.5 to 24.1 C at 14 C outdoors; at 0 C it reaches 21 C and cycles between
+  16.3 and 21.0 C with a mean of 20.4 C (control acts once per slow step, so it is reached, not held); a cooler holds a 30 C room near 21 C. These values come from the vanilla rates and the built roof, not the
+  old constants.
 * A door leaks more than a wall; heat moves between rooms through a door; uniform temperatures do not drift.
 * Same seed and inputs give bit-identical room temperatures.
 * Room stats for a fixed layout: beauty 0.65, cleanliness -1/6, wealth 80, impressiveness 5.264, worked by hand in the test.

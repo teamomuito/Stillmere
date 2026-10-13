@@ -16,6 +16,13 @@ Implemented in `sim/` (`Climate.kt` `Thermal`, `GameMap.kt` links and doors, `Wo
 hook, `SaveGame.kt` version 40). Save format changed: version 40 (see "Save format"). Tests: `HeatExchangeTest` (new, 25 tests),
 `LegacyHeatMigrationTest` (new, loads `colony_v39.sav`), and `TemperatureRoomsTest` (changed, see "Tests"). Not committed.
 
+Full suite after the heater change: one run of `./gradlew :sim:test --console=plain`, 826 tests, 0 failures, 0 errors, 0 skipped.
+
+Heater output changed from 14 to 35.62 heat units (`Buildings.kt`, `HEATER`). This is Stillmere's own choice (C): the smallest value to two
+decimals that lets a sealed 3 by 3 room with one heater, one door and a built roof reach 21 C at 0 C outdoors. The room reaches 21 and then
+cycles between about 16.3 and 21 C (mean 20.4 C); it is not held at 21. The cooler (-14) is unchanged. The output is not saved, so the save
+version is not changed (still 40). See "Heater output" under "Consequences".
+
 Full suite: one run of `./gradlew :sim:test --console=plain` for this round: 818 tests, 0 failures, 0 errors, 0 skipped. An earlier run's two
 failures (`CaravanBattleTest`, an array index on a map that had never been rebuilt) were fixed by `GameMap.firstCellOfRoom`.
 
@@ -80,8 +87,10 @@ For an indoor room (fewer than a quarter of its cells open, `Verse/Room.cs:105`)
 
 ### Heat from buildings
 
-Unchanged this round: a heater adds `14 x 1.2 / cells` degrees per slow step while the room is below 21 (`RimWorld/CompProperties_TempControl.cs:9`
-for the setpoint, which matches; the heat per unit is C, row 105 is ambiguous). A cooler does the same above 21. See "Consequences".
+A heater adds `35.62 x 1.2 / cells` degrees per slow step while the room is below 21 (`RimWorld/CompProperties_TempControl.cs:9` for the
+setpoint, which matches). The 35.62 heat units are Stillmere's choice (C), not a vanilla value: the built heater's output is not in the tree
+(row 105). A cooler adds `-14 x 1.2 / cells` while the room is above 21; its output is unchanged this round (C). See "Heater output" and
+"Consequences".
 
 ## Constants
 
@@ -112,7 +121,9 @@ for the setpoint, which matches; the heat per unit is C, row 105 is ambiguous). 
 | Room temperature limits | -273.15 to 1000 degrees | `Verse/RoomTempTracker.cs:56`; `Verse/TemperatureTuning.cs:5, 7` | D (replaces -60 to 80, C) |
 | Door cell temperature | mean of the rooms on its two sides | `Verse/GenTemperature.cs:408, 414` | D |
 | Heater and cooler setpoint | 21 | `RimWorld/CompProperties_TempControl.cs:9` (row 104, matches) | D |
-| Heat per unit of building heat | 14 for a heater, 1.2 per room cell per slow step | Stillmere's own numbers (row 105 is ambiguous; definition data) | C, ? (unchanged this round) |
+| Heater heat per unit | 35.62 | Stillmere's choice, not a vanilla value. The built heater's output is definition data the tree does not hold; `RimWorld/CompProperties_TempControl.cs:7` gives only the code default (`energyPerSecond` 12). Chosen as the smallest value to two decimals that reaches 21 C at 0 C outdoors (threshold 35.618; 35.61 settles at 20.995, see "Heater output") | C (Stillmere choice) |
+| Cooler heat per unit | -14 | Stillmere's own number, unchanged this round; not vanilla (definition data, not in the tree) | C, ? (unchanged) |
+| Degrees per slow step per unit of heat, per room cell | 1.2 | Stillmere's own number, unchanged this round | C |
 | Slide hatch open | while powered | Stillmere's passability rule (`GameMap.walkable`) | C |
 | Door open timing | on entry; vanilla opens on approach (`:401-412`) | Stillmere's movement step (`Jobs.kt`, `goTo`) | C |
 
@@ -131,7 +142,7 @@ for the setpoint, which matches; the heat per unit is C, row 105 is ambiguous). 
 | 101 Indoor and outdoor rule | differs | unchanged this round (adopted in the roofs round) |
 | 103 Doorway as a room | differs | **not adopted** as a room: a door belongs to no room in Stillmere (rows 80-83). Its temperature is **adopted** (above). A door as the far cell of a wall edge is approximated (below) |
 | 104 Heater setpoint | matches | kept |
-| 105 Heater output and efficiency | ambiguous | **not adopted**: the built heater's output is definition data (`RimWorld/CompProperties_TempControl.cs:7`). Heat per unit stays C |
+| 105 Heater output and efficiency | ambiguous | **Stillmere's choice**: the built heater's output is definition data the tree does not hold (`RimWorld/CompProperties_TempControl.cs:7`). Heat per unit is set to 35.62 (C, see "Heater output"). No efficiency falloff (C) |
 
 Rows outside this area (86-98, 106-108) are not changed here.
 
@@ -151,18 +162,37 @@ Rows outside this area (86-98, 106-108) are not changed here.
 * **Opening time of a door** (`Building_Door.cs:234-241`): depends on the door-opening speed stat, which is definition data. **?**.
 * **Vanilla's 120-tick passes and their sampling** (`RoomTempTracker.cs:20-22`, `:222`): replaced by exact integration of the per-tick rates
   over the slow step. The expectation matches; the variance is not reproduced.
-* **Heater output** (row 105): kept at Stillmere's numbers. See "Consequences".
+* **Heater output** (row 105): the tree has no value for the built heater, so the output is Stillmere's choice (35.62, C). See "Heater output".
+  No efficiency falloff is applied (C).
 
-## Consequences (for the owner to decide)
+## Consequences
 
-With vanilla's wall and door rates, the Stillmere heater (14 per unit, unchanged) is weaker than before, relative to the room:
+### Heater output
 
-* A sealed 3 by 3 room with one heater and a door (9 cells, 11 walls, one door, one built roof) gives an exchange of 0.2262 of the gap per slow
-  step. The heater adds 1.87 degrees per slow step below 21, so the heater holds 21 only at about 13 C outdoors or warmer. At 0 C outdoors the
-  room settles near 8 C with the heater running all the time (`TemperatureRoomsTest.aHeaterCannotHoldTheSetpointAtZeroDegreesOutdoors`).
-* Before this round the same room held 21 at 0 C. Colonists in small heated rooms in winter will be colder than before. The fix is a choice
-  of heater output that the reference cannot settle (row 105, definition data). It is not made here.
-* A cooler (-14 units) holds 21 up to about 29 C outdoors, for the same room.
+The heater output is 35.62 heat units (C, Stillmere's choice). The reference has no value for the built heater (row 105), so the output is
+set by what the room needs. The test room is a sealed 3 by 3 room (9 cells, 11 wall edges, one closed door, one built roof). The figures
+below come from a double-precision replay of the slow step for this room; the two heated-room tests in `TemperatureRoomsTest` check them:
+
+* It closes 0.2261 of its gap to the outdoors per slow step. The exponent is 0.1299 (walls) + 0.0953 (door) + 0.0313 (roof) = 0.2564.
+* With the heater always on, the room settles where `output x 1.2 / 9` equals 0.2261 x 21, that is at an output of 35.618. Below that the
+  heater cannot reach 21 at 0 C outdoors: 35.61 settles at 20.995 C and never reaches 21. The smallest value to two decimals that reaches
+  21 is 35.62 (it settles at 21.001 C, so it reaches 21 only just).
+* For comparison, 36 settles at 21.2 C. Over a long run it cycles between 16.3 and 21.05 C with a mean of 19.7 C, while 35.62 has a mean of
+  20.4 C, so 35.62 keeps the room nearer 21 on average.
+* The cooler (-14) is unchanged. It holds 21 up to about 29 C outdoors for the same room (it settles at 21 when outdoors are 29.25 C).
+* The output is a game value and is not saved, so the save version does not change.
+
+### What the heated room does now
+
+* At 0 C outdoors the room reaches the setpoint and the thermostat cuts out there. Over a long run it cycles between 16.25 and 21.0 C (the
+  peak is 21.0002 C) with a mean of 20.4 C, and it is below 19 C for about 11 percent of the time. Control acts once per slow step (625
+  ticks), so each pulse adds 4.75 degrees, and the room loses 22.6 percent of its temperature per step between pulses. It is reached, not
+  held. Before the heater round (output 14) the same room settled near 8 C at 0 C and never reached 21; that is why the output was changed.
+  The swing follows from the slow step and the exchange, not from a vanilla value; vanilla's swing is not checked (?).
+* At 14 C outdoors the swing is 19.5 to 24.1 C (`TemperatureRoomsTest.anEnclosedRoomWithAHeaterHoldsItsTargetTemperature`, band 19 to 25).
+  The old band of 19 to 23 cannot hold for any output that reaches 21 at 0 C: at 14 C the pulse peaks at about 24 (24.1 at 35.62, 24.2 at 36).
+* Colonists in heated rooms in winter reach 21 at 0 C again, but are not held there: about 11 percent of the time they are below 19 C,
+  down to 16.3 C. A finer control step would narrow this; it is not made here.
 
 ## Save format
 
@@ -185,8 +215,11 @@ asked for); it is untracked in the working tree.
   hold (300, then spent), the presence hold (110), the slide hatch (open while powered); the temperature limits; no overshoot; the save round
   trip of the door hold and the room temperature; same seed, same bits with doors and colonists.
 * `TemperatureRoomsTest` (changed): the three `Thermal.step` calls take the new arguments; `anEnclosedRoomWithAHeaterHoldsItsTargetTemperature`
-  now runs at 14 C outdoors and checks 19 to 23 C (the swing is 19.4 to 21.2, from the 1.87-degree steps); `aCoolerHoldsAHotRoomAtItsTarget`
-  runs at 30 C outdoors. New: `aHeaterCannotHoldTheSetpointAtZeroDegreesOutdoors`. The rooms in these tests have no colonists, since one
+  now runs at 14 C outdoors and checks 19 to 25 C (the swing is 19.5 to 24.1, from the 4.75-degree pulses of the 35.62 output; the band was 19
+  to 23 with the output of 14, and 23 cannot hold for an output that reaches 21 at 0 C, see "Heater output"). `aCoolerHoldsAHotRoomAtItsTarget`
+  runs at 30 C outdoors (the cooler is unchanged). New: `aHeaterReachesTheSetpointAtZeroDegreesOutdoors` (peak 21.0002 C, trough 16.25 C,
+  mean about 20.3 C over the sampled steps, at 0 C outdoors; it checks that the room reaches 21 but does not hold it). It replaces
+  `aHeaterCannotHoldTheSetpointAtZeroDegreesOutdoors`, whose settle point of 8 C the 35.62 output makes false. The rooms in these tests have no colonists, since one
   standing in the doorway holds the door open. `aDoorLeaksMoreHeatThanAWall` and `heatMovesBetweenNeighbouringRoomsThroughADoor` are unchanged.
 * Version assertions: `RoofsTest` and `ColonyMapSizeTest` expect 40; `GrassTest` checks `SaveGame.VERSION` (its message said 39); the v39
   fixture is in `ColonyMapSizeTest`'s table at 250 by 250.
@@ -194,7 +227,9 @@ asked for); it is untracked in the working tree.
 
 ## Open
 
-* Heater output (row 105): the consequence above needs an owner decision.
+* Heater output (row 105): 35.62 is Stillmere's choice (C), the smallest value to two decimals that reaches 21 C at 0 C outdoors (threshold
+  35.618). The owner may change it; it is a game value with no save change.
+* Swing of a heated room under thermostat control (once per slow step): vanilla's swing is not checked (?). Stillmere's is one pulse wide.
 * Vent exchange (row 100).
 * A door as the far cell of a wall edge (above).
 * The door def's XML values for the intervals, and the opening time (definition data).
