@@ -26,6 +26,8 @@ class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
     var ownerId = -1
     var fuel = 0f
     var cooldown = 0
+    /** A swing door's open time left, in ticks: a pawn stepping in holds it open (docs/fidelity/heat-exchange.md). Saved from version 40. */
+    var doorHold = 0
     var quality = Quality.NORMAL
     var powered = false
     var forbidden = false
@@ -312,10 +314,17 @@ class GameMap(val w: Int, val h: Int) {
     var roomImpress = FloatArray(0)
     var roomRole = IntArray(0) // 0 none, 1 bedroom, 2 barracks, 3 dining, 4 hospital, 5 prison, 6 rec, 7 workshop, 8 kitchen
     var roomWealth = FloatArray(0)
-    /** Heat paths of indoor rooms: room [linkA] exchanges with [linkB] (a room id, or [Thermal.OUTDOORS] / [Thermal.GROUND]) with conductance [linkC]. */
+    /**
+     * Heat paths of indoor rooms: room [linkA] exchanges with [linkB] (a room id, or [Thermal.OUTDOORS]) with weight [linkC]. A door
+     * link has [linkDoor] >= 0, an index into [doorCell], the cell of that door. Built by [buildHeatLinks].
+     */
     var linkA = IntArray(0)
     var linkB = IntArray(0)
     var linkC = FloatArray(0)
+    var linkDoor = IntArray(0)
+    var doorCell = IntArray(0)
+    /** The roof shares of each room, from the same scan as the indoor rule. */
+    var roomRoofs = RoofShares.NONE
 
     private fun separates(i: Int): Boolean {
         val b = building[i]
@@ -411,13 +420,25 @@ class GameMap(val w: Int, val h: Int) {
         roomImpress = FloatArray(sizes.size)
         roomRole = IntArray(sizes.size)
         roomWealth = FloatArray(sizes.size)
+        roomRoofs = RoofShares(
+            open = FloatArray(sizes.size) { r -> scan.open[r].toFloat() / sizes[r] },
+            thin = FloatArray(sizes.size) { r -> (sizes[r] - scan.open[r] - scan.natural[r]).toFloat() / sizes[r] },
+            thick = FloatArray(sizes.size) { r -> scan.natural[r].toFloat() / sizes[r] },
+        )
         buildHeatLinks()
         roomDirty = false
     }
 
-    /** One link per wall, door or rock edge of an indoor room, to whatever lies straight through it. */
+    /**
+     * Heat paths, one per separator edge of an indoor room (docs/fidelity/heat-exchange.md). A door links the rooms on its two sides;
+     * a side with no room gives no exchange (Verse/GenTemperature.cs:417-420). A wall, rock or water edge follows the cell two steps
+     * across (Verse/RoomTempTracker.cs:116-175): a room there gives weight 1, and a cell with no room gives half weight toward the
+     * outdoors (Verse/RoomTempTracker.cs:248), unless it touches the room itself (:159-168).
+     */
     private fun buildHeatLinks() {
-        val a = ArrayList<Int>(); val b = ArrayList<Int>(); val c = ArrayList<Float>()
+        val a = ArrayList<Int>(); val b = ArrayList<Int>(); val c = ArrayList<Float>(); val door = ArrayList<Int>()
+        val doors = ArrayList<Int>()
+        val doorIdOf = IntArray(size) { -1 }
         for (cell in 0 until size) {
             val r = roomId[cell]
             if (r < 0 || !roomIndoor[r]) continue
@@ -426,24 +447,63 @@ class GameMap(val w: Int, val h: Int) {
                 val nx = cx + DX4[d]; val ny = cy + DY4[d]
                 if (!inB(nx, ny)) continue
                 val n = idx(nx, ny)
-                if (!separates(n)) continue
                 val bd = building[n]
-                val cond: Float
-                var other = Thermal.OUTDOORS
-                if (terrain[n] == Terrain.ROCK) { cond = Thermal.ROCK_CONDUCTANCE; other = Thermal.GROUND }
-                else {
-                    cond = if (bd!!.def.isDoor) Thermal.DOOR_CONDUCTANCE else Thermal.wallConductance(bd.material)
-                    val ox = nx + DX4[d]; val oy = ny + DY4[d]
-                    if (inB(ox, oy)) {
-                        val q = roomId[idx(ox, oy)]
-                        if (q == r) continue
-                        if (q >= 0) other = q
-                    }
+                val isDoor = bd != null && bd.built && bd.def.isDoor
+                if (!isDoor && !separates(n) && terrain[n] != Terrain.WATER_DEEP) continue
+                val fx = nx + DX4[d]; val fy = ny + DY4[d]
+                if (!inB(fx, fy)) continue
+                val q = roomId[idx(fx, fy)]
+                if (isDoor) {
+                    if (q < 0 || q == r) continue
+                    if (doorIdOf[n] < 0) { doorIdOf[n] = doors.size; doors.add(n) }
+                    a.add(r); b.add(q); c.add(1f); door.add(doorIdOf[n])
+                    continue
                 }
-                a.add(r); b.add(other); c.add(cond)
+                if (q == r) continue
+                if (q >= 0) { a.add(r); b.add(q); c.add(Thermal.wallConductance(bd?.material)); door.add(-1); continue }
+                if (touchesRoom(fx, fy, r)) continue
+                a.add(r); b.add(Thermal.OUTDOORS); c.add(Thermal.HALF_OUTDOOR_WEIGHT); door.add(-1)
             }
         }
-        linkA = a.toIntArray(); linkB = b.toIntArray(); linkC = c.toFloatArray()
+        linkA = a.toIntArray(); linkB = b.toIntArray(); linkC = c.toFloatArray(); linkDoor = door.toIntArray()
+        doorCell = doors.toIntArray()
+    }
+
+    /** Is one of the four cardinal neighbours of ([x], [y]) a cell of room [r]? */
+    private fun touchesRoom(x: Int, y: Int, r: Int): Boolean {
+        for (d in 0 until 4) {
+            val nx = x + DX4[d]; val ny = y + DY4[d]
+            if (inB(nx, ny) && roomId[idx(nx, ny)] == r) return true
+        }
+        return false
+    }
+
+    /** A non-animal pawn stepped onto cell [i]. A swing door stays open for at least [Thermal.DOOR_HOLD_OPEN] ticks (vanilla applies that minimum on approach, RimWorld/Building_Door.cs:411; Stillmere applies it on entry). */
+    fun doorEntered(i: Int) {
+        val b = building[i] ?: return
+        if (b.built && b.def.isDoor && b.def != BuildDef.SHUTTER_DOOR) b.doorHold = Thermal.holdAfterEntry(b.doorHold)
+    }
+
+    /**
+     * The first cell of each room (in cell order; -1 for a room with none), so the save can key each room's temperature to a cell that
+     * the rebuilt rooms will share.
+     */
+    fun firstCellOfRoom(): IntArray {
+        val first = IntArray(roomSize.size) { -1 }
+        // A map that has never been rebuilt has no rooms: its room ids are all zero, and there is no room 0 to index.
+        if (first.isEmpty()) return first
+        for (c in 0 until size) {
+            val r = roomId[c]
+            if (r >= 0 && r < first.size && first[r] < 0) first[r] = c
+        }
+        return first
+    }
+
+    /** Sets the temperature of the indoor room that holds [cell], after the rooms are rebuilt (a save restores its rooms this way). */
+    fun restoreRoomTemp(cell: Int, t: Float) {
+        if (cell < 0 || cell >= size) return
+        val r = roomId[cell]
+        if (r >= 0 && roomIndoor[r]) roomTemp[r] = t
     }
 
     fun roomIndoorAt(i: Int): Boolean {
@@ -465,7 +525,30 @@ class GameMap(val w: Int, val h: Int) {
     fun tempAt(i: Int, outdoor: Float): Float {
         if (roomDirty) return outdoor
         val r = roomId[i]
-        return if (r >= 0 && roomIndoor[r]) roomTemp[r] else outdoor
+        if (r >= 0) return if (roomIndoor[r]) roomTemp[r] else outdoor
+        val b = building[i]
+        return if (b != null && b.built && b.def.isDoor) doorTemp(i, outdoor) else outdoor
+    }
+
+    /**
+     * A door belongs to no room, so it reads the mean temperature of the distinct rooms on its sides, outdoor rooms counting as
+     * outdoors (Verse/GenTemperature.cs:408, 414). With no room beside it, the outdoor temperature.
+     */
+    private fun doorTemp(i: Int, outdoor: Float): Float {
+        val x = xOf(i); val y = yOf(i)
+        var sum = 0f
+        var count = 0
+        val seen = IntArray(4) { -2 }
+        for (d in 0 until 4) {
+            val nx = x + DX4[d]; val ny = y + DY4[d]
+            if (!inB(nx, ny)) continue
+            val q = roomId[idx(nx, ny)]
+            if (q < 0 || seen.contains(q)) continue
+            seen[count] = q
+            sum += if (roomIndoor[q]) roomTemp[q] else outdoor
+            count++
+        }
+        return if (count == 0) outdoor else sum / count
     }
 
     // ---------------------------------------------------------------- items

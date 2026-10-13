@@ -125,6 +125,7 @@ fun Game.goTo(p: Pawn, tx: Int, ty: Int, adjacent: Boolean = false, breach: Bool
     val prevIdx = map.idx(p.x, p.y)
     p.fromX = p.x; p.fromY = p.y
     p.x = map.xOf(next); p.y = map.yOf(next)
+    if (!p.isAnimal) map.doorEntered(next)
     p.pathI++
     p.moveTotal = max(tk(3), p.moveSpeedTicks() * map.stepCost(next) / 10)
     p.moveCd = p.moveTotal

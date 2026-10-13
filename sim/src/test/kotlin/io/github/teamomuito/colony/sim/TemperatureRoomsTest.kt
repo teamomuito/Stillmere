@@ -22,10 +22,14 @@ private fun GameMap.put(d: BuildDef, x: Int, y: Int, powered: Boolean = true): B
 
 private fun GameMap.roomAt(x: Int, y: Int) = roomId[idx(x, y)]
 
-/** A game with one closed 3x3 room (outer 5x5) with a door in the south wall, on cleared ground. */
+/**
+ * A game with one closed 3x3 room (outer 5x5) with a door in the south wall, on cleared ground. Its colonists are removed: one
+ * standing in the doorway would hold the door open (docs/fidelity/heat-exchange.md), and these tests isolate the room's exchange.
+ */
 private fun heatedRoomGame(seed: Long, withDoor: Boolean = true): Pair<Game, IntArray> {
     val g = Game(seed)
     g.startNewColony(Scenario.QUIET_ENCLAVE)
+    g.pawns.clear()
     val m = g.map
     val x0 = g.homeX; val y0 = g.homeY - 2
     for (y in y0 - 1..y0 + 5) for (x in x0 - 1..x0 + 5) {
@@ -147,29 +151,47 @@ class TemperatureRoomsTest {
 
     // ----------------------------------------------------------------------------------------------- heat
 
+    /*
+     * Hand numbers for the 3 by 3 room with a door (docs/fidelity/heat-exchange.md). Eleven wall edges give 11 x 0.00017 x 625 / 9 =
+     * 0.1299 of exponent per slow tick. The closed door gives -ln(1 - 0.5 / 9) x 625 / 375 = 0.0953, and the built (thin) roof
+     * 0.00005 x 625 = 0.0313. Together 0.2565, so the room closes 22.6 percent of its gap to the outdoors per slow tick. The heater adds
+     * 14 x 1.2 / 9 = 1.87 degrees per slow tick below the setpoint, so the room swings between about 19.4 and 21.3 C.
+     */
     @Test fun anEnclosedRoomWithAHeaterHoldsItsTargetTemperature() {
         val (g, o) = heatedRoomGame(11)
         val m = g.map
         m.put(BuildDef.HEATER, o[0] + 1, o[1] + 1)
-        m.rebuildRooms(0f)
+        m.rebuildRooms(14f)
         val r = m.roomAt(o[0] + 1, o[1] + 2)
         assertTrue(m.roomIndoor[r]); assertEquals(9, m.roomSize[r])
         val seen = ArrayList<Float>()
-        repeat(300) { g.roomClimate(0f); if (it >= 250) seen.add(m.roomTemp[r]) }
-        for (t in seen) assertTrue("room at $t C should stay near ${Thermal.SETPOINT}", t in 19.5f..23.5f)
+        repeat(300) { g.roomClimate(14f); if (it >= 250) seen.add(m.roomTemp[r]) }
+        for (t in seen) assertTrue("room at $t C should stay near ${Thermal.SETPOINT}", t in 19f..23f)
         // The same room without power sinks to the outdoor temperature.
         m.building[m.idx(o[0] + 1, o[1] + 1)]!!.powered = false
+        repeat(300) { g.roomClimate(14f) }
+        assertEquals(14f, m.roomTemp[r], 0.5f)
+    }
+
+    /** The limit of the heater output (Stillmere's own, row 105 of the reference): at 0 C outdoors the heater runs all the time. */
+    @Test fun aHeaterCannotHoldTheSetpointAtZeroDegreesOutdoors() {
+        val (g, o) = heatedRoomGame(14)
+        val m = g.map
+        m.put(BuildDef.HEATER, o[0] + 1, o[1] + 1)
+        m.rebuildRooms(0f)
+        val r = m.roomAt(o[0] + 1, o[1] + 2)
         repeat(300) { g.roomClimate(0f) }
-        assertEquals(0f, m.roomTemp[r], 0.5f)
+        // The heater runs all the time: 1.87 per slow tick against an exchange of 0.2262 of the gap, so it settles near 8.3 C.
+        assertTrue("a sealed room settles well below the setpoint: ${m.roomTemp[r]}", m.roomTemp[r] in 7.5f..9f)
     }
 
     @Test fun aCoolerHoldsAHotRoomAtItsTarget() {
         val (g, o) = heatedRoomGame(12)
         val m = g.map
         m.put(BuildDef.COOLER, o[0] + 1, o[1] + 1)
-        m.rebuildRooms(40f)
+        m.rebuildRooms(30f)
         val r = m.roomAt(o[0] + 1, o[1] + 3)
-        repeat(300) { g.roomClimate(40f) }
+        repeat(300) { g.roomClimate(30f) }
         assertEquals(Thermal.SETPOINT, m.roomTemp[r], 2.5f)
         assertTrue(m.roomTemp[r] < 30f)
     }
@@ -194,7 +216,7 @@ class TemperatureRoomsTest {
         m.roomTemp[west] = 25f; m.roomTemp[east] = 5f
         val heat = FloatArray(m.roomTemp.size)
         var temps = m.roomTemp
-        repeat(40) { temps = Thermal.step(temps, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, 5f) }
+        repeat(40) { temps = Thermal.step(temps, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, m.linkDoor, FloatArray(m.doorCell.size), m.roomRoofs, 5f) }
         assertTrue("the cold room warms through the door: ${temps[east]}", temps[east] > 5f)
         assertTrue("the warm room cools: ${temps[west]}", temps[west] < 25f)
         assertTrue("the east room, with fewer cells, sits closer to the west one than the outdoors", temps[east] > temps[west] - 20f)
@@ -206,7 +228,7 @@ class TemperatureRoomsTest {
         val m = twoRoomPlan(BuildDef.DOOR)
         for (r in m.roomTemp.indices) m.roomTemp[r] = 5f
         val heat = FloatArray(m.roomTemp.size)
-        val next = Thermal.step(m.roomTemp, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, 5f)
+        val next = Thermal.step(m.roomTemp, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, m.linkDoor, FloatArray(m.doorCell.size), m.roomRoofs, 5f)
         for (r in next.indices) assertEquals(5f, next[r], 1e-5f)
     }
 

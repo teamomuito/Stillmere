@@ -208,7 +208,7 @@ class GrassTest {
         assertEquals(m.grassCells(), back.map.grassCells())
     }
 
-    /** colony_v38.sav was written before grass existed. It loads, has none, and a new save is version 39. */
+    /** colony_v38.sav was written before grass existed. It loads, has none, and a new save is the current version (40). */
     @Test fun aVersion38SaveHasNoGrassAndLoadsAsTheCurrentVersion() {
         val fixture = resource("colony_v38.sav")
         assertEquals(38, ByteBuffer.wrap(fixture).int)
@@ -217,7 +217,7 @@ class GrassTest {
         assertEquals(0, g.map.grassCells().size)
         assertEquals(0, g.map.grassCovers().size)
         val bytes = SaveGame.write(g)
-        assertEquals(39, ByteBuffer.wrap(bytes).int)
+        assertEquals(SaveGame.VERSION, ByteBuffer.wrap(bytes).int)
         val again = SaveGame.read(bytes)
         assertEquals(0, again.map.grassCells().size)
         assertEquals(g.colonists.size, again.colonists.size)

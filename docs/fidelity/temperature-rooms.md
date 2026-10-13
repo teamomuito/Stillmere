@@ -70,23 +70,15 @@ Sine uses `StrictMath` so the result is bit-identical on any JVM and on Android 
 
 ### Heat (`Thermal.step`, once per slow tick = 625 ticks)
 
-For each indoor room `r` with `size` cells: `T' = T + (mean - T) * rate + heat / size * 1.2`, where
-`rate = min(0.5, 0.048 * Σc / size)`, `Σc` is the sum of conductances of its boundary edges and `mean` is the conductance-weighted
-average temperature of whatever lies straight through each edge. Outdoor rooms are set to the outdoor temperature.
+**Superseded in part by `docs/fidelity/heat-exchange.md`** (round of section 3.3, heat exchange). The rates, the door and roof rules, the
+limits and the save of room temperatures are there, each with its source. In brief: walls and rock exchange at vanilla's per-tick rates
+(0.00017 per unit weight per cell, far-side rule with half weight to the outdoors through rock), a door closes its share of the gap on each
+pass (every 34 ticks open, 375 closed), an unroofed cell and a thin roof exchange with the outdoors (0.0007 and 0.00005 per tick), a thick
+roof pulls a warm room toward 15 C, a door cell reads the mean of its sides, and room temperatures are clamped to -273.15 to 1000 C.
+A heater or cooler still adds 14 heat units, as before.
 
-| Constant | Value | Conf |
-|---|---|---|
-| `EXCHANGE` | 0.048 per unit conductance per cell (a 5x5 room with one door closes about 4% of the gap per slow tick) | C |
-| Wall edge conductance | 1.0, all materials | C |
-| Door edge conductance | 3.0 | C |
-| Rock edge conductance | 0.3, linked to ground temperature `(outdoor + 14) / 2` | C |
-| Heat gain | `building heat / size * 1.2` degrees per slow tick | C |
-| Heater / cooler | +14 / -14 heat; a heater works only below 21 C, a cooler only above | C (replaces nothing known) |
-| Other heat sources | campfire +10, pitch post +1.5, stove +3, coal forge +4, generator +3, frost vault -9 | C |
-| Temperature clamp | -60 to 80 C | C |
-
-Heat now flows **between neighbouring rooms** through doors and walls (before, rooms only exchanged with the outdoors), and the
-old special-case "underground rooms hold a mild constant" is replaced by the rock-edge link.
+The earlier constants of this section (`EXCHANGE` 0.048, `MAX_RATE`, door conductance 3, rock conductance 0.3 toward a ground temperature
+of (outdoor + 14) / 2, and the -60 to 80 C clamp) no longer exist in the code.
 
 ### Room stats (`computeRoomStats`, `RoomRules`)
 
@@ -102,13 +94,16 @@ old special-case "underground rooms hold a mild constant" is replaced by the roc
 Stillmere's contributions per building (`BuildDef.beauty`) and floors (wood 0.3, stone 0.6, steel 0.3, carpet 1.1) are custom.
 Which buildings and terrain count toward beauty and cleanliness in vanilla, and by how much, **could not be confirmed**.
 
-## Tests (`TemperatureRoomsTest`, 18 tests; the rooms in them are roofed, since a room is indoor only when roofed)
+## Tests
+
+`TemperatureRoomsTest` (19 tests; the rooms in them are roofed, since a room is indoor only when roofed) and `HeatExchangeTest` (25 tests,
+see `heat-exchange.md`).
 
 * Season order and a hand-calculated day mean (temperate, day 22: 20.733 C); day/night extremes at 03:00 and 15:00 and a 14 C swing.
 * Room detection on a 10x6 plan: with a door the rooms have 16 and 12 cells and the door belongs to neither; an opening gives one
   room of 29; a wall keeps them apart; an outside door keeps a room indoor; a broken outer wall makes it outdoor.
-* A closed 3x3 room with a powered heater stays in 19.5 to 23.5 C at 0 C outdoors, and sinks to 0 C when unpowered; a cooler holds a
-  40 C day near 21 C.
+* A closed 3x3 room with a powered heater holds 19 to 23 C at 14 C outdoors (it swings 19.4 to 21.2); at 0 C it settles near 8 C; a cooler
+  holds a 30 C room near 21 C. These values come from the vanilla rates and the built roof, not the old constants.
 * A door leaks more than a wall; heat moves between rooms through a door; uniform temperatures do not drift.
 * Same seed and inputs give bit-identical room temperatures.
 * Room stats for a fixed layout: beauty 0.65, cleanliness -1/6, wealth 80, impressiveness 5.264, worked by hand in the test.

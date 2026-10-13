@@ -45,9 +45,14 @@ object SaveGame {
      * cover ([PlantType.GRASS]) are new values of the terrain byte and of the plant type, appended to their enums (docs/fidelity/grass.md).
      * Saves before 39 never hold them, so nothing is read differently. An older build refuses a version-39 save with its usual
      * "Unsupported save version" error, instead of failing on a value it does not have.
+     *
+     * 40 adds two things, both read only from version 40 (docs/fidelity/heat-exchange.md). One integer per building, the swing door's
+     * open time left ([Building.doorHold]), written after the occupant. And, at the end of the stream, the temperature of each indoor
+     * room, keyed by the room's first cell, so a load keeps the heat the rooms had. A save before 40 has neither, so its doors start
+     * shut and its indoor rooms start at the outdoor temperature, as they did before.
      */
     /** The version [write] writes by default. Tests compare against it, so they do not repeat the number. */
-    internal const val VERSION = 39
+    internal const val VERSION = 40
 
     /** Spoil times before version 35, which saved rot is rescaled from. */
     private const val OLD_MEAT_SPOIL_DAYS = 4f
@@ -235,6 +240,7 @@ object SaveGame {
             o.writeFloat(b.progress); o.writeFloat(b.hp); o.writeInt(b.ownerId); o.writeFloat(b.fuel)
             o.writeByte(b.quality.ordinal); o.writeBoolean(b.forbidden); o.writeFloat(b.charge); o.writeInt(b.shells)
             o.writeBoolean(b.prisonerBed); o.writeInt(b.occupant)
+            if (version >= 40) o.writeInt(b.doorHold)
             o.writeInt(b.bills.size)
             for (bill in b.bills) {
                 o.writeInt(bill.recipe.ordinal); o.writeInt(bill.mode.ordinal); o.writeInt(bill.target); o.writeInt(bill.done)
@@ -330,6 +336,12 @@ object SaveGame {
         if (version >= 19) {
             o.writeLong(g.playMs)
             o.writeInt(g.unreachable.size); for ((k, v) in g.unreachable) { o.writeLong(k); o.writeLong(v) }
+        }
+        if (version >= 40) {
+            val first = m.firstCellOfRoom()
+            val indoor = m.roomIndoor.indices.filter { m.roomIndoor[it] && first[it] >= 0 }
+            o.writeInt(indoor.size)
+            for (r in indoor) { o.writeInt(first[r]); o.writeFloat(m.roomTemp[r]) }
         }
         o.flush()
         return bytes.toByteArray()
@@ -480,6 +492,7 @@ object SaveGame {
             b.progress = i.readFloat(); b.hp = i.readFloat(); b.ownerId = i.readInt(); b.fuel = i.readFloat()
             b.quality = Quality.entries[i.readByte().toInt()]; b.forbidden = i.readBoolean(); b.charge = i.readFloat(); b.shells = i.readInt()
             b.prisonerBed = i.readBoolean(); b.occupant = i.readInt()
+            if (version >= 40) b.doorHold = i.readInt()
             repeat(i.readInt()) {
                 val bill = Bill(Recipe.entries[i.readInt()])
                 bill.mode = BillMode.entries[i.readInt()]; bill.target = i.readInt(); bill.done = i.readInt()
@@ -604,9 +617,12 @@ object SaveGame {
             g.playMs = i.readLong()
             repeat(i.readInt()) { g.unreachable[i.readLong()] = i.tickAt(version) }
         }
+        // Version 40: the indoor room temperatures, applied once the rooms are rebuilt (docs/fidelity/heat-exchange.md).
+        val roomTemps = if (version >= 40) List(i.readInt()) { Pair(i.readInt(), i.readFloat()) } else emptyList()
         // Before version 38 there is no roof grid: it is rebuilt from the old indoor rule, before the rooms are, so no room changes status.
         if (version < 38) map.adoptLegacyRoofs()
         map.rebuildRooms(g.outdoorTemp())
+        for ((cell, t) in roomTemps) map.restoreRoomTemp(cell, t)
         for (p in g.pawns) g.recomputeHealth(p)
         for (c in g.caravans) for (p in c.members) g.recomputeHealth(p)
         g.restoreJobState()

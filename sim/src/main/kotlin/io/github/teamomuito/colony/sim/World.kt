@@ -360,8 +360,35 @@ internal fun Game.roomClimate(out: Float) {
         // Weather puts out outdoor fires.
         if (r >= 0 && !m.roomIndoor[r] && d == BuildDef.CAMPFIRE && (weather == Weather.RAIN || weather == Weather.THUNDER)) b.fuel = max(0f, b.fuel - 2f)
     }
-    val next = Thermal.step(m.roomTemp, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, out)
+    val next = Thermal.step(m.roomTemp, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, m.linkDoor, doorOpenShares(m), m.roomRoofs, out)
     next.copyInto(m.roomTemp)
+}
+
+/**
+ * The share of this slow step that each door is open. A pawn standing in a swing door holds it open for [Thermal.DOOR_CLOSE_DELAY]
+ * more ticks, and the open time left is spent over the step, at most the whole of it. A slide hatch is open while it is powered.
+ * Every door's hold is spent, including a door that links no rooms, so no hold is kept back. Returns one share per link door
+ * ([GameMap.doorCell]). Docs: docs/fidelity/heat-exchange.md.
+ */
+internal fun Game.doorOpenShares(m: GameMap): FloatArray {
+    for (p in pawns) {
+        if (!p.alive || p.isAnimal || !m.inB(p.x, p.y)) continue
+        val b = m.building[m.idx(p.x, p.y)] ?: continue
+        if (b.built && b.def.isDoor && b.def != BuildDef.SHUTTER_DOOR) b.doorHold = max(b.doorHold, Thermal.DOOR_CLOSE_DELAY)
+    }
+    val step = Game.SLOW_TICK
+    val share = HashMap<Int, Float>()
+    for (b in m.buildings()) {
+        if (!b.built || !b.def.isDoor) continue
+        share[m.idx(b.x, b.y)] = if (b.def == BuildDef.SHUTTER_DOOR) {
+            if (b.powered) 1f else 0f
+        } else {
+            val spent = minOf(b.doorHold.toLong(), step).toInt()
+            b.doorHold -= spent
+            spent.toFloat() / step.toFloat()
+        }
+    }
+    return FloatArray(m.doorCell.size) { d -> share[m.doorCell[d]] ?: 0f }
 }
 
 /** Fertility factor: the reference's sensitivity blend (RimWorld/PlantUtility.cs:358). */
