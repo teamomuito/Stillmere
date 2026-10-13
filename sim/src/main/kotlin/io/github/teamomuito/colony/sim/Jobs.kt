@@ -667,8 +667,18 @@ internal fun Game.findConstruct(p: Pawn): Job? {
         val j = Job(JobType.REPAIR, map.xOf(r), map.yOf(r)); j.key = key(r, K_DESIG)
         return j
     }
-    return null
+    return findRoof(p)
 }
+
+/** A designated roof cell that can be built now (Roofs.kt). Built after repair, under the construct work type. */
+internal fun Game.findRoof(p: Pawn): Job? {
+    val i = nearestCell(p, K_DESIG) { map.desig[it].toInt() == Desig.ROOF && map.canBuildRoofAt(it) }
+    if (i < 0) return null
+    reserve(p, key(i, K_DESIG))
+    val j = Job(JobType.BUILD_ROOF, map.xOf(i), map.yOf(i)); j.key = key(i, K_DESIG)
+    return j
+}
+
 
 internal fun Game.zoneBestFor(p: Pawn, s: ItemStack, from: Int): Int {
     // Highest-priority stockpile that accepts the item and has room; nearest within a priority.

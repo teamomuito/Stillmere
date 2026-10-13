@@ -23,7 +23,7 @@ class ColonyMapSizeTest {
         "colony_v34.sav" to 100, "colony_v35.sav" to 100,
         "colony_v25_adults.sav" to 250, "colony_v27_sites.sav" to 250, "colony_v29.sav" to 250, "colony_v30.sav" to 250,
         "colony_v31.sav" to 250, "colony_v32.sav" to 250, "colony_v32_xp.sav" to 250, "colony_v33.sav" to 250,
-        "colony_v36.sav" to 250,
+        "colony_v36.sav" to 250, "colony_v37.sav" to 250,
     )
 
     @Test fun everyLegacySaveKeepsTheSideItStores() {
@@ -55,13 +55,13 @@ class ColonyMapSizeTest {
         assertEquals(250, g.map.h)
     }
 
-    /** Version 36 is the last save before the bump to 37, which changed no field. A version 36 save still loads, and a new save is written as 37. */
-    @Test fun aVersion36SaveLoadsAndANewSaveIsVersion37() {
+    /** Version 36 still loads, and a new save is written as the current version (38, the roof grid). */
+    @Test fun aVersion36SaveLoadsAndANewSaveIsTheCurrentVersion() {
         val fixture = javaClass.getResourceAsStream("/legacy/colony_v36.sav")!!.use { it.readBytes() }
         val g = SaveGame.read(fixture)
         assertEquals(250, g.map.w)
         assertEquals(5, g.colonists.size)
-        assertEquals(37, ByteBuffer.wrap(SaveGame.write(g)).int)
+        assertEquals(38, ByteBuffer.wrap(SaveGame.write(g)).int)
     }
 
     /**

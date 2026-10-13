@@ -61,6 +61,8 @@ class WorldTest {
         }
         val fire = Building(BuildDef.CAMPFIRE, hx + 2, hy + 2, true); fire.fuel = 24f
         g.map.building[g.map.idx(hx + 2, hy + 2)] = fire
+        // The walled room is indoors only when roofed (docs/fidelity/roofs.md).
+        for (x in hx + 1..hx + 3) for (y in hy + 1..hy + 3) g.map.setRoof(g.map.idx(x, y), true)
         g.map.roomDirty = true
         g.tempOffset = -25f
         g.run(4000)

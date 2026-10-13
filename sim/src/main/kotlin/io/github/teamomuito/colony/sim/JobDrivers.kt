@@ -69,6 +69,7 @@ fun Game.driveJob(p: Pawn) {
         JobType.BUILD -> driveBuild(p, j)
         JobType.DECONSTRUCT -> driveDecon(p, j)
         JobType.REPAIR -> driveRepair(p, j)
+        JobType.BUILD_ROOF -> driveBuildRoof(p, j)
         JobType.BILL -> driveBill(p, j)
         JobType.RESEARCH -> driveResearch(p, j)
         JobType.TEND -> driveTend(p, j)
@@ -457,7 +458,8 @@ private fun Game.driveMine(p: Pawn, j: Job) {
         map.markWalkChanged()
         map.desig[i] = 0
         map.roomDirty = true
-        // Cave-ins are not modelled; mined rock stays roofed (natRoof).
+        // Mined rock was a roof holder: built roofs it held may fall (Roofs.kt). Natural roof stays (natRoof).
+        map.holderRemoved(map.xOf(i), map.yOf(i))
         endJob(p)
     }
 }
@@ -681,6 +683,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                     // A subsoil auger drills out the rock under it. The ore stays in the cell, so the auger pulls it from there.
                     if (b.def == BuildDef.SUBSOIL_AUGER && map.terrain[i] == Terrain.ROCK) {
                         map.terrain[i] = Terrain.GRAVEL
+                        map.holderRemoved(map.xOf(i), map.yOf(i))
                         map.markWalkChanged()
                         map.roomDirty = true
                     }
@@ -734,6 +737,26 @@ private fun Game.driveRepair(p: Pawn, j: Job) {
     b.hp = min(b.maxHp, b.hp + 0.4f * p.workSpeed(SkillType.ARCHITECTURE) / TIME_SCALE)
     p.gainXp(SkillType.ARCHITECTURE, 0.05f)
     if (b.hp >= b.maxHp) { map.desig[i] = 0; endJob(p) }
+}
+
+private fun Game.driveBuildRoof(p: Pawn, j: Job) {
+    val i = map.idx(j.tx, j.ty)
+    if (map.desig[i].toInt() != Desig.ROOF) { endJob(p); return }
+    if (map.roofed(i)) { map.desig[i] = 0; endJob(p); return }
+    if (!map.canBuildRoofAt(i)) { endJob(p); return }
+    if (j.stage == 0) {
+        val r = goTo(p, j.tx, j.ty, adjacent = true)
+        if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
+        return
+    }
+    // Progress per tick is the work speed times ROOF_WORK_RATE, against ROOF_WORK. Both numbers are D (RimWorld/JobDriver_AffectRoof.cs:15,
+    // :43, :47; see Roofs.kt). The stat they multiply is Stillmere's own mapping (C). docs/fidelity/roofs.md, constants table.
+    j.work += p.workSpeed(SkillType.ARCHITECTURE) * ROOF_WORK_RATE
+    // XP per tick is Stillmere's generic default rate (JobDrivers.kt doWork). Neither vanilla roof driver calls a learn method; see docs/fidelity/roofs.md.
+    p.gainXp(SkillType.ARCHITECTURE, 0.07f / TIME_SCALE)
+    if (j.work < ROOF_WORK) return
+    map.finishRoofBlock(j.tx, j.ty)
+    endJob(p)
 }
 
 private fun Game.driveClean(p: Pawn, j: Job) {

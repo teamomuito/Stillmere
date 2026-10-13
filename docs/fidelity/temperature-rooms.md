@@ -16,7 +16,7 @@ URL; a row from a summary with no recorded URL is M, UNVERIFIED.
 | Temperature is stored per room, not per cell: every cell of a room shares one temperature | yes | M, UNVERIFIED (search summary, no URL recorded) |
 | A room's temperature is shaped by its roof and by the temperature of tiles next to its walls | yes | M, UNVERIFIED (search summary, no URL recorded) |
 | Doors, vents and missing roof tiles make heat exchange faster | yes | M, UNVERIFIED (search summary, no URL recorded) |
-| A room that is 75% roofed or less stays at the outdoor temperature (counts as outdoors) | 75% | M, UNVERIFIED (search summary, no URL recorded) |
+| A room that is 75% roofed or less stays at the outdoor temperature (counts as outdoors) | 75% | D, `Verse/Room.cs:103-108` (quarter rule at :105); see `roofs.md` |
 | Removing a wall or door that borders the outside turns the room into outdoor space | yes | M, UNVERIFIED (search summary, no URL recorded) |
 | Vents move heat between rooms but are not fully efficient; each extra vent loses efficiency | qualitative | M, UNVERIFIED (search summary, no URL recorded) |
 | Outdoor temperature depends on latitude, time of day, day of year and biome; the temperature events deep chill, smoke pall and scorching spell shift it (names in names.md section 6.3) | yes | V (`https://rimworldwiki.com/wiki/Temperature`, a search result read in round 9; the page itself was not read) |
@@ -37,7 +37,8 @@ URL; a row from a summary with no recorded URL is M, UNVERIFIED.
   through each wall, door and rock edge. `GameMap.tempAt(cell)` still answers per cell (the room's value, or the outdoor value).
 * **"Insulation from wall and building materials."** No per-material wall insulation was found for vanilla. `Thermal.wallConductance`
   takes the material but returns the same value for all, so the hook exists without inventing numbers. Doors and rock do differ (below).
-* **Roofs** are still not modelled. Indoor/outdoor is decided by enclosure (see below), not by a roofed-cell fraction. Divergent.
+* **Roofs** are modelled (`docs/fidelity/roofs.md`, version 38). Indoor/outdoor is decided by the roofed share: a room is indoor only
+  when it does not touch the map edge and fewer than a quarter of its cells are open. Enclosure alone no longer makes a room indoor.
 
 ## What the code does now
 
@@ -62,9 +63,9 @@ Sine uses `StrictMath` so the result is bit-identical on any JVM and on Android 
 * Flood fill over four-neighbour cells. Walls, doors and rock separate; deep water is not part of any room.
 * **A door is a separator, so it splits rooms** and belongs to none. It is *not* an opening in the sense of a gap: a room whose only
   exit is a door stays indoor. A missing wall segment (no building) joins the room to whatever is behind it.
-* A region is outdoor if it touches the map edge. Otherwise it is indoor when it has at most 700 cells, or when more than half its
-  cells are under natural (mountain) roof. Player roofs do not exist; the 700-cell limit stands in for "the player roofed it".
-  Divergent from the 75% rule (M, UNVERIFIED; row 18).
+* A region is outdoor if it touches the map edge. Otherwise it is indoor when fewer than a quarter of its cells are open: unroofed,
+  neither a built roof nor natural roof (`GameMap.roomIsIndoor`, Verse/Room.cs:103-108). The 75 percent rule is vanilla's (D). Before
+  version 38 the rule was at most 700 cells or a natural-roof majority; that rule now only migrates old saves (`roofs.md`).
 * **Room size** (`roomSize`) is the number of floor cells. Wall, door and rock cells are not counted.
 
 ### Heat (`Thermal.step`, once per slow tick = 625 ticks)
@@ -101,7 +102,7 @@ old special-case "underground rooms hold a mild constant" is replaced by the roc
 Stillmere's contributions per building (`BuildDef.beauty`) and floors (wood 0.3, stone 0.6, steel 0.3, carpet 1.1) are custom.
 Which buildings and terrain count toward beauty and cleanliness in vanilla, and by how much, **could not be confirmed**.
 
-## Tests (`TemperatureRoomsTest`, 18 tests)
+## Tests (`TemperatureRoomsTest`, 18 tests; the rooms in them are roofed, since a room is indoor only when roofed)
 
 * Season order and a hand-calculated day mean (temperate, day 22: 20.733 C); day/night extremes at 03:00 and 15:00 and a 14 C swing.
 * Room detection on a 10x6 plan: with a door the rooms have 16 and 12 cells and the door belongs to neither; an opening gives one

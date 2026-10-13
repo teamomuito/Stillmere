@@ -34,6 +34,8 @@ private fun heatedRoomGame(seed: Long, withDoor: Boolean = true): Pair<Game, Int
     }
     m.wallRing(x0, y0, 5, 5)
     if (withDoor) m.put(BuildDef.DOOR, x0 + 2, y0 + 4) else m.put(BuildDef.WOOD_WALL, x0 + 2, y0 + 4)
+    // A room is indoors only when it is roofed (docs/fidelity/roofs.md): roof the 3 by 3 floor.
+    for (y in y0 + 1..y0 + 3) for (x in x0 + 1..x0 + 3) m.setRoof(m.idx(x, y), true)
     m.rebuildRooms(0f)
     return g to intArrayOf(x0, y0)
 }
@@ -91,6 +93,8 @@ class TemperatureRoomsTest {
         m.wallRing(3, 3, 10, 6)
         for (y in 4..7) m.put(BuildDef.WOOD_WALL, 8, y)
         if (crossing != null) m.put(crossing, 8, 5) else m.removeBuilding(m.building[m.idx(8, 5)]!!)
+        // Both rooms are roofed on every floor cell, so they are indoors (docs/fidelity/roofs.md).
+        for (y in 4..7) for (x in 4..11) if (m.building[m.idx(x, y)] == null) m.setRoof(m.idx(x, y), true)
         m.rebuildRooms(5f)
         return m
     }
@@ -228,6 +232,7 @@ class TemperatureRoomsTest {
         for (y in 3..5) for (x in 3..6) m.floor[m.idx(x, y)] = BuildDef.WOOD_FLOOR
         m.put(BuildDef.SCULPTURE_SMALL, 4, 4)
         m.filth[m.idx(5, 3)] = 2
+        for (y in 3..5) for (x in 3..6) m.setRoof(m.idx(x, y), true) // roofed, so indoors (docs/fidelity/roofs.md)
         m.rebuildRooms(10f)
         m.computeRoomStats()
         val r = m.roomAt(4, 3)
@@ -250,6 +255,7 @@ class TemperatureRoomsTest {
         m.wallRing(2, 2, 5, 5)
         m.put(BuildDef.TABLE, 3, 3)
         m.put(BuildDef.CHAIR, 5, 3)
+        for (y in 3..5) for (x in 3..5) m.setRoof(m.idx(x, y), true) // furniture does not stop a roof
         m.rebuildRooms(10f)
         m.computeRoomStats()
         val r = m.roomAt(3, 5)
@@ -266,6 +272,8 @@ class TemperatureRoomsTest {
         // A growing plant adds 0.4 to its cell; a mountain roof takes 0.1 off.
         m.natRoof[m.idx(3, 3)] = true
         m.plant[m.idx(4, 4)] = Plant(PlantType.entries.first { !it.isTree }, 4, 4, 1f)
+        // The other three cells are roofed, so the room is indoors (its natural roof still counts as roofed too).
+        m.setRoof(m.idx(4, 3), true); m.setRoof(m.idx(3, 4), true); m.setRoof(m.idx(4, 4), true)
         m.rebuildRooms(10f)
         m.computeRoomStats()
         val r = m.roomAt(3, 3)

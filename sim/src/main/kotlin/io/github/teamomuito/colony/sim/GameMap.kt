@@ -92,7 +92,9 @@ class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var
 
 class Fire(var intensity: Float) { var age = 0 }
 
-object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5 }
+object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5; const val ROOF = 6 }
+/** The indoor rule before version 38 (GameMap.kt, rooms): at most this many cells, or a natural-roof majority. Used only to migrate saves. */
+const val LEGACY_INDOOR_MAX_CELLS = 700
 object ZoneKind { const val NONE = 0; const val STOCKPILE = 1; const val GROWING = 2; const val DUMPING = 3 }
 
 class Zone(val id: Int, val kind: Int) {
@@ -134,6 +136,7 @@ class GameMap(val w: Int, val h: Int) {
     fun removeBuilding(b: Building) {
         for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy) && building[idx(xx, yy)] === b) building[idx(xx, yy)] = null
         roomDirty = true; bVersion++; walkVersion++
+        if (b.built && (b.def.isWall || b.def.isDoor)) holderRemoved(b.x, b.y)
     }
 
     /** Each building once, even if it covers several cells. */
@@ -154,7 +157,12 @@ class GameMap(val w: Int, val h: Int) {
     val desig = ByteArray(size)
     val filth = ByteArray(size)
     val fires = HashMap<Int, Fire>()
+    /** Natural (mountain) roof. Counts as roofed. */
     val natRoof = BooleanArray(size)
+    /** A built roof (docs/fidelity/roofs.md). Saved from version 38; older saves are migrated by [adoptLegacyRoofs]. */
+    val roof = BooleanArray(size)
+    /** Cells whose built roof fell this step and whose colonists must take the crush roll (drained by [Game.step]). */
+    val pendingRoofFalls = ArrayList<Int>()
     val conduit = BooleanArray(size)
     val areas = Array(3) { BooleanArray(size) }
     val areaNames = arrayOf("Home", "Area 2", "Area 3")
@@ -311,12 +319,15 @@ class GameMap(val w: Int, val h: Int) {
         return terrain[i] == Terrain.ROCK || (b != null && b.built && (b.def.isWall || b.def.isDoor))
     }
 
-    fun rebuildRooms(outdoorTemp: Float) {
-        val old = roomTemp
-        val oldId = roomId
+    /** One flood-filled region per room: its cell count, whether it touches the map edge, its open (unroofed) and natural-roof cells. */
+    private class RoomScan(val id: IntArray, val size: IntArray, val edge: BooleanArray, val open: IntArray, val natural: IntArray)
+
+    private fun scanRooms(): RoomScan {
         val id = IntArray(size) { -1 }
         val sizes = ArrayList<Int>()
-        val indoor = ArrayList<Boolean>()
+        val edges = ArrayList<Boolean>()
+        val opens = ArrayList<Int>()
+        val naturals = ArrayList<Int>()
         val stack = IntArray(size)
         for (start in 0 until size) {
             if (id[start] != -1 || separates(start) || terrain[start] == Terrain.WATER_DEEP) continue
@@ -327,10 +338,12 @@ class GameMap(val w: Int, val h: Int) {
             var count = 0
             var edge = false
             var natural = 0
+            var open = 0
             while (sp > 0) {
                 val c = stack[--sp]
                 count++
                 if (natRoof[c]) natural++
+                if (!natRoof[c] && !roof[c]) open++
                 val cx = xOf(c); val cy = yOf(c)
                 if (cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1) edge = true
                 for (d in 0 until 4) {
@@ -343,11 +356,45 @@ class GameMap(val w: Int, val h: Int) {
                 }
             }
             sizes.add(count)
-            indoor.add(!edge && (count <= 700 || natural * 2 > count))
+            edges.add(edge)
+            opens.add(open)
+            naturals.add(natural)
         }
+        return RoomScan(id, sizes.toIntArray(), edges.toBooleanArray(), opens.toIntArray(), naturals.toIntArray())
+    }
+
+    /**
+     * A room is indoor when it does not touch the map edge and fewer than a quarter of its cells are open (unroofed). Outdoor when
+     * `open * 4 >= cells`: the quarter rule at Verse/Room.cs:105, in whole numbers.
+     */
+    fun roomIsIndoor(cells: Int, open: Int, touchesEdge: Boolean): Boolean = !touchesEdge && open * 4 < cells
+
+    /**
+     * A save from before version 38 has no roof grid. Every cell of each room that was indoor under the old rule gets a built roof,
+     * so the new rule keeps that room indoor, and each cell reads as roofed as it did before (docs/fidelity/roofs.md). The old rule:
+     * not touching the map edge, and at most [LEGACY_INDOOR_MAX_CELLS] cells or a natural-roof majority.
+     */
+    fun adoptLegacyRoofs() {
+        val scan = scanRooms()
+        for (c in 0 until size) {
+            val r = scan.id[c]
+            if (r < 0) continue
+            val oldIndoor = !scan.edge[r] && (scan.size[r] <= LEGACY_INDOOR_MAX_CELLS || scan.natural[r] * 2 > scan.size[r])
+            if (oldIndoor) roof[c] = true
+        }
+        roomDirty = true
+    }
+
+    fun rebuildRooms(outdoorTemp: Float) {
+        val old = roomTemp
+        val oldId = roomId
+        val scan = scanRooms()
+        val id = scan.id
+        val sizes = scan.size
+        val indoor = BooleanArray(sizes.size) { r -> roomIsIndoor(sizes[r], scan.open[r], scan.edge[r]) }
         roomId = id
-        roomSize = sizes.toIntArray()
-        roomIndoor = indoor.toBooleanArray()
+        roomSize = sizes
+        roomIndoor = indoor
         val temps = FloatArray(sizes.size) { outdoorTemp }
         for (c in 0 until size) {
             val r = id[c]
@@ -402,7 +449,15 @@ class GameMap(val w: Int, val h: Int) {
         return r >= 0 && roomIndoor[r]
     }
 
-    fun roofed(i: Int): Boolean = natRoof[i] || roomIndoorAt(i)
+    /** Roofed means a built roof or a natural roof. A room is indoor only when most of it is roofed (see [roomIsIndoor]). */
+    fun roofed(i: Int): Boolean = natRoof[i] || roof[i]
+
+    /** Sets or clears a built roof, and marks the rooms for a rebuild. */
+    fun setRoof(i: Int, on: Boolean) {
+        if (roof[i] == on) return
+        roof[i] = on
+        roomDirty = true
+    }
 
     fun tempAt(i: Int, outdoor: Float): Float {
         if (roomDirty) return outdoor

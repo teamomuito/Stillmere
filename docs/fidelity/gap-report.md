@@ -147,8 +147,8 @@ berry bushes, feral mirewort, brambles, wildlife herds, a flat start area.
 
 ### 3.3 Temperature and rooms
 
-**Status: Partial** (was Divergent). Details and sources: `docs/fidelity/temperature-rooms.md`. **Priority 1.**
-**Files:** `Climate.kt` (outdoor temperature, `Thermal.step`), `GameMap.kt` (`rebuildRooms`, `buildHeatLinks`, `tempAt`), `Rooms.kt` (`computeRoomStats`, `RoomRules`), `World.kt` (`roomClimate`), `Game.kt` (`outdoorTemp`), `Mood.kt` (`comfortTick`), `Pawn.kt` (`comfyMin/Max`).
+**Status: Partial** (was Divergent). Details and sources: `docs/fidelity/temperature-rooms.md`; roofs, roof collapse and roofless rooms: `docs/fidelity/roofs.md`. **Priority 1.**
+**Files:** `Climate.kt` (outdoor temperature, `Thermal.step`), `GameMap.kt` (`rebuildRooms`, `roomIsIndoor`, `buildHeatLinks`, `tempAt`, `roof`, `setRoof`), `Roofs.kt` (support, collapse, roof building), `Rooms.kt` (`computeRoomStats`, `RoomRules`), `World.kt` (`roomClimate`), `Game.kt` (`outdoorTemp`, `designate`), `Mood.kt` (`comfortTick`), `Pawn.kt` (`comfyMin/Max`), `SaveGame.kt` (version 38).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
@@ -160,7 +160,8 @@ berry bushes, feral mirewort, brambles, wildlife herds, a flat start area.
 | Heat exchange | `0.048 * sum(edge conductance) / cells` of the gap per slow tick; wall 1.0, door 3.0, rock 0.3 | doors, vents and missing roof speed it up; rates not found | model differs in detail | M, UNVERIFIED (qualitative part from a search summary with no URL recorded; rates UNVERIFIED) |
 | Wall material insulation | none (all materials equal) | none recalled | | M |
 | Heater / cooler | +14 / -14 heat units, only below / above 21 C | ? | | UNVERIFIED |
-| Rooms | flood fill; walls, doors and rock separate; a door splits rooms and belongs to none; indoor if it does not touch the map edge and has at most 700 cells, or a mostly natural-roofed majority | a room that is 75% roofed or less is outdoors | **Divergent** (no roofs) | M, UNVERIFIED (search summary, no URL recorded) |
+| Rooms | flood fill; walls, doors and rock separate; a door splits rooms and belongs to none; indoor when it does not touch the map edge and fewer than a quarter of its cells are open (unroofed), `open * 4 < cells` | a room that is 75% roofed or less is outdoors (Verse/Room.cs:103-108, quarter rule at :105) | **Matches**. The old 700-cell rule is gone, kept only to migrate saves | D, `Verse/Room.cs:105` (see `roofs.md`) |
+| Roofs and roof collapse | built roof grid (saved, version 38); designation and build job (65 work, progress 1.7 x work speed per tick); a roof needs a holder (wall, door or rock) within 6.9 cells through roofed cells; removing a holder drops the roofs it held; crush roll 15 to 30 per colonist under a falling roof | the same rules, from RoofCollapseUtility, RoofCollapseCellsFinder, JobDriver_BuildRoof, JobDriver_AffectRoof, RoofCollapserImmediate | **Partial**: no remove-roof designation, trees are not cut first, the collapse does not destroy buildings or plants, no app command yet | D for the 6.9-cell radius (`Verse/RoofCollapseUtility.cs:5`) and the quarter rule (`Verse/Room.cs:103-108`, `:105`), both rows of the reference table; D for the 65 work (`RimWorld/JobDriver_AffectRoof.cs:15`, `:43`), the 1.7 rate (`:47`) and the 15 to 30 crush roll (`Verse/RoofCollapserImmediate.cs:10`), cited to the decompiled source with no reference row (the pinned build 1.6.4850 is not checked); C for the work speed used in place of the construction stat, the collapse steps and the holder test; the 3 by 3 block is roofed to a fixed point (C), and vanilla's single pass is not adopted; the other vanilla rules are C or not adopted for the same reason (`roofs.md`, Tags and "Corrections in this round"); C (work speed mapping; no material cost charged); UNVERIFIED (which defs hold roofs, natural rock holding a roof, the built roof's thin flag) |
 | Room stats | beauty, cleanliness, wealth, impressiveness, role (9 roles); constants in `RoomRules` | impressiveness from wealth, beauty, space, cleanliness with named stages | structure matches, all numbers custom | M, UNVERIFIED (structure, from a search summary with no URL recorded); C (numbers) |
 
 **Done in phase 4:** outdoor temperature moved into a pure `Climate` object (`StrictMath`, fixing R3 for this curve); heat now flows
@@ -171,9 +172,22 @@ room stats moved out of `Game` into `computeRoomStats` with named constants. 18 
 the impressiveness formula and thresholds, and which buildings and terrain contribute to beauty and cleanliness and by how much.
 All are marked UNVERIFIED and are Stillmere's own numbers.
 
-**Missing:** roofs (and so the 75% rule, roof collapse and roofless rooms), vents, doors that are open versus closed, rain and snow on
-roofless rooms, overhead mountain rock as a room property beyond the natural-roof flag, sunlight beyond a day/night curve, seasonal
-day length, latitude-dependent seasonal swing.
+**Roofs (this round, `roofs.md`).** The 75 percent rule, roofless rooms, roof building and roof collapse are in `sim/` (`Roofs.kt`,
+`GameMap.kt`). A room indoors now needs a roof: a walled room with no roof is outdoors, as in vanilla. Saves from version 37 and older
+get roofs on each cell of the rooms that were indoor under the old rule, so no room changes status on load (`LegacyRoofMigrationTest`).
+`Desig.ROOF` and `JobType.BUILD_ROOF` are new (appended, so saved job types keep their ordinals). Crush damage goes through the sim RNG.
+Tests: `RoofsTest.kt` (rule, support radius, collapse, crush, building, save) and `LegacyRoofMigrationTest.kt`; the room tests in
+`TemperatureRoomsTest.kt`, `GameTest.kt` and `ColonyMapSizeTest.kt` now roof their rooms or check version 38 (listed in `roofs.md`).
+All 750 sim tests pass with 0 failures (22 in `RoofsTest`, 6 in `LegacyRoofMigrationTest`), confirmed by one `./gradlew :sim:test --console=plain` run (`roofs.md`, Status).
+
+**Still open for roofs:** the app has no build-roof command yet (the sim accepts `designate(x, y, Desig.ROOF)`), so rooms built by
+players are outdoors until roofed; the remove-roof designation; trees that block a roof are skipped, not cut first; the 3 by 3 block is roofed to a fixed point, not vanilla's single pass (not adopted); the crush does not
+destroy buildings or plants; natural roof is kept when its group loses support, where vanilla drops a natural roof that is not thick (not
+adopted, a decision recorded in `roofs.md`); the built roof's cost, thin or thick flag, and which defs hold a roof are `UNVERIFIED`.
+
+**Missing:** vents, doors that are open versus closed, rain and snow on roofless rooms beyond the existing roofed checks, overhead
+mountain rock as a room property beyond the natural-roof flag, sunlight beyond a day/night curve, seasonal day length, latitude-dependent
+seasonal swing.
 
 ### 3.4 Health and medicine
 
@@ -618,7 +632,7 @@ Per `CLAUDE.md`: flagged, not deleted.
 ## 7. Top 10 gaps
 
 1. ~~**Time base (24,000 vs 60,000 ticks per day)**~~ **Done** (`7e402c9`): 60,000 ticks per day. (3.1)
-2. **Map: new colonies are 250 x 250 (round 6); no roofs, grass, caves or ruins**, rooms that count as indoors without a roof. (3.2, 3.3)
+2. **Map: new colonies are 250 x 250 (round 6); no grass, caves or ruins.** Roofs and roof collapse are in (3.3, `roofs.md`); the app has no roof command yet. (3.2, 3.3)
 3. **Needs and mood model:** the drains, hunger categories, break timing, drug tolerance and the four added needs now follow the decompiled reference (round 13, `needs-mood.md`). The thought catalogue, mood smoothing and the chemical interest need are still missing. (3.5)
 4. **Combat model** (3.11): band accuracy, the shooter factor, the cover pass, the layered armour roll, melee dodge and stagger, and burning are done from the reference (combat round, `combat.md`). Still open: the weapon stat values, the intercept and stray-miss model, minimum range, stun, EMP, shields, and the fire growth rows of 3.8.
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)

@@ -36,9 +36,13 @@ object SaveGame {
      *
      * 37 changes no field and no layout. It marks the saves written after new colonies moved to a 250 by 250 map (docs/fidelity/map.md).
      * The width and height have been written since version 14 and are read as before, so every save keeps the size it stores.
+     *
+     * 38 adds one flag per map cell, the built roof (docs/fidelity/roofs.md), after the snow of each cell. A save before 38 has no
+     * flags: on reading, every cell of each room that was indoor under the old rule gets a roof, so no room changes status and
+     * each cell is roofed as before ([GameMap.adoptLegacyRoofs]).
      */
     /** The version [write] writes by default. Tests compare against it, so they do not repeat the number. */
-    internal const val VERSION = 37
+    internal const val VERSION = 38
 
     /** Spoil times before version 35, which saved rot is rescaled from. */
     private const val OLD_MEAT_SPOIL_DAYS = 4f
@@ -207,6 +211,7 @@ object SaveGame {
             o.writeByte(m.floor[i]?.ordinal ?: -1); o.writeByte(m.floorQuality[i].ordinal)
             o.writeInt(m.zoneId[i]); o.writeByte(m.desig[i].toInt()); o.writeByte(m.filth[i].toInt())
             o.writeBoolean(m.natRoof[i]); o.writeBoolean(m.conduit[i]); o.writeByte((m.snow[i] * 100).toInt())
+            if (version >= 38) o.writeBoolean(m.roof[i])
         }
         for (a in 0 until 3) { o.writeUTF(m.areaNames[a]); for (c in 0 until m.size) o.writeBoolean(m.areas[a][c]) }
         o.writeInt(m.peekNextZone())
@@ -448,6 +453,7 @@ object SaveGame {
             map.floorQuality[c] = Quality.entries[i.readByte().toInt()]
             map.zoneId[c] = i.readInt(); map.desig[c] = i.readByte(); map.filth[c] = i.readByte()
             map.natRoof[c] = i.readBoolean(); map.conduit[c] = i.readBoolean(); map.snow[c] = i.readByte() / 100f
+            if (version >= 38) map.roof[c] = i.readBoolean()
         }
         for (a in 0 until 3) { map.areaNames[a] = i.readUTF(); for (c in 0 until map.size) map.areas[a][c] = i.readBoolean() }
         map.setNextZone(i.readInt())
@@ -593,6 +599,8 @@ object SaveGame {
             g.playMs = i.readLong()
             repeat(i.readInt()) { g.unreachable[i.readLong()] = i.tickAt(version) }
         }
+        // Before version 38 there is no roof grid: it is rebuilt from the old indoor rule, before the rooms are, so no room changes status.
+        if (version < 38) map.adoptLegacyRoofs()
         map.rebuildRooms(g.outdoorTemp())
         for (p in g.pawns) g.recomputeHealth(p)
         for (c in g.caravans) for (p in c.members) g.recomputeHealth(p)

@@ -422,6 +422,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             Desig.CUT -> if (map.plant[i] != null && !(map.plant[i]!!.type.crop && map.zoneKind(i) == ZoneKind.GROWING)) map.desig[i] = kind.toByte() else return false
             Desig.HARVEST -> if (map.plant[i] != null && map.plant[i]!!.mature && !map.plant[i]!!.type.isTree) map.desig[i] = kind.toByte() else return false
             Desig.REPAIR -> if (map.building[i]?.built == true) map.desig[i] = kind.toByte() else return false
+            Desig.ROOF -> if (map.terrain[i].passable && !map.roofed(i)) map.desig[i] = kind.toByte() else return false
             Desig.DECON -> {
                 val b = map.building[i]
                 if (b != null) {
@@ -619,6 +620,7 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         blasts.removeAll { it.expires < tick }
         if (tick % SLOW_TICK == 0L) slowTick()
         if (tick % TICKS_PER_HOUR == 0L) hourlyTick()
+        resolveRoofCollapses()
         val gone = pawns.filter { it.dead && tick - it.deathTick > tk(10) }
         if (gone.isNotEmpty()) pawns.removeAll(gone.toSet())
         if (!encounter && humansOnSide.none { it.colonist } && caravans.none { c -> c.inBattle || c.members.any { it.colonist && it.alive } } && !gameOver) {

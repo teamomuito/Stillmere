@@ -19,6 +19,7 @@ enum class JobType(val label: String) {
     EXTINGUISH("Putting out fire"), DELIVER("Delivering"), BURY("Burying"), SMOKE("Taking a drug"),
     // Appended last: saves store job types by ordinal.
     TRAIN("Training animal"),
+    BUILD_ROOF("Building roof"),
 }
 
 /** Most tricks a tamed animal can learn. */
