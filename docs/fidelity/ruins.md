@@ -2,7 +2,7 @@
 
 Plan, constants and rows for ruins on colony maps. Gap-report section 3.2 holds the audit. The vanilla values come from the
 decompiled source at version 1.6.9438.38202 (tag **D**), read from the clone at `/home/user/chillu1/rimworlddecompiled`. The
-pinned target is 1.6.4850, so a D value may differ from it (see `decompiled-reference.md`).
+pinned build is 1.6.9438.38202, the same as the source, so the D values match it (see `decompiled-reference.md`).
 
 The reference's section 3.2 has no ruins row. Every ruin value below is cited to its decompiled file and line directly, which
 the reference allows for a value with no table row. The loot table is not in the source: its weights and counts are XML in

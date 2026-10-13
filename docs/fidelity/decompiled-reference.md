@@ -6,7 +6,7 @@ Each row is tagged `D`. Its file and line are in the source tree, not in this re
 
 Only citations that a second pass re-opened and confirmed are listed. Rejected citations are left out. Status compares the decompiled value with the Stillmere value: **matches**, **differs**, or **ambiguous** (depends on runtime data or several candidates). Confidence is the extractor's own rating.
 
-Source version 1.6.9438.38202 is not the pinned target 1.6.4850 (see CLAUDE.md). Values may differ between the two builds until the owner decides which one to pin.
+The pinned build is 1.6.9438.38202, the same as the source (see CLAUDE.md). So the decompiled values in the tables below are the values of the pinned build.
 
 Total confirmed citations: 532.
 

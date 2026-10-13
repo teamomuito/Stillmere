@@ -2,7 +2,7 @@
 
 Plan and reference for the grass terrain (gap-report section 3.9, "Missing: grass"; section 3.2, "Missing: Grass"). The vanilla
 values come from the decompiled source at version 1.6.9438.38202 (tag **D**), listed in `decompiled-reference.md`, sections 3.2 and
-3.9. The pinned target is 1.6.4850, so a D value may differ from it (see that file).
+3.9. The pinned build is 1.6.9438.38202, the same as the source, so the D values match it (see that file).
 
 ## What the decompiled source says about grass
 

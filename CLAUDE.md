@@ -2,7 +2,7 @@
 
 ## Project goal
 
-Faithful recreation of the Core (base game, no DLC) RimWorld 1.6.4850 experience as an Android app written in Kotlin.
+Faithful recreation of the Core (base game, no DLC) RimWorld 1.6.9438.38202 experience as an Android app written in Kotlin.
 Mechanics, formulas, numbers and timings should match vanilla as closely as we can verify.
 The `sim/` module stays pure JVM with no Android dependencies.
 

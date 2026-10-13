@@ -18,8 +18,8 @@ private const val ROOF_SUPPORT_RADIUS_SQ = ROOF_SUPPORT_RADIUS * ROOF_SUPPORT_RA
 /**
  * D: the work total (65) of one roof job (RimWorld/JobDriver_AffectRoof.cs:15, the base work, and :43, the reset at the start of the job;
  * version 1.6.9438.38202 in the clone). D: the progress factor (1.7) per tick, applied to the pawn's work speed in place of vanilla's
- * construction speed stat (RimWorld/JobDriver_AffectRoof.cs:47). That stat mapping is Stillmere's own (C). The pinned build 1.6.4850 is
- * not checked (docs/fidelity/roofs.md, constants table).
+ * construction speed stat (RimWorld/JobDriver_AffectRoof.cs:47). That stat mapping is Stillmere's own (C). The pinned build is
+ * 1.6.9438.38202, the same as the source (docs/fidelity/roofs.md, constants table).
  */
 internal const val ROOF_WORK = 65f
 internal const val ROOF_WORK_RATE = 1.7f
@@ -27,7 +27,8 @@ internal const val ROOF_WORK_RATE = 1.7f
 /**
  * D: the crush range, 15 to 30 (Verse/RoofCollapserImmediate.cs:10), used as the damage of each crush wound. The draw itself is
  * Stillmere's own (C): inclusive through the sim RNG (`Rng.range`, Noise.kt:70); vanilla's inclusive draw is at Verse/IntRange.cs:34,
- * cited for comparison only. Who is hit and how many rolls are made is also Stillmere's own rule (C). The pinned build is not checked.
+ * cited for comparison only. Who is hit and how many rolls are made is also Stillmere's own rule (C). The pinned build is 1.6.9438.38202,
+ * the same as the source.
  */
 internal const val ROOF_CRUSH_MIN = 15
 internal const val ROOF_CRUSH_MAX = 30

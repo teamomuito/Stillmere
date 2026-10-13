@@ -2,7 +2,7 @@
 
 Plan, constants and rows for caves on colony maps. Gap-report section 3.2 holds the audit. The vanilla values come from the
 decompiled source at version 1.6.9438.38202 (tag **D**), read from the clone at `/home/user/chillu1/rimworlddecompiled` (commit
-`2d50803`). The pinned target is 1.6.4850, so a D value may differ from it (see `decompiled-reference.md`).
+`2d50803`). The pinned build is 1.6.9438.38202, the same as the source, so the D values match it (see `decompiled-reference.md`).
 
 The reference's section 3.2 has no caves row. The cave constants below are cited to the decompiled files directly (a D tag with
 file and line is enough without a table row). Each D citation was opened at its line in the clone and the value checked there. A

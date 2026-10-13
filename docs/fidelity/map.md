@@ -2,7 +2,7 @@
 
 Plan and reference for the colony map's size, the ore count that scales with it, and the saved map size. Gap-report section 3.2
 holds the audit. The vanilla values come from the decompiled source at version 1.6.9438.38202 (tag **D**), listed in
-`decompiled-reference.md`, section 3.2. The pinned target is 1.6.4850, so a D value may differ from it (see that file).
+`decompiled-reference.md`, section 3.2. The pinned build is 1.6.9438.38202, the same as the source, so the D values match it (see that file).
 
 ## Decisions
 

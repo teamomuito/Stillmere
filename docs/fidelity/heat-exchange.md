@@ -1,8 +1,7 @@
 # Heat exchange between rooms, walls, doors, roofs and the outdoors
 
 Gap-report section 3.3 (heat exchange). Reference: `docs/fidelity/decompiled-reference.md`, section 3.3, rows 80-108 (temperature and rooms).
-Source tree: the decompiled RimWorld tree at version 1.6.9438.38202 (`/home/user/chillu1/rimworlddecompiled`, read only). That is not the
-pinned target 1.6.4850 (CLAUDE.md), so every D value here may differ from the pinned build.
+Source tree: the decompiled RimWorld tree at version 1.6.9438.38202 (`/home/user/chillu1/rimworlddecompiled`, read only). That is the pinned build (CLAUDE.md), the same as the source, so every D value here matches it.
 
 Tags:
 * **D** = taken from the decompiled source: repository `Chillu1/RimWorldDecompiled`, file and line cited, opened in the clone. No code,
