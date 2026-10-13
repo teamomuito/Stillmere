@@ -62,6 +62,7 @@ control of the outcome beyond drafting, moving and retreating.
 **World**
 - Six biomes, rivers, lakes, five rock types, five ores, seasons, rain, fog, snow, lightning squalls,
   deep chills and scorching spells.
+- Caves in some hill country: tunnels through the rock, with natural roofs and openings onto the surface.
 - Crops that depend on temperature, light and soil; spoilage of food and corpses; items that wear outdoors.
 - Wildlife for hunting, taming, slaughter and breeding.
 
