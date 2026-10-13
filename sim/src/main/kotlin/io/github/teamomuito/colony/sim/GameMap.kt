@@ -853,6 +853,14 @@ class GameMap(val w: Int, val h: Int) {
                 cx to cy
             }
             m.spawnX = sx; m.spawnY = sy
+            // Caves on a hill tile: tunnels are cut from the rock as it stands now (docs/fidelity/caves.md). Carved cells become gravel
+            // floor and keep their natural roof, and the rock that stays is the cave's wall. This runs before the sides are connected,
+            // so a crossing can use a cave. Caves draw from their own generator, so a map without caves is unchanged.
+            if (local?.caves == true) {
+                val rockCells = BooleanArray(m.size) { m.terrain[it] == Terrain.ROCK }
+                val carved = Caves.carve(w, h, rockCells, seed)
+                for (i in carved.indices) if (carved[i]) m.terrain[i] = Terrain.GRAVEL
+            }
             m.connectSides(sx, sy)
             // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. The number of
             // veins of each kind follows the map's area and hilliness (see [oreVeinPlan]), unless the caller gave the plan.

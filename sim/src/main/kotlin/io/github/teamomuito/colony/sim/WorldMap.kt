@@ -37,6 +37,8 @@ class World(val w: Int, val h: Int) {
     val water = BooleanArray(w * h)
     val river = BooleanArray(w * h)
     val hills = Array(w * h) { Hills.FLAT }
+    /** Whether the tile's map has caves, set once the hilliness is final (end of [generate]; docs/fidelity/caves.md). Not saved: the world is rebuilt from its seed. */
+    val caves = BooleanArray(w * h)
     val road = BooleanArray(w * h)
     val elevation = FloatArray(w * h)
     val settlements = ArrayList<Settlement>()
@@ -121,6 +123,14 @@ class World(val w: Int, val h: Int) {
     companion object {
         const val W = 60
         const val H = 40
+        /**
+         * Chance that a tile's map has caves, by hilliness: 0.5 on mountain tiles and 0.25 on large hills (RimWorld.Planet/
+         * WorldGenStep_Mutators.cs lines 12 and 14). Stillmere's mountain tile stands for the base game's mountainous band (see
+         * docs/fidelity/caves.md). The draws use their own seed, so the rest of the world does not change.
+         */
+        const val CAVE_CHANCE_MOUNTAIN = 0.5f
+        const val CAVE_CHANCE_LARGE = 0.25f
+        private const val CAVE_SEED = 0x3d8a1f5bL
         /** Ticks to cross one unit of travel cost; written in old ticks and scaled to the current calendar. */
         const val TICKS_PER_COST = 1900f * TIME_SCALE
 
@@ -267,6 +277,12 @@ class World(val w: Int, val h: Int) {
                 val near = hubs.filter { it != a }.sortedBy { abs(world.x(it) - world.x(a)) + abs(world.y(it) - world.y(a)) }.take(2)
                 for (b in near) world.path(a, b)?.let { p -> if (world.routeCost(a, p) < 45f) for (t in p) world.road[t] = true }
             }
+            // Caves: a hill tile may carry them. Hilliness is final by now, and the draws come from their own generator.
+            val caveRng = Rng(seed xor CAVE_SEED)
+            for (t in 0 until W * H) {
+                val chance = when (world.hills[t]) { Hills.MOUNTAIN -> CAVE_CHANCE_MOUNTAIN; Hills.LARGE -> CAVE_CHANCE_LARGE; else -> 0f }
+                world.caves[t] = chance > 0f && caveRng.chance(chance)
+            }
             return world
         }
     }
@@ -285,10 +301,20 @@ class World(val w: Int, val h: Int) {
         var sx = 0; var sy = 0; var nWater = 0
         for (dy in -1..1) for (dx in -1..1) if ((dx != 0 || dy != 0) && waterAt(dx, dy)) { sx += dx; sy += dy; nWater++ }
         val lakeAngle = if (nWater > 0 && (sx != 0 || sy != 0)) StrictMath.atan2(sy.toDouble(), sx.toDouble()).toFloat() else null
-        return LocalTerrain(river[t], adjacentWater(t) && !river[t], hills[t], horizontal, lakeAngle)
+        return LocalTerrain(river[t], adjacentWater(t) && !river[t], hills[t], horizontal, lakeAngle, caves[t])
     }
 
 
-    /** [riverHorizontal]: true when the river runs east-west across the map, false for north-south, null when unknown. [lakeAngle]: the direction of the lake, in radians with y pointing down. */
-    class LocalTerrain(val river: Boolean, val lake: Boolean, val hills: Hills, val riverHorizontal: Boolean? = null, val lakeAngle: Float? = null)
+    /**
+     * [riverHorizontal]: true when the river runs east-west across the map, false for north-south, null when unknown. [lakeAngle]: the
+     * direction of the lake, in radians with y pointing down. [caves]: the tile's map has caves (see [World.caves]).
+     */
+    class LocalTerrain(
+        val river: Boolean,
+        val lake: Boolean,
+        val hills: Hills,
+        val riverHorizontal: Boolean? = null,
+        val lakeAngle: Float? = null,
+        val caves: Boolean = false,
+    )
 }
