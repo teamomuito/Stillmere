@@ -115,7 +115,8 @@ class ItemsTest {
         info.silver = 2000
         g.sellItem(info, ItemType.W_RIFLE, 1)
         assertEquals("the trader holds the rifle at its quality", 1, info.stock.count(Lot(ItemType.W_RIFLE, Quality.GOOD, 100)))
-        assertFalse("the rifle left the map", g.map.items.values.any { it.type == ItemType.W_RIFLE })
+        // Only the rifle this test put down must leave: a generated ruin can hold rifles of its own (docs/fidelity/ruins.md).
+        assertFalse("the rifle left the map", g.map.items.values.any { it === rifle })
 
         g.map.drop(ItemType.SILVER, 1000, g.homeX, g.homeY)   // buying back costs more than the sale earned
         assertTrue(g.buyItem(info, ItemType.W_RIFLE, 1))

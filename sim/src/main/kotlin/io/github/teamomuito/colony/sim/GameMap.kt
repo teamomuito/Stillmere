@@ -748,10 +748,11 @@ class GameMap(val w: Int, val h: Int) {
         /**
          * A map of [w] by [h] cells. The ore veins follow [oreVeinPlan] for the hilliness of [local], unless [veins] gives the plan
          * (battle maps pass [FIXED_ORE_VEINS], so a fight keeps the 18 veins it had before the map-size change).
+         * A colony map (one with a world tile, [local] not null) also gets its ruins, unless [ruins] is false (docs/fidelity/ruins.md).
          */
         fun generate(
             w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null,
-            veins: List<Pair<Ore, Int>>? = null,
+            veins: List<Pair<Ore, Int>>? = null, ruins: Boolean = true,
         ): GameMap {
             val m = GameMap(w, h)
             m.biome = biome
@@ -887,6 +888,9 @@ class GameMap(val w: Int, val h: Int) {
                     }
                 }
             }
+            // Ruins on a colony map: walls and floors now, before the plants, which the ruins' footprints clear afterwards. They draw from
+            // their own generator, so the terrain, ore and plant rolls above and below are the same as on a map without ruins.
+            val ruinGen = if (ruins && local != null) Ruins.place(m, seed) else null
             // Plants.
             val trees = when (biome) {
                 Biome.TEMPERATE -> listOf(PlantType.OAK, PlantType.POPLAR, PlantType.OAK, PlantType.BIRCH, PlantType.MAPLE)
@@ -922,6 +926,8 @@ class GameMap(val w: Int, val h: Int) {
                 if (m.terrain[i] != Terrain.GRASS || m.plant[i] != null) continue
                 if (coverN.fractal(x.toFloat(), y.toFloat(), GRASS_COVER_SCALE) > GRASS_COVER_SHARE) m.plant[i] = Plant(PlantType.GRASS, x, y, 1f)
             }
+            // Ruin footprints lose their plants, then get their rubble and loot (docs/fidelity/ruins.md).
+            ruinGen?.finish()
             return m
         }
     }

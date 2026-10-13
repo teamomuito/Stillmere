@@ -476,14 +476,21 @@ class AdvancedTest {
     }
 
     @Test fun mentalBreaksHappenToUnhappyColonists() {
-        val g = newGame(6)
-        g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
-        g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE
-        val p = g.colonists[0]
-        p.addThought("Awful day", -0.6f, g.tick, 20 * TICKS_PER_DAY)
-        var broke = false
-        repeat(40) { g.run(1000); if (p.breakUntil > 0) broke = true }
-        assertTrue(broke)
+        // A break is a chance roll on each slow tick: about 0.8 percent a roll at the extreme level, so an unhappy colonist breaks
+        // within 40,000 ticks roughly 7 times in 10. One seed alone is one draw of the random sequence, and generated ruins change that
+        // sequence (docs/fidelity/ruins.md). So the test asserts over twelve seeds: at least five of the twelve colonists must break.
+        var broke = 0
+        for (seed in 6L..17L) {
+            val g = newGame(seed)
+            g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
+            g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE
+            val p = g.colonists[0]
+            p.addThought("Awful day", -0.6f, g.tick, 20 * TICKS_PER_DAY)
+            var seedBroke = false
+            repeat(40) { g.run(1000); if (p.breakUntil > 0) seedBroke = true }
+            if (seedBroke) broke++
+        }
+        assertTrue("$broke of 12 unhappy colonists broke within 40,000 ticks", broke >= 5)
     }
 }
 
@@ -862,6 +869,8 @@ class LifeTest {
 class MultiTileTest {
     @Test fun footprintsBlockAndRotate() {
         val g = newGame(41); g.quiet()
+        // A colony map has generated ruins, whose walls are buildings too (docs/fidelity/ruins.md). The test counts only its own two.
+        val before = g.map.buildings().size
         val x = g.homeX + 5; val y = g.homeY + 5
         for (yy in y - 1..y + 4) for (xx in x - 1..x + 4) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
         assertTrue(g.canBuildAt(BuildDef.EMBER_OVEN, x, y))
@@ -873,9 +882,9 @@ class MultiTileTest {
         val bed = g.map.building[g.map.idx(x, y + 2)]!!
         assertEquals(2, bed.fw); assertEquals(1, bed.fh)
         assertSame(bed, g.map.building[g.map.idx(x + 1, y + 2)])
-        assertEquals(2, g.map.buildings().size)
+        assertEquals(before + 2, g.map.buildings().size)
         val l = SaveGame.read(SaveGame.write(g))
-        assertEquals(2, l.map.buildings().size)
+        assertEquals(before + 2, l.map.buildings().size)
         assertTrue(l.map.buildings().any { it.def == BuildDef.BED && it.rot })
         assertSame(l.map.building[l.map.idx(x + 2, y)], l.map.building[l.map.idx(x, y)])
         g.map.removeBuilding(b)
@@ -1068,6 +1077,8 @@ class MaterialTest {
 
     @Test fun insufficientMaterialWaitsWithoutSpendingAnything() {
         val g = preparedGame(72, Research.PART_ASSEMBLY)
+        // Ruin loot holds hardalloy too (docs/fidelity/ruins.md), so the map is cleared of it before the test counts what is there.
+        for (s in g.map.items.values.filter { it.type == ItemType.HARDALLOY }) g.map.take(g.map.idx(s.x, s.y), s.count)
         val y = g.homeY - 7
         g.clear(g.homeX + 6, y - 1, g.homeX + 12, y + 1)
         assertEquals(0, g.map.countItems(ItemType.HARDALLOY))

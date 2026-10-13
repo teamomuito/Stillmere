@@ -129,9 +129,10 @@ class JobAiTest {
 
     @Test fun aHaulEndsWhenItsItemVanishesBeforePickup() {
         val g = newGame(207)
-        g.removeItems { it.type == ItemType.STEEL }
-        // No weapon is left on the map, so the colonist cannot start an equip job, which holds a key of its own.
-        g.removeItems { it.type.weapon != null }
+        // Every item is cleared first. Ruin loot (docs/fidelity/ruins.md) and the start stock are other haul targets, so with only some
+        // kinds removed the colonist would start a second haul once this one ended. No weapon is left, so the colonist cannot start an
+        // equip job, which holds a key of its own.
+        g.removeItems { true }
         g.paintZone(g.homeX + 6, g.homeY - 6, g.homeX + 8, g.homeY - 4, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.STEEL, 20, g.homeX - 6, g.homeY + 2)
         val c = g.colonists[0]

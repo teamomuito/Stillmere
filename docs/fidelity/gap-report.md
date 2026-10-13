@@ -119,7 +119,7 @@ See `docs/fidelity/time.md` (migration section) and `LegacySaveMigrationTest`, w
 ### 3.2 Map generation
 
 **Status: Divergent.** **Priority 1.**
-**Files:** `GameMap.kt` (`generate`, `generateFor`), `Noise.kt`, `Defs.kt` (`Terrain`, `RockType`, `Ore`, `Biome`, `PlantType`), `Game.kt` (`MAP_SIZE`, `findStartSpot`), `Animals.kt` (`populateWildlife`).
+**Files:** `GameMap.kt` (`generate`, `generateFor`), `Ruins.kt` (ruins, `docs/fidelity/ruins.md`), `Noise.kt`, `Defs.kt` (`Terrain`, `RockType`, `Ore`, `Biome`, `PlantType`), `Game.kt` (`MAP_SIZE`, `findStartSpot`), `Animals.kt` (`populateWildlife`).
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
@@ -140,7 +140,8 @@ berry bushes, feral mirewort, brambles, wildlife herds, a flat start area.
 
 **Missing:**
 * **Grass ground and grass cover** are in (round 18, `grass.md`): grass ground is a terrain with fertility 1.0 (UNVERIFIED), and the cover grows, is harvested for hay from 65 percent growth, and regrows. Still missing: animals grazing it (3.10), grass spread, flowers, bushes, most wild plants.
-* **Caves** are generated on hill tiles (round 19, `caves.md`): tunnels through the rock, with natural roofs, gravel floor and openings onto the surface. Only colonies on large hills can have them (about 4 percent of starts). Still missing: the cave floor's water and gravel patches, cave hives, and cave-ins (`JobDrivers.kt:444` states cave-ins are not modelled). The base game's pocket-map exits and other cave content are DLC and excluded. **Ancient ruins**, steam geysers, map-edge features.
+* **Caves** are generated on hill tiles (round 19, `caves.md`): tunnels through the rock, with natural roofs, gravel floor and openings onto the surface. Only colonies on large hills can have them (about 4 percent of starts). Still missing: the cave floor's water and gravel patches, cave hives, and cave-ins (`JobDrivers.kt:444` states cave-ins are not modelled). The base game's pocket-map exits and other cave content are DLC and excluded. Steam geysers and map-edge features are still missing.
+* **Ruins** are generated on colony maps (round 20, `ruins.md`): square ruins of stone or steel walls with a stone floor, walls damaged by the vanilla destroy rule, rough rock where walls fell, and 3 to 10 loot stacks per ruin from a Stillmere loot table. Battle maps get none. Terrain, ore and roofs are unchanged; plants are cleared only inside the footprints. The save format is unchanged (version 39). Still missing: the monument shapes, furniture and doors, filth rubble (rough rock stands in), and the ruin count and loot table, which are UNVERIFIED (vanilla values are XML).
 * **Roofs.** Only a natural roof flag exists. There is no roof designation, no building of roofs, and no roof collapse.
 * **Ore as vanilla places it:** the subsoil auger reads the ore under its own cell, but ore only exists inside rock, which cannot be built on. See 3.9 (defect).
 * Rock chunks on the surface, mining yields and mine work are custom (`Ore.work` 1000 to 2200, plain rock 1000).
@@ -634,7 +635,7 @@ Per `CLAUDE.md`: flagged, not deleted.
 ## 7. Top 10 gaps
 
 1. ~~**Time base (24,000 vs 60,000 ticks per day)**~~ **Done** (`7e402c9`): 60,000 ticks per day. (3.1)
-2. **Map: new colonies are 250 x 250 (round 6); grass ground and covers are in (round 18, `grass.md`); caves are generated on hill tiles (round 19, `caves.md`); no ruins.** Roofs and roof collapse are in (3.3, `roofs.md`); the app has no roof command yet. (3.2, 3.3, 3.9)
+2. **Map: new colonies are 250 x 250 (round 6); grass ground and covers are in (round 18, `grass.md`); caves are generated on hill tiles (round 19, `caves.md`); ruins are generated on colony maps (round 20, `ruins.md`).** Roofs and roof collapse are in (3.3, `roofs.md`); the app has no roof command yet. (3.2, 3.3, 3.9)
 3. **Needs and mood model:** the drains, hunger categories, break timing, drug tolerance and the four added needs now follow the decompiled reference (round 13, `needs-mood.md`). The thought catalogue, mood smoothing and the chemical interest need are still missing. (3.5)
 4. **Combat model** (3.11): band accuracy, the shooter factor, the cover pass, the layered armour roll, melee dodge and stagger, and burning are done from the reference (combat round, `combat.md`). Still open: the weapon stat values, the intercept and stray-miss model, minimum range, stun, EMP, shields, and the fire growth rows of 3.8.
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)
@@ -862,3 +863,16 @@ Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, 
 * **Measured:** a 90 by 90 rock mass keeps 80 to 93 percent of its rock as wall. A 250 by 250 cave map has 610 to 1,943 carved cells, of which 19 to 91 touch open ground. Map generation takes 41 to 136 ms in the test JVM. No phone was measured.
 * **README:** the caves claim is back in the World section ("Caves in some hill country"), because caves now exist. Section 4 above is updated to match.
 * **Open:** the owner confirms the mountain mapping (0.5, UNVERIFIED, since no colony uses it) and decides whether colonies may start on mountain tiles, which would raise the share with caves and changes the home choice and the world. The owner decides whether caves get water patches, and with which noise. The value-noise heading is a model difference (C). The base game's mutator placement rules are not adopted: the tile-validity check is at `RimWorld/TileMutatorDef.cs:172` and tests the def's own ranges and categories, whose values for the Caves definition are in XML and are UNVERIFIED, and the Caves definition's non-landmark chance is XML too (UNVERIFIED). The owner decides whether battle maps get caves.
+
+## 20. Generated ruins (3.2), round 20
+
+Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, the rows not adopted, the test notes and the open items are in [ruins.md](ruins.md). Nothing is committed.
+
+* **Review findings fixed (three, all in `GameTest.kt`; each failed in the working tree with the ruins on the map):**
+  * `MultiTileTest.footprintsBlockAndRotate` expected two buildings. Ruin walls are buildings, so the test now counts from a baseline taken before it places anything (`before + 2`, before and after the save round-trip).
+  * `MaterialTest.insufficientMaterialWaitsWithoutSpendingAnything` expected no hardalloy on the map. Ruin loot holds 11 on that seed, so the test removes the map's hardalloy before it counts.
+  * `AdvancedTest.mentalBreaksHappenToUnhappyColonists` expected a break for seed 6 within 40,000 ticks. A break is one roll every 250 ticks at about 0.8 percent (`BreakRules.chance`, extreme level), so one colonist in that window breaks about 7 times in 10. The ruins change the random sequence and so change the outcome of that one roll. The mood path for seed 6 was the same with and without ruins. Over seeds 6 to 17 with the same setup, 7 of 12 colonists broke with ruins and 9 of 12 without, which is the spread the chance predicts. The test now asserts that at least five of the twelve break within 40,000 ticks. A broken break mechanism gives zero, so the assertion still tests the mechanism. This changes an assertion, so it is open for the owner to confirm (below).
+* **Citation audit.** Every D citation in `ruins.md` was opened at its line in the clone (`/home/user/chillu1/rimworlddecompiled`). Rows whose cited line did not hold the claim were changed to C or not adopted, with the reason. The main changes: the wall outline is C (vanilla places walls from a generated shape, not a rectangle), and the rubble chance is C (0.5 is vanilla's filth scatter chance around a tank trap, not per destroyed wall). The floor and buildables rows no longer cite `SketchResolver_FloorFill.cs:63`, which is in the open-shape path. The list is in `ruins.md`, "Round 20 changes". No row was added to `decompiled-reference.md`.
+* **Code.** The only code change is a comment: `Ruins.RUBBLE_CHANCE` is now described as C. The generator and its numbers are unchanged, so the measurements in `ruins.md` still hold. The save format is unchanged and `VERSION` stays 39.
+* **Tests.** `./gradlew :sim:test --console=plain` does not finish within the 600-second limit, so it ran as six foreground calls, with `--tests` filters that together name every test class. The calls ran 42, 58, 45, 171, 184 and 288 tests. The totals add to 788, the number of `@Test` methods. All passed, with 0 failures and 0 errors. The 58-test call took 578 seconds, close to the limit, so its heavy classes are in that call alone.
+* **Open:** the owner confirms the mental break test's change from one seed to twelve (a test change, not a ruin change). The count per 10,000 cells (0.5 to 1.0), the loot table and the rubble choice remain C and UNVERIFIED, and the owner decides the rubble pile count (the open items in `ruins.md`).
