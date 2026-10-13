@@ -8,13 +8,13 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private fun newGame(seed: Long = 7, sc: Scenario = Scenario.CRASHLANDED): Game {
-    val g = Game(seed)
+private fun newGame(seed: Long = 7, sc: Scenario = Scenario.SALVAGE_CREW): Game {
+    val g = Game(seed, GameMap.generateFor(Game.MAP_SIZE, Game.MAP_SIZE, seed, Biome.TEMPERATE))
     g.startNewColony(sc)
     return g
 }
 
-private fun Game.addComms() { val b = Building(BuildDef.COMMS_CONSOLE, homeX + 8, homeY + 8, true); b.powered = true; map.setBuilding(b) }
+private fun Game.addComms() { val b = Building(BuildDef.SIGNAL_DESK, homeX + 8, homeY + 8, true); b.powered = true; map.setBuilding(b) }
 private fun Game.run(ticks: Int) { repeat(ticks) { step() } }
 private fun Game.quiet() { mentalBreaksEnabled = false; pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }; nextRaid = Long.MAX_VALUE; nextMisc = Long.MAX_VALUE; nextWanderer = Long.MAX_VALUE; nextTrader = Long.MAX_VALUE }
 
@@ -43,7 +43,7 @@ class PathfinderTest {
 class WorldTest {
     @Test fun mapHasPlayableTerrainInEveryBiome() {
         for (b in Biome.entries) {
-            val m = GameMap.generate(100, 100, 42, b)
+            val m = GameMap.generate(Game.MAP_SIZE, Game.MAP_SIZE, 42, b)
             assertTrue("$b rock", m.terrain.count { it == Terrain.ROCK } > 200)
             assertTrue("$b ore", m.ore.count { it != Ore.NONE } > 10)
             assertTrue("$b land", m.terrain.count { it.passable && it != Terrain.WATER_SHALLOW } > 5000)
@@ -61,6 +61,8 @@ class WorldTest {
         }
         val fire = Building(BuildDef.CAMPFIRE, hx + 2, hy + 2, true); fire.fuel = 24f
         g.map.building[g.map.idx(hx + 2, hy + 2)] = fire
+        // The walled room is indoors only when roofed (docs/fidelity/roofs.md).
+        for (x in hx + 1..hx + 3) for (y in hy + 1..hy + 3) g.map.setRoof(g.map.idx(x, y), true)
         g.map.roomDirty = true
         g.tempOffset = -25f
         g.run(4000)
@@ -78,13 +80,13 @@ class WorldTest {
         for (x in hx..hx + 4) { val i = g.map.idx(x, hy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null; g.map.building[i] = null }
         g.map.conduit[g.map.idx(hx + 1, hy)] = true; g.map.conduit[g.map.idx(hx + 2, hy)] = true; g.map.conduit[g.map.idx(hx + 3, hy)] = true
         val solar = Building(BuildDef.SOLAR_PANEL, hx, hy, true); g.map.building[g.map.idx(hx, hy)] = solar
-        val lamp = Building(BuildDef.STANDING_LAMP, hx + 4, hy, true); g.map.building[g.map.idx(hx + 4, hy)] = lamp
+        val lamp = Building(BuildDef.POLE_LANTERN, hx + 4, hy, true); g.map.building[g.map.idx(hx + 4, hy)] = lamp
         // Run into daytime.
         g.tick = 12L * TICKS_PER_HOUR
         g.run(tk(600))
         assertTrue("lamp powered", lamp.powered)
         assertTrue(g.power.produced > 500f)
-        // A solar flare shuts everything down.
+        // A corona surge shuts everything down.
         g.solarFlareUntil = g.tick + 5000
         g.run(500)
         assertFalse(lamp.powered)
@@ -109,12 +111,15 @@ class HealthTest {
 
     @Test fun woundsBleedAndTendingHelps() {
         val (g, p) = human()
-        p.skill[SkillType.MEDICINE.ordinal] = 15
+        p.skill[SkillType.HEALING.ordinal] = 15
+        // This test is about bleeding and tending, not armour. The armour roll is made per hit (docs/fidelity/combat.md), so the
+        // starting clothes could deflect the cut. They are taken off here so the wound is certain.
+        p.apparel.clear()
         g.dealDamage(p, DamageKind.CUT, 12f, 0f, null, 0)
         assertTrue(p.injuries.isNotEmpty())
         assertTrue(p.bleeding > 0f)
         val before = p.bleeding
-        g.tendPawn(p, p, ItemType.MEDS_INDUSTRIAL)
+        g.tendPawn(p, p, ItemType.MEDS_STERILE_DRESSING)
         assertTrue(p.bleeding < before * 0.5f)
         assertFalse(p.untended)
     }
@@ -122,7 +127,7 @@ class HealthTest {
     @Test fun woundsHealWithRest() {
         val (g, p) = human()
         g.dealDamage(p, DamageKind.BRUISE, 10f, 0f, null, 3)
-        g.tendPawn(null, p, ItemType.MEDS_HERBAL)
+        g.tendPawn(null, p, ItemType.MEDS_LEAF_POULTICE)
         g.run(TICKS_PER_DAY * 6)
         assertTrue("healed ${p.injuries.size}", p.injuries.none { !it.scar && it.severity > 0.5f })
         assertTrue(p.alive)
@@ -134,7 +139,7 @@ class HealthTest {
         for (k in 0 until 6) g.woundPart(p, 0, DamageKind.CUT, 5f)
         var worst = 0f
         repeat(96) { g.run(1000); worst = maxOf(worst, p.bloodLoss) }
-        assertTrue("worst blood loss $worst", p.dead || worst > 0.3f)
+        assertTrue("worst bleed-out $worst", p.dead || worst > 0.3f)
     }
 
     @Test fun destroyingTheHeartKills() {
@@ -157,7 +162,7 @@ class HealthTest {
         val g = newGame(); g.quiet()
         val a = g.colonists[0]; val b = g.colonists[1]
         a.apparel.clear(); b.apparel.clear()
-        b.apparel.add(Worn(ItemType.A_FLAK_VEST, Quality.NORMAL, 160f))
+        b.apparel.add(Worn(ItemType.A_RIBBED_VEST, Quality.NORMAL, 160f))
         var da = 0f; var db = 0f
         repeat(40) {
             a.injuries.clear(); b.injuries.clear()
@@ -169,19 +174,19 @@ class HealthTest {
         assertTrue("armored $db vs bare $da", db < da * 0.75f)
     }
 
-    @Test fun coldWithoutClothesCausesHypothermia() {
+    @Test fun coldWithoutClothesCausesColdCore() {
         val g = newGame(); g.quiet()
         val p = g.colonists[0]
         p.apparel.clear()
         g.tempOffset = -40f; g.tempEventUntil = g.tick + 10 * TICKS_PER_DAY
         g.run(3000)
-        assertNotNull(p.hediff(HediffKind.HYPOTHERMIA))
+        assertNotNull(p.hediff(HediffKind.COLD_CORE))
     }
 
     @Test fun illnessRunsItsCourseWithCare() {
         val (g, p) = human()
-        g.addHediff(p, HediffKind.FLU, 0.1f)
-        repeat(8) { g.tendPawn(null, p, ItemType.MEDS_HERBAL); g.run(TICKS_PER_DAY / 4) }
+        g.addHediff(p, HediffKind.CHEST_COUGH, 0.1f)
+        repeat(8) { g.tendPawn(null, p, ItemType.MEDS_LEAF_POULTICE); g.run(TICKS_PER_DAY / 4) }
         assertTrue(p.alive)
     }
 }
@@ -219,26 +224,31 @@ class ColonyTest {
         assertTrue(g.map.terrain[rockI] != Terrain.ROCK)
     }
 
-    @Test fun cropsGrowAndGetHarvested() {
+    @Test fun cropsSownInAGrowingZoneGrowOnTheReferenceRate() {
+        // Rice takes about 11.6 game days of light on Stillmere's day (docs/fidelity/economy.md; RimWorld/Plant.cs:346). After
+        // 8 days the first crops are still growing, not ripe, and the cold snap on day 9 kills immature crops (the frost rule).
+        // So this checks the growth made in the zone, which is the part the reference rate changed.
         val g = newGame(); g.quiet()
         g.paintZone(g.homeX - 2, g.homeY + 3, g.homeX + 2, g.homeY + 5, ZoneKind.GROWING, PlantType.RICE)
-        g.run(TICKS_PER_DAY * 9)
-        assertTrue("planted", g.map.plant.any { it?.type == PlantType.RICE } || g.map.countItems(ItemType.RICE) > 0)
+        g.run(TICKS_PER_DAY * 8)
+        val rice = g.map.plant.filterNotNull().filter { it.type == PlantType.RICE }
+        assertTrue("planted", rice.isNotEmpty())
+        assertTrue("grown past the first days", rice.maxOf { it.growth } > 0.4f)
     }
 
     @Test fun billsCookMealsFromRawFood() {
         val g = newGame(); g.quiet()
         g.researchDone.addAll(Research.entries)
         val sx = g.homeX + 4; val sy = g.homeY
-        val stove = Building(BuildDef.STOVE_FUEL, sx, sy, true); stove.fuel = 10f
+        val stove = Building(BuildDef.EMBER_OVEN, sx, sy, true); stove.fuel = 10f
         g.map.building[g.map.idx(sx, sy)] = stove
-        val bill = Bill(Recipe.COOK_SIMPLE); bill.mode = BillMode.DO_X; bill.target = 2
+        val bill = Bill(Recipe.COOK_HEARTH_STEW); bill.mode = BillMode.DO_X; bill.target = 2
         stove.bills.add(bill)
         g.map.drop(ItemType.RICE, 60, g.homeX, g.homeY - 2)
         // Remove existing meals so the new ones are countable.
-        val mealsBefore = g.map.countItems(ItemType.MEAL_SIMPLE)
+        val mealsBefore = g.map.countItems(ItemType.MEAL_HEARTH_STEW)
         g.run(9000)
-        assertTrue("meals ${g.map.countItems(ItemType.MEAL_SIMPLE)} vs $mealsBefore", g.map.countItems(ItemType.MEAL_SIMPLE) >= mealsBefore - 6 + 2 || stove.bills.isEmpty())
+        assertTrue("meals ${g.map.countItems(ItemType.MEAL_HEARTH_STEW)} vs $mealsBefore", g.map.countItems(ItemType.MEAL_HEARTH_STEW) >= mealsBefore - 6 + 2 || stove.bills.isEmpty())
         assertTrue(bill.done >= 1)
     }
 
@@ -248,16 +258,16 @@ class ColonyTest {
         // The nearest free spot for a three-wide bench: a tree or rock can sit on any fixed spot the map happens to produce.
         val (bx, by) = (-6..6).flatMap { dx -> (-6..6).map { dy -> g.homeX + dx to g.homeY + dy } }
             .sortedBy { (x, y) -> kotlin.math.abs(x - g.homeX) + kotlin.math.abs(y - g.homeY) }
-            .first { (x, y) -> g.canBuildAt(BuildDef.RESEARCH_BENCH, x, y) }
-        g.placeBlueprint(BuildDef.RESEARCH_BENCH, bx, by)
+            .first { (x, y) -> g.canBuildAt(BuildDef.STUDY_DESK, x, y) }
+        g.placeBlueprint(BuildDef.STUDY_DESK, bx, by)
         val scholar = g.colonists.first { !it.workBlocked(WorkType.RESEARCH) }
         for (c in g.colonists) c.priority[WorkType.RESEARCH.ordinal] = 0
         scholar.priority[WorkType.RESEARCH.ordinal] = 1
-        g.startResearch(Research.SMITHING)
+        g.startResearch(Research.FORGEWORK)
         g.run(TICKS_PER_DAY / 2)
-        assertTrue("not instant", Research.SMITHING !in g.researchDone)
+        assertTrue("not instant", Research.FORGEWORK !in g.researchDone)
         g.run(TICKS_PER_DAY * 10)
-        assertTrue(Research.SMITHING in g.researchDone)
+        assertTrue(Research.FORGEWORK in g.researchDone)
         assertTrue(g.canBuildAt(BuildDef.STEEL_WALL, g.homeX + 6, g.homeY - 6))
     }
 
@@ -274,20 +284,20 @@ class ColonyTest {
         val g = newGame()
         g.run(3000)
         g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 5, g.homeY + 5)
-        g.researchCurrent = Research.SMITHING
+        g.researchCurrent = Research.FORGEWORK
         val c = g.colonists[0]
         g.dealDamage(c, DamageKind.CUT, 9f, 0f, null, 0)
-        g.addHediff(c, HediffKind.FLU, 0.2f)
+        g.addHediff(c, HediffKind.CHEST_COUGH, 0.2f)
         val bench = Building(BuildDef.CAMPFIRE, g.homeX + 6, g.homeY + 6, true)
-        bench.bills.add(Bill(Recipe.COOK_SIMPLE).also { it.mode = BillMode.FOREVER })
+        bench.bills.add(Bill(Recipe.COOK_HEARTH_STEW).also { it.mode = BillMode.FOREVER })
         g.map.building[g.map.idx(g.homeX + 6, g.homeY + 6)] = bench
         val loaded = SaveGame.read(SaveGame.write(g))
         assertEquals(g.tick, loaded.tick)
         assertEquals(g.colonists.map { it.name }, loaded.colonists.map { it.name })
-        assertEquals(g.map.countItems(ItemType.MEAL_SIMPLE), loaded.map.countItems(ItemType.MEAL_SIMPLE))
+        assertEquals(g.map.countItems(ItemType.MEAL_HEARTH_STEW), loaded.map.countItems(ItemType.MEAL_HEARTH_STEW))
         assertNotNull(loaded.map.building[loaded.map.idx(g.homeX + 5, g.homeY + 5)])
         assertEquals(1, loaded.map.building[loaded.map.idx(g.homeX + 6, g.homeY + 6)]!!.bills.size)
-        assertEquals(Research.SMITHING, loaded.researchCurrent)
+        assertEquals(Research.FORGEWORK, loaded.researchCurrent)
         val lc = loaded.pawnById(c.id)!!
         assertEquals(c.injuries.size, lc.injuries.size)
         assertEquals(c.hediffs.size, lc.hediffs.size)
@@ -323,7 +333,7 @@ class CombatTest {
         val cell = (-3..3).flatMap { dy -> (-3..3).map { dx -> g.homeX + 6 + dx to g.homeY + 6 + dy } }
         val bed = Building(BuildDef.BED, g.homeX + 6, g.homeY + 6, true); bed.prisonerBed = true
         g.map.building[g.map.idx(g.homeX + 6, g.homeY + 6)] = bed
-        val raider = g.newRaider(g.homeX + 3, g.homeY + 4, ItemType.W_KNIFE, 1)
+        val raider = g.newRaider(g.homeX + 3, g.homeY + 4, ItemType.W_POCKET_BLADE, 1)
         for (i in raider.race.body.indices) if (raider.race.body[i].tag == PartTag.LEG) g.woundPart(raider, i, DamageKind.CUT, 80f)
         raider.tameMark = false
         g.downPawn(raider)
@@ -331,7 +341,7 @@ class CombatTest {
         g.run(2500)
         assertTrue("captured", raider.prisoner)
         raider.resistance = 0f
-        g.colonists.forEach { it.skill[SkillType.SOCIAL.ordinal] = 15 }
+        g.colonists.forEach { it.skill[SkillType.RAPPORT.ordinal] = 15 }
         for (k in 0 until 40) { raider.lastSocial = -99999; g.run(1000); if (!raider.prisoner) break }
         assertTrue("recruited", !raider.prisoner && raider.faction == Faction.PLAYER && raider.colonist)
         assertTrue(cell.isNotEmpty())
@@ -342,7 +352,7 @@ class AnimalTest {
     @Test fun huntedAnimalsBecomeMeat() {
         val g = newGame(9); g.quiet()
         g.researchDone.addAll(Research.entries)
-        val table = Building(BuildDef.BUTCHER_TABLE, g.homeX + 3, g.homeY - 4, true)
+        val table = Building(BuildDef.CARVING_SLAB, g.homeX + 3, g.homeY - 4, true)
         g.map.building[g.map.idx(g.homeX + 3, g.homeY - 4)] = table
         val deer = g.newAnimal(Race.DEER, g.homeX + 8, g.homeY + 2)
         deer.huntMark = true
@@ -356,7 +366,7 @@ class AnimalTest {
         val g = newGame(9); g.quiet()
         val hare = g.newAnimal(Race.COW, g.homeX + 4, g.homeY + 3)
         hare.tameMark = true
-        for (c in g.colonists) { c.priority[WorkType.HANDLE.ordinal] = 1; c.skill[SkillType.ANIMALS.ordinal] = 14 }
+        for (c in g.colonists) { c.priority[WorkType.HANDLE.ordinal] = 1; c.skill[SkillType.HUSBANDRY.ordinal] = 14 }
         g.run(15000)
         assertEquals(Faction.PLAYER, hare.faction)
     }
@@ -412,29 +422,29 @@ class ScenarioTest {
 
 
 class AdvancedTest {
-    @Test fun surgeryInstallsABionicLeg() {
+    @Test fun surgeryInstallsAServoLeg() {
         val g = newGame(8); g.quiet()
         g.researchDone.addAll(Research.entries)
-        val bed = Building(BuildDef.HOSPITAL_BED, g.homeX + 3, g.homeY - 3, true)
+        val bed = Building(BuildDef.INFIRMARY_COT, g.homeX + 3, g.homeY - 3, true)
         g.map.building[g.map.idx(g.homeX + 3, g.homeY - 3)] = bed
-        g.map.drop(ItemType.PLASTEEL, 40, g.homeX, g.homeY - 2)
+        g.map.drop(ItemType.HARDALLOY, 40, g.homeX, g.homeY - 2)
         g.map.drop(ItemType.GOLD, 40, g.homeX + 1, g.homeY - 2)
         g.map.drop(ItemType.COMPONENT, 20, g.homeX - 1, g.homeY - 2)
         val doc = g.colonists[0]; val pat = g.colonists[1]
-        doc.skill[SkillType.MEDICINE.ordinal] = 16
+        doc.skill[SkillType.HEALING.ordinal] = 16
         for (c in g.colonists) c.priority[WorkType.DOCTOR.ordinal] = if (c === doc) 1 else 0
         val leg = pat.race.body.indexOfFirst { it.tag == PartTag.LEG }
         g.woundPart(pat, leg, DamageKind.CUT, 80f)
         assertTrue(pat.partMissing(leg))
-        val order = g.availableSurgeries(pat).first { it.kind == SurgeryKind.INSTALL && it.part == leg && it.implant == Implant.BIONIC_LEG }
+        val order = g.availableSurgeries(pat).first { it.kind == SurgeryKind.INSTALL && it.part == leg && it.implant == Implant.SERVO_STRIDER }
         g.queueSurgery(pat, order)
         g.run(14000)
-        assertTrue("implanted ${pat.implants} queue=${pat.surgeries.size}", pat.implants[leg] == Implant.BIONIC_LEG || pat.surgeries.isEmpty())
+        assertTrue("implanted ${pat.implants} queue=${pat.surgeries.size}", pat.implants[leg] == Implant.SERVO_STRIDER || pat.surgeries.isEmpty())
     }
 
-    @Test fun mechanoidsDropScrapWhenDestroyed() {
+    @Test fun ironSwarmsDropScrapWhenDestroyed() {
         val g = newGame(4); g.quiet()
-        val m = g.newMech(Race.SCYTHER, g.homeX + 20, g.homeY, 1)
+        val m = g.newMech(Race.HOOKTALON, g.homeX + 20, g.homeY, 1)
         assertFalse(m.hostile.not())
         val steel = g.map.countItems(ItemType.STEEL)
         g.woundPart(m, 4, DamageKind.BULLET, 80f) // power core
@@ -466,14 +476,21 @@ class AdvancedTest {
     }
 
     @Test fun mentalBreaksHappenToUnhappyColonists() {
-        val g = newGame(6)
-        g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
-        g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE
-        val p = g.colonists[0]
-        p.addThought("Awful day", -0.6f, g.tick, 20 * TICKS_PER_DAY)
-        var broke = false
-        repeat(40) { g.run(1000); if (p.breakUntil > 0) broke = true }
-        assertTrue(broke)
+        // A break is a chance roll on each slow tick: about 0.8 percent a roll at the extreme level, so an unhappy colonist breaks
+        // within 40,000 ticks roughly 7 times in 10. One seed alone is one draw of the random sequence, and generated ruins change that
+        // sequence (docs/fidelity/ruins.md). So the test asserts over twelve seeds: at least five of the twelve colonists must break.
+        var broke = 0
+        for (seed in 6L..17L) {
+            val g = newGame(seed)
+            g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
+            g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE
+            val p = g.colonists[0]
+            p.addThought("Awful day", -0.6f, g.tick, 20 * TICKS_PER_DAY)
+            var seedBroke = false
+            repeat(40) { g.run(1000); if (p.breakUntil > 0) seedBroke = true }
+            if (seedBroke) broke++
+        }
+        assertTrue("$broke of 12 unhappy colonists broke within 40,000 ticks", broke >= 5)
     }
 }
 
@@ -519,24 +536,24 @@ class CraftingTest {
     @Test fun tailorsMakeClothesAndColonistsWearThem() {
         val g = newGame(12); g.quiet()
         g.researchDone.addAll(Research.entries)
-        bench(g, BuildDef.TAILOR_BENCH, 4, -3, Recipe.MAKE_PARKA)
+        bench(g, BuildDef.STITCH_FRAME, 4, -3, Recipe.MAKE_PADDED_COAT)
         g.map.drop(ItemType.CLOTH, 200, g.homeX, g.homeY - 2)
-        for (c in g.colonists) c.skill[SkillType.CRAFTING.ordinal] = 8
+        for (c in g.colonists) c.skill[SkillType.WORKMANSHIP.ordinal] = 8
         for (c in g.colonists) c.priority[WorkType.TAILOR.ordinal] = 1
         g.run(12000)
-        val parkas = g.map.items.values.count { it.type == ItemType.A_PARKA } + g.colonists.count { c -> c.apparel.any { it.type == ItemType.A_PARKA } }
-        assertTrue("parkas $parkas", parkas >= 1)
+        val paddedCoats = g.map.items.values.count { it.type == ItemType.A_PADDED_COAT } + g.colonists.count { c -> c.apparel.any { it.type == ItemType.A_PADDED_COAT } }
+        assertTrue("padded coats $paddedCoats", paddedCoats >= 1)
         g.run(8000)
-        assertTrue("someone wears it", g.colonists.any { c -> c.apparel.any { it.type == ItemType.A_PARKA } })
+        assertTrue("someone wears it", g.colonists.any { c -> c.apparel.any { it.type == ItemType.A_PADDED_COAT } })
     }
 
     @Test fun smithsCraftWeapons() {
         val g = newGame(13); g.quiet()
         g.researchDone.addAll(Research.entries)
-        bench(g, BuildDef.SMITHY, 4, -3, Recipe.MAKE_KNIFE, 2)
-        for (c in g.colonists) { c.skill[SkillType.CRAFTING.ordinal] = 10; c.priority[WorkType.SMITH.ordinal] = 1 }
+        bench(g, BuildDef.COAL_FORGE, 4, -3, Recipe.MAKE_POCKET_BLADE, 2)
+        for (c in g.colonists) { c.skill[SkillType.WORKMANSHIP.ordinal] = 10; c.priority[WorkType.SMITH.ordinal] = 1 }
         g.run(15000)
-        val knives = g.map.items.values.count { it.type == ItemType.W_KNIFE } + g.pawns.count { it.weaponItem == ItemType.W_KNIFE }
+        val knives = g.map.items.values.count { it.type == ItemType.W_POCKET_BLADE } + g.pawns.count { it.weaponItem == ItemType.W_POCKET_BLADE }
         assertTrue("knives $knives", knives >= 2)
     }
 
@@ -553,7 +570,7 @@ class CraftingTest {
     @Test fun drugLabBrewsBeer() {
         val g = newGame(15); g.quiet()
         g.researchDone.addAll(Research.entries)
-        bench(g, BuildDef.DRUG_LAB, 4, -3, Recipe.BREW_BEER)
+        bench(g, BuildDef.TINCTURE_RIG, 4, -3, Recipe.BREW_BEER)
         g.map.drop(ItemType.CORN, 30, g.homeX + 1, g.homeY - 2)
         for (c in g.colonists) c.priority[WorkType.CRAFT.ordinal] = 1
         g.run(10000)
@@ -566,7 +583,7 @@ class CraftingTest {
         val x = g.homeX + 8; val y = g.homeY - 8
         val i = g.map.idx(x, y)
         g.map.terrain[i] = Terrain.GRAVEL; g.map.plant[i] = null
-        val h = Building(BuildDef.HYDROPONICS, x, y, true); h.powered = true
+        val h = Building(BuildDef.GROW_TRAY, x, y, true); h.powered = true
         g.map.building[i] = h
         g.map.conduit[g.map.idx(x + 1, y)] = true
         val solar = Building(BuildDef.SOLAR_PANEL, x + 2, y, true)
@@ -588,14 +605,14 @@ class VictoryTest {
         val g = newGame(77); g.quiet()
         g.researchDone.addAll(Research.entries)
         // Plenty of everything and a power grid-free build site.
-        for (t in listOf(ItemType.STEEL, ItemType.PLASTEEL, ItemType.COMPONENT, ItemType.GOLD)) g.map.drop(t, 800, g.homeX, g.homeY - 2)
-        val spots = listOf(BuildDef.SHIP_COMPUTER, BuildDef.SHIP_ENGINE, BuildDef.SHIP_ENGINE, BuildDef.SHIP_REACTOR, BuildDef.SHIP_CASKET)
+        for (t in listOf(ItemType.STEEL, ItemType.HARDALLOY, ItemType.COMPONENT, ItemType.GOLD)) g.map.drop(t, 800, g.homeX, g.homeY - 2)
+        val spots = listOf(BuildDef.NAVIGATION_BRAIN, BuildDef.THRUST_DRIVE, BuildDef.THRUST_DRIVE, BuildDef.CORE_FURNACE, BuildDef.COLD_POD)
         for ((k, d) in spots.withIndex()) {
             val x = g.homeX + 6 + k * 4; val y = g.homeY - 7
             for (yy in y until y + 4) for (xx in x until x + 4) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null; g.map.building[i] = null }
             assertTrue("place ${d.label}", g.placeBlueprint(d, x, y))
         }
-        for (c in g.colonists) { c.skill[SkillType.CONSTRUCTION.ordinal] = 16; c.priority[WorkType.CONSTRUCT.ordinal] = 1 }
+        for (c in g.colonists) { c.skill[SkillType.ARCHITECTURE.ordinal] = 16; c.priority[WorkType.CONSTRUCT.ordinal] = 1 }
         assertFalse(g.shipComplete())
         g.run(TICKS_PER_DAY * 5)
         assertTrue("ship complete", g.shipComplete())
@@ -606,11 +623,11 @@ class VictoryTest {
 
 class CaravanTest {
     private fun packed(g: Game): Pair<List<Pawn>, Map<ItemType, Int>> {
-        g.map.drop(ItemType.MEAL_PACKAGED, 20, g.homeX, g.homeY)
+        g.map.drop(ItemType.MEAL_RATION, 20, g.homeX, g.homeY)
         g.map.drop(ItemType.STEEL, 100, g.homeX, g.homeY)
         g.paintZone(g.homeX - 2, g.homeY - 2, g.homeX + 2, g.homeY + 2, ZoneKind.STOCKPILE)
-        g.map.drop(ItemType.MEAL_PACKAGED, 20, g.homeX, g.homeY); g.map.drop(ItemType.STEEL, 100, g.homeX, g.homeY)
-        return listOf(g.colonists[0]) to mapOf(ItemType.MEAL_PACKAGED to 20, ItemType.STEEL to 10)
+        g.map.drop(ItemType.MEAL_RATION, 20, g.homeX, g.homeY); g.map.drop(ItemType.STEEL, 100, g.homeX, g.homeY)
+        return listOf(g.colonists[0]) to mapOf(ItemType.MEAL_RATION to 20, ItemType.STEEL to 10)
     }
 
     @Test fun worldHasHomeSettlementsAndRoutes() {
@@ -734,7 +751,7 @@ class FactionTest {
 class MapSizeTest {
     @Test fun largeMapRunsAndSaves() {
         val g = Game(11, GameMap.generateFor(150, 150, 11, Biome.BOREAL))
-        g.startNewColony(Scenario.CRASHLANDED)
+        g.startNewColony(Scenario.SALVAGE_CREW)
         g.run(24000)
         assertEquals(150, g.map.w)
         val l = SaveGame.read(SaveGame.write(g))
@@ -744,8 +761,10 @@ class MapSizeTest {
 
 class SettleTest {
     @Test fun caravanFoundsNewColonyAndOldOneIsArchived() {
-        // Seed 22: the random draws moved with the time base, and seed 21's trip now meets an ambush. This test is about settling.
-        val g = newGame(22, Scenario.LOST_TRIBE); g.quiet()
+        // Random ambushes and finds on the road are the one part of the trip that depends on the seed. This test is about settling,
+        // so they are switched off, and the trip no longer depends on the seed.
+        val g = newGame(22, Scenario.QUIET_ENCLAVE); g.quiet()
+        g.randomCaravanEvents = false
         g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY + 3, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.STEEL, 60, g.homeX, g.homeY)
         val homeTile = g.world.homeTile
@@ -774,7 +793,7 @@ class SettleTest {
 
 class LifeTest {
     @Test fun couplesConceiveAndBabiesAreBornAndFed() {
-        val g = newGame(31, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(31, Scenario.QUIET_ENCLAVE); g.quiet()
         val f = g.colonists.first { it.female }; val m = g.colonists.first { !it.female }
         f.age = 25; m.age = 27; f.spouse = m.id; m.spouse = f.id
         g.map.drop(ItemType.MILK, 40, g.homeX, g.homeY)
@@ -791,8 +810,12 @@ class LifeTest {
         assertNotNull(baby)
         assertEquals(before + 1, g.pawns.count { !it.isAnimal })
         assertEquals(f.id, baby!!.mother)
+        // Only an idle adult feeds a baby. For the feeding, every colonist is idle and fed, so none goes for food, rest or work and
+        // takes the milk first. The old milk is removed and fresh milk is put down: milk spoils, and an old stack would rot away
+        // before the feeder reached it.
+        for (p in g.colonists) { for (w in WorkType.entries) p.priority[w.ordinal] = 0; p.job = null; p.food = 1f; p.rest = 1f; p.joy = 1f }
+        for (st in g.map.items.values.filter { it.type == ItemType.MILK }) g.map.take(g.map.idx(st.x, st.y), st.count)
         // Babies use 0.6 of the adult rate (1.6 a day), so one meal of milk is not enough for long: they need feeding about twice a day.
-        // Adults eat milk too, so restock it now: the test checks the feeding, not what is left over.
         g.map.drop(ItemType.MILK, 10, g.homeX, g.homeY)
         baby.food = 0.2f
         var fed = false
@@ -846,10 +869,12 @@ class LifeTest {
 class MultiTileTest {
     @Test fun footprintsBlockAndRotate() {
         val g = newGame(41); g.quiet()
+        // A colony map has generated ruins, whose walls are buildings too (docs/fidelity/ruins.md). The test counts only its own two.
+        val before = g.map.buildings().size
         val x = g.homeX + 5; val y = g.homeY + 5
         for (yy in y - 1..y + 4) for (xx in x - 1..x + 4) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
-        assertTrue(g.canBuildAt(BuildDef.STOVE_FUEL, x, y))
-        assertTrue(g.placeBlueprint(BuildDef.STOVE_FUEL, x, y))
+        assertTrue(g.canBuildAt(BuildDef.EMBER_OVEN, x, y))
+        assertTrue(g.placeBlueprint(BuildDef.EMBER_OVEN, x, y))
         val b = g.map.building[g.map.idx(x, y)]!!
         assertSame(b, g.map.building[g.map.idx(x + 2, y)])
         assertFalse(g.canBuildAt(BuildDef.TABLE, x + 1, y))
@@ -857,9 +882,9 @@ class MultiTileTest {
         val bed = g.map.building[g.map.idx(x, y + 2)]!!
         assertEquals(2, bed.fw); assertEquals(1, bed.fh)
         assertSame(bed, g.map.building[g.map.idx(x + 1, y + 2)])
-        assertEquals(2, g.map.buildings().size)
+        assertEquals(before + 2, g.map.buildings().size)
         val l = SaveGame.read(SaveGame.write(g))
-        assertEquals(2, l.map.buildings().size)
+        assertEquals(before + 2, l.map.buildings().size)
         assertTrue(l.map.buildings().any { it.def == BuildDef.BED && it.rot })
         assertSame(l.map.building[l.map.idx(x + 2, y)], l.map.building[l.map.idx(x, y)])
         g.map.removeBuilding(b)
@@ -874,13 +899,13 @@ class MultiTileTest {
         g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 1, g.homeY, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.STEEL, 200, g.homeX, g.homeY - 2)
         g.map.drop(ItemType.RICE, 60, g.homeX, g.homeY - 1)
-        assertTrue(g.placeBlueprint(BuildDef.STOVE_FUEL, x, y))
-        for (c in g.colonists) { c.skill[SkillType.CONSTRUCTION.ordinal] = 12; c.priority[WorkType.CONSTRUCT.ordinal] = 1; c.priority[WorkType.COOK.ordinal] = 1 }
+        assertTrue(g.placeBlueprint(BuildDef.EMBER_OVEN, x, y))
+        for (c in g.colonists) { c.skill[SkillType.ARCHITECTURE.ordinal] = 12; c.priority[WorkType.CONSTRUCT.ordinal] = 1; c.priority[WorkType.COOK.ordinal] = 1 }
         g.run(TICKS_PER_DAY)
         val stove = g.map.building[g.map.idx(x + 1, y)]!!
         assertTrue("stove built", stove.built)
         stove.fuel = 12f
-        val bill = Bill(Recipe.COOK_SIMPLE); bill.mode = BillMode.DO_X; bill.target = 2
+        val bill = Bill(Recipe.COOK_HEARTH_STEW); bill.mode = BillMode.DO_X; bill.target = 2
         stove.bills.add(bill)
         g.run(TICKS_PER_DAY)
         assertTrue("cooked", bill.done >= 1)
@@ -903,17 +928,17 @@ class ContentTest {
     @Test fun newBuildingsAreUnlockedByResearch() {
         for (d in BuildDef.entries) d.research?.let { assertTrue(it in Research.entries) }
         val g = newGame(51); g.quiet()
-        assertFalse(g.canBuildAt(BuildDef.COMMS_CONSOLE, g.homeX + 6, g.homeY - 6))
+        assertFalse(g.canBuildAt(BuildDef.SIGNAL_DESK, g.homeX + 6, g.homeY - 6))
         g.researchDone.add(Research.COMMS)
         for (yy in g.homeY - 7..g.homeY - 5) for (xx in g.homeX + 5..g.homeX + 9) { val i = g.map.idx(xx, yy); g.map.terrain[i] = Terrain.SOIL; g.map.plant[i] = null }
-        assertTrue(g.canBuildAt(BuildDef.COMMS_CONSOLE, g.homeX + 6, g.homeY - 6))
+        assertTrue(g.canBuildAt(BuildDef.SIGNAL_DESK, g.homeX + 6, g.homeY - 6))
     }
 
     @Test fun orbitalTradersLandAtBeacons() {
         val g = newGame(52); g.quiet()
         g.addComms()
         assertNotNull(g.requestOrbitalTrader())   // no beacon yet
-        g.map.setBuilding(Building(BuildDef.TRADE_BEACON, g.homeX + 3, g.homeY + 3, true))
+        g.map.setBuilding(Building(BuildDef.SUMMONS_FLARE, g.homeX + 3, g.homeY + 3, true))
         g.paintZone(g.homeX - 3, g.homeY - 3, g.homeX + 3, g.homeY, ZoneKind.STOCKPILE)
         g.map.drop(ItemType.SILVER, 500, g.homeX, g.homeY - 1)
         g.map.drop(ItemType.STEEL, 30, g.homeX + 4, g.homeY + 3)   // near the beacon, outside any stockpile
@@ -929,29 +954,32 @@ class ContentTest {
         val a = g.newHuman(0, 0); val b = g.newHuman(0, 0)
         a.traits.clear(); b.traits.clear(); a.female = true; b.female = true
         assertFalse(attractedTo(a, b))
-        a.traits.add(Trait.GAY); b.traits.add(Trait.GAY)
+        a.traits.add(Trait.SAME_SEX_DRAWN); b.traits.add(Trait.SAME_SEX_DRAWN)
         assertTrue(attractedTo(a, b) && attractedTo(b, a))
-        a.traits.clear(); a.traits.add(Trait.ASEXUAL)
+        a.traits.clear(); a.traits.add(Trait.UNROMANTIC)
         assertFalse(attractedTo(a, b))
     }
 
     @Test fun dormantMechsWakeNearColonists() {
         val g = newGame(54); g.quiet()
-        for (p in g.colonists) p.priority[WorkType.HAUL.ordinal] = 0   // hauling would walk the colonist away from the mech
-        val far = g.newMech(Race.SCYTHER, g.homeX + 40, g.homeY + 40, -9)
+        // Work would walk a colonist away from the mech within the 200 ticks, so no colonist has any: each stays where the test puts it.
+        for (p in g.colonists) for (w in WorkType.entries) p.priority[w.ordinal] = 0
+        val far = g.newMech(Race.HOOKTALON, g.homeX + 40, g.homeY + 40, -9)
         far.dormant = true
         g.run(200)
         assertTrue(far.dormant)
         g.colonists[0].x = far.x - 3; g.colonists[0].y = far.y
+        // Drafted, the colonist holds this spot, so only its distance from the mech decides the wake-up.
+        g.setDrafted(g.colonists[0], true)
         g.run(200)
         assertFalse(far.dormant)
     }
 
     @Test fun savesKeepNewFields() {
         val g = newGame(55); g.quiet()
-        val m = g.newMech(Race.LANCER, g.homeX + 30, g.homeY, -3); m.dormant = true
+        val m = g.newMech(Race.PIKEWALKER, g.homeX + 30, g.homeY, -3); m.dormant = true
         val l = SaveGame.read(SaveGame.write(g))
-        assertTrue(l.pawns.any { it.race == Race.LANCER && it.dormant })
+        assertTrue(l.pawns.any { it.race == Race.PIKEWALKER && it.dormant })
     }
 }
 
@@ -972,15 +1000,20 @@ class RulesTest {
 
     @Test fun outfitPolicyKeepsArmorOffWorkers() {
         val g = newGame(62); g.quiet()
-        val p = g.colonists.first(); p.outfit = 1
+        // A bare-skinned colonist never wears apparel, so the test uses one who can.
+        val p = g.colonists.first { Trait.BARE_SKINNED !in it.traits }; p.outfit = 1
         for (o in g.colonists) if (o !== p) o.outfit = 1
         p.apparel.clear()
-        g.map.drop(ItemType.A_FLAK_VEST, 1, p.x + 1, p.y)
+        // No colonist has work, so nothing carries the vest off. It lies on the colonist's own cell, so it is always in reach.
+        for (o in g.colonists) for (w in WorkType.entries) o.priority[w.ordinal] = 0
+        g.map.drop(ItemType.A_RIBBED_VEST, 1, p.x, p.y)
         g.run(600)
-        assertTrue(p.apparel.none { it.type == ItemType.A_FLAK_VEST })
+        assertTrue(p.apparel.none { it.type == ItemType.A_RIBBED_VEST })
+        // A new policy takes effect at the colonist's next decision, so its current job ends now.
         p.outfit = 2
+        p.job = null; p.clearPath()
         g.run(6000)
-        assertTrue(p.apparel.any { it.type == ItemType.A_FLAK_VEST })
+        assertTrue(p.apparel.any { it.type == ItemType.A_RIBBED_VEST })
     }
 
     @Test fun lovers_with_bad_opinions_break_up_and_kin_like_each_other() {
@@ -1010,19 +1043,19 @@ class MaterialTest {
     }
 
     @Test fun simultaneousOrdersUseTheirOwnMaterials() {
-        val g = preparedGame(71, Research.SMITHING, Research.FABRICATION)
+        val g = preparedGame(71, Research.FORGEWORK, Research.PART_ASSEMBLY)
         val y = g.homeY - 7
         g.clear(g.homeX + 6, y - 1, g.homeX + 20, y + 1)
         g.stock(ItemType.STEEL, 20, g.homeX, g.homeY - 3)
         g.stock(ItemType.STONE, 20, g.homeX, g.homeY - 3)
-        g.stock(ItemType.PLASTEEL, 20, g.homeX, g.homeY - 3)
+        g.stock(ItemType.HARDALLOY, 20, g.homeX, g.homeY - 3)
         val steel0 = g.map.countItems(ItemType.STEEL); val stone0 = g.map.countItems(ItemType.STONE)
-        val plast0 = g.map.countItems(ItemType.PLASTEEL); val wood0 = g.map.countItems(ItemType.WOOD)
+        val plast0 = g.map.countItems(ItemType.HARDALLOY); val wood0 = g.map.countItems(ItemType.WOOD)
 
         assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y))
         assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 8, y, material = ItemType.STONE))
         assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 10, y, material = ItemType.STEEL))
-        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 12, y, material = ItemType.PLASTEEL))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 12, y, material = ItemType.HARDALLOY))
         g.run(TICKS_PER_DAY * 2)
 
         val wood = g.wallAt(g.homeX + 6, y); val stone = g.wallAt(g.homeX + 8, y)
@@ -1038,26 +1071,28 @@ class MaterialTest {
         // Exactly one wall's worth of each material was spent, no more.
         assertEquals(steel0 - 5, g.map.countItems(ItemType.STEEL))
         assertEquals(stone0 - 5, g.map.countItems(ItemType.STONE))
-        assertEquals(plast0 - 5, g.map.countItems(ItemType.PLASTEEL))
+        assertEquals(plast0 - 5, g.map.countItems(ItemType.HARDALLOY))
         assertEquals(wood0 - 5, g.map.countItems(ItemType.WOOD))
     }
 
     @Test fun insufficientMaterialWaitsWithoutSpendingAnything() {
-        val g = preparedGame(72, Research.FABRICATION)
+        val g = preparedGame(72, Research.PART_ASSEMBLY)
+        // Ruin loot holds hardalloy too (docs/fidelity/ruins.md), so the map is cleared of it before the test counts what is there.
+        for (s in g.map.items.values.filter { it.type == ItemType.HARDALLOY }) g.map.take(g.map.idx(s.x, s.y), s.count)
         val y = g.homeY - 7
         g.clear(g.homeX + 6, y - 1, g.homeX + 12, y + 1)
-        assertEquals(0, g.map.countItems(ItemType.PLASTEEL))
-        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.PLASTEEL))
+        assertEquals(0, g.map.countItems(ItemType.HARDALLOY))
+        assertTrue(g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6, y, material = ItemType.HARDALLOY))
         g.run(TICKS_PER_DAY * 2)
         val w = g.wallAt(g.homeX + 6, y)
         assertFalse(w.built)
         assertEquals(0, w.delivered.sum())
-        // Four plasteel arrive: still not enough for five.
-        g.stock(ItemType.PLASTEEL, 4, g.homeX, g.homeY - 3)
+        // Four hardalloy arrive: still not enough for five.
+        g.stock(ItemType.HARDALLOY, 4, g.homeX, g.homeY - 3)
         g.run(TICKS_PER_DAY * 2)
         assertFalse(w.built)
         assertEquals(0, w.delivered.sum())
-        g.stock(ItemType.PLASTEEL, 1, g.homeX, g.homeY - 3)
+        g.stock(ItemType.HARDALLOY, 1, g.homeX, g.homeY - 3)
         g.run(TICKS_PER_DAY * 2)
         assertTrue(w.built)
         assertEquals(525f, w.maxHp, 0.5f)
@@ -1074,7 +1109,7 @@ class MaterialTest {
     }
 
     @Test fun cancellingReturnsTheChosenMaterialAndRebuildUsesTheNewChoice() {
-        val g = preparedGame(74, Research.SMITHING)
+        val g = preparedGame(74, Research.FORGEWORK)
         val y = g.homeY - 7
         g.clear(g.homeX + 6, y - 1, g.homeX + 10, y + 1)
         g.stock(ItemType.STEEL, 5, g.homeX, g.homeY - 3)
@@ -1097,7 +1132,7 @@ class MaterialTest {
     }
 
     @Test fun saveKeepsMaterialsDeliveriesAndDamage() {
-        val g = preparedGame(75, Research.SMITHING)
+        val g = preparedGame(75, Research.FORGEWORK)
         val y = g.homeY - 7
         g.clear(g.homeX + 6, y - 1, g.homeX + 12, y + 1)
         g.stock(ItemType.STEEL, 3, g.homeX, g.homeY - 3)
@@ -1120,7 +1155,7 @@ class MaterialTest {
     }
 
     @Test fun savesFromBeforeMaterialsStillLoad() {
-        val g = preparedGame(76, Research.SMITHING)
+        val g = preparedGame(76, Research.FORGEWORK)
         g.clear(g.homeX + 6, g.homeY - 8, g.homeX + 12, g.homeY - 6)
         // A legacy fixed-material wall from the old separate defs, and an ordinary wood wall.
         g.map.setBuilding(Building(BuildDef.STONE_WALL, g.homeX + 6, g.homeY - 7, true))
@@ -1139,14 +1174,14 @@ class MaterialTest {
     }
 
     @Test fun severalOrdersAtOnceAllFinishWithTheRightMaterials() {
-        val g = preparedGame(77, Research.SMITHING, Research.FABRICATION)
+        val g = preparedGame(77, Research.FORGEWORK, Research.PART_ASSEMBLY)
         val y = g.homeY - 7
         g.clear(g.homeX + 6, y - 1, g.homeX + 30, y + 1)
         g.stock(ItemType.STEEL, 30, g.homeX, g.homeY - 3)
         g.stock(ItemType.STONE, 30, g.homeX, g.homeY - 3)
-        val plan = listOf(ItemType.WOOD, ItemType.STONE, ItemType.STEEL, ItemType.PLASTEEL, ItemType.STEEL, ItemType.STONE, ItemType.PLASTEEL, ItemType.WOOD)
-        g.stock(ItemType.PLASTEEL, 10, g.homeX, g.homeY - 3)
-        val before = listOf(ItemType.STEEL, ItemType.STONE, ItemType.PLASTEEL, ItemType.WOOD).associateWith { g.map.countItems(it) }
+        val plan = listOf(ItemType.WOOD, ItemType.STONE, ItemType.STEEL, ItemType.HARDALLOY, ItemType.STEEL, ItemType.STONE, ItemType.HARDALLOY, ItemType.WOOD)
+        g.stock(ItemType.HARDALLOY, 10, g.homeX, g.homeY - 3)
+        val before = listOf(ItemType.STEEL, ItemType.STONE, ItemType.HARDALLOY, ItemType.WOOD).associateWith { g.map.countItems(it) }
         for ((k, m) in plan.withIndex()) assertTrue("order $k", g.placeBlueprint(BuildDef.WOOD_WALL, g.homeX + 6 + k * 3, y, material = m))
         g.run(TICKS_PER_DAY * 3)
         for ((k, m) in plan.withIndex()) {
@@ -1154,25 +1189,25 @@ class MaterialTest {
             assertTrue("built $k", w.built)
             assertEquals("material $k", m, w.material)
         }
-        // Two steel, two stone, two plasteel and two wood walls: five of the matching item per wall.
+        // Two steel, two stone, two hardalloy and two wood walls: five of the matching item per wall.
         assertEquals(before[ItemType.STEEL]!! - 10, g.map.countItems(ItemType.STEEL))
         assertEquals(before[ItemType.STONE]!! - 10, g.map.countItems(ItemType.STONE))
-        assertEquals(before[ItemType.PLASTEEL]!! - 10, g.map.countItems(ItemType.PLASTEEL))
+        assertEquals(before[ItemType.HARDALLOY]!! - 10, g.map.countItems(ItemType.HARDALLOY))
         assertEquals(before[ItemType.WOOD]!! - 10, g.map.countItems(ItemType.WOOD))
     }
 }
 
 class CaravanBattleTest {
-    /** A caravan of the first [people] colonists (armed with [weapon]) and [animals] tame muffalo, parked on the world map. */
+    /** A caravan of the first [people] colonists (armed with [weapon]) and [animals] tame shagox, parked on the world map. */
     private fun Game.caravanWith(people: Int, weapon: ItemType?, animals: Int = 0): Caravan {
         val c = Caravan(nextCaravanId++, "Test caravan", world.homeTile)
         for (p in colonists.take(people)) { pawns.remove(p); c.members.add(p); p.weaponItem = weapon; p.drafted = false }
         repeat(animals) {
-            val a = newAnimal(Race.MUFFALO, homeX, homeY, Faction.PLAYER)
+            val a = newAnimal(Race.SHAGOX, homeX, homeY, Faction.PLAYER)
             pawns.remove(a); c.members.add(a)
         }
         c.inventory.add(ItemType.STEEL, 40)
-        c.inventory.add(ItemType.MEAL_PACKAGED, 12)
+        c.inventory.add(ItemType.MEAL_RATION, 12)
         caravans.add(c)
         return c
     }
@@ -1186,8 +1221,8 @@ class CaravanBattleTest {
     private fun Game.enemies() = pawns.filter { it.hostile && it.alive }
 
     @Test fun attackedCaravanStopsAndWaitsForTheBattleInsteadOfResolvingItself() {
-        val g = newGame(81, Scenario.LOST_TRIBE); g.quiet()
-        val c = g.caravanWith(3, ItemType.W_REVOLVER)
+        val g = newGame(81, Scenario.QUIET_ENCLAVE); g.quiet()
+        val c = g.caravanWith(3, ItemType.W_CYLINDER_GUN)
         val t0 = g.tick
         g.startFight(c, "test raiders", 0, 60f, false, BattleAftermath.AMBUSH)
         assertTrue(c.inBattle)
@@ -1208,7 +1243,7 @@ class CaravanBattleTest {
     }
 
     @Test fun playerWinsAgainstWeakRaidersAndKeepsTheCargo() {
-        val g = newGame(82, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(82, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(4, ItemType.W_RIFLE)
         val steelBefore = c.inventory.count(ItemType.STEEL)
         g.startFight(c, "test raiders", 0, 15f, false, BattleAftermath.AMBUSH)
@@ -1226,7 +1261,7 @@ class CaravanBattleTest {
     }
 
     @Test fun playerLosesAgainstALargeRaidAndTheCargoIsLost() {
-        val g = newGame(83, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(83, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(1, null)
         val graves = g.graveyard.size
         g.startFight(c, "a raid", 0, 400f, false, BattleAftermath.AMBUSH)
@@ -1239,7 +1274,7 @@ class CaravanBattleTest {
     }
 
     @Test fun playerRetreatsAndTheCaravanKeepsItsCargoAndItsRoute() {
-        val g = newGame(84, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(84, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(3, ItemType.W_RIFLE)
         val home = g.world.homeTile
         c.route.add(home)
@@ -1258,7 +1293,7 @@ class CaravanBattleTest {
     }
 
     @Test fun animalsInTheCaravanFightAndComeBack() {
-        val g = newGame(85, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(85, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(2, ItemType.W_RIFLE, animals = 2)
         g.startFight(c, "test raiders", 0, 80f, false, BattleAftermath.AMBUSH)
         val bg = g.beginBattle()
@@ -1276,7 +1311,7 @@ class CaravanBattleTest {
     }
 
     @Test fun injuriesSurviveTheBattleAsTheSameObjects() {
-        val g = newGame(86, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(86, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(2, ItemType.W_RIFLE)
         val hurt = c.members[0]
         val inj = Injury(0, DamageKind.CUT, 4f, 0f)
@@ -1294,7 +1329,7 @@ class CaravanBattleTest {
     }
 
     @Test fun pawnsDyingInTheBattleAreRemovedAndRecorded() {
-        val g = newGame(87, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(87, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(3, null)
         val graves = g.graveyard.size
         g.startFight(c, "a raid", 0, 200f, false, BattleAftermath.AMBUSH)
@@ -1311,7 +1346,7 @@ class CaravanBattleTest {
     }
 
     @Test fun multipleEnemiesAreAllOnTheBattleMap() {
-        val g = newGame(88, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(88, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(4, ItemType.W_RIFLE)
         g.startFight(c, "a warband", 0, 140f, false, BattleAftermath.AMBUSH)
         val bg = g.beginBattle()
@@ -1322,7 +1357,7 @@ class CaravanBattleTest {
     }
 
     @Test fun multipleMembersWithDifferentWeaponsResolveConsistently() {
-        val g = newGame(89, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(89, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(5, ItemType.W_BOW)
         c.members.add(g.newHuman(0, 0).also { g.pawns.remove(it) })
         g.startFight(c, "bandits", 0, 60f, false, BattleAftermath.AMBUSH)
@@ -1336,7 +1371,7 @@ class CaravanBattleTest {
     }
 
     @Test fun saveAndLoadBeforeTheBattleBegins() {
-        val g = newGame(90, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(90, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(2, ItemType.W_RIFLE)
         g.startFight(c, "test raiders", 0, 30f, false, BattleAftermath.AMBUSH)
         val l = SaveGame.read(SaveGame.write(g))
@@ -1351,7 +1386,7 @@ class CaravanBattleTest {
     }
 
     @Test fun saveAndLoadDuringTheBattle() {
-        val g = newGame(91, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(91, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(3, ItemType.W_RIFLE, animals = 1)
         val homeTick = g.tick
         g.startFight(c, "a raid", 0, 120f, false, BattleAftermath.AMBUSH)
@@ -1374,7 +1409,7 @@ class CaravanBattleTest {
     }
 
     @Test fun saveAndLoadKeepsARetreatInProgress() {
-        val g = newGame(92, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(92, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(2, ItemType.W_RIFLE)
         g.startFight(c, "a raid", 0, 300f, false, BattleAftermath.AMBUSH)
         val bg = g.beginBattle()
@@ -1387,7 +1422,7 @@ class CaravanBattleTest {
     }
 
     @Test fun settlementAssaultIsAFightTheRightSideCanCommand() {
-        val g = newGame(93, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(93, Scenario.QUIET_ENCLAVE); g.quiet()
         val c = g.caravanWith(4, ItemType.W_RIFLE)
         val s = g.world.settlements.first { it.faction.trades }
         c.tile = s.tile
@@ -1475,15 +1510,15 @@ class RansomTest {
         while (battle!!.outcome == null && n++ < limit) step()
     }
 
-    /** A colony with a comms console on a real, charged battery network, so the power recomputes every tick. */
+    /** A colony with a signal desk on a real, charged battery network, so the power recomputes every tick. */
     private fun setup(seed: Long): Game {
-        val g = newGame(seed, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(seed, Scenario.QUIET_ENCLAVE); g.quiet()
         // Solar panel above, a conduit run linking it to the console and the battery beside it.
         g.map.setBuilding(Building(BuildDef.SOLAR_PANEL, g.homeX + 8, g.homeY + 4, true))
         // Conduit run from the panel's corner to the console and the battery.
         val run = listOf(7 to 4, 7 to 5, 7 to 6, 7 to 7, 8 to 7, 9 to 7, 10 to 7)
         for ((dx, dy) in run) g.map.conduit[g.map.idx(g.homeX + dx, g.homeY + dy)] = true
-        g.map.setBuilding(Building(BuildDef.COMMS_CONSOLE, g.homeX + 8, g.homeY + 8, true))
+        g.map.setBuilding(Building(BuildDef.SIGNAL_DESK, g.homeX + 8, g.homeY + 8, true))
         g.map.setBuilding(Building(BuildDef.BATTERY, g.homeX + 10, g.homeY + 8, true).also { it.charge = 600f })
         g.run(1)
         return g
@@ -1502,7 +1537,7 @@ class RansomTest {
     }
 
     @Test fun withoutACommsConsoleNobodyOffers() {
-        val g = newGame(112, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(112, Scenario.QUIET_ENCLAVE); g.quiet()
         val f = g.neutralFaction()
         val p = g.prisonerOf(f.id)
         assertNull(g.untilOffer(p, hours = 120))
@@ -1606,7 +1641,7 @@ class RansomTest {
         val f = g.neutralFaction()
         val p = g.prisonerOf(f.id)
         val offer = g.untilOffer(p)!!
-        g.map.buildings().first { it.def == BuildDef.COMMS_CONSOLE }.powered = false
+        g.map.buildings().first { it.def == BuildDef.SIGNAL_DESK }.powered = false
         val silver = g.map.countItems(ItemType.SILVER)
         assertNotNull(g.acceptRansom(offer.id))
         assertEquals(silver, g.map.countItems(ItemType.SILVER))
@@ -1619,6 +1654,8 @@ class RansomTest {
         val f = g.neutralFaction()
         val a = g.prisonerOf(f.id, index = g.colonists.size - 1)
         val b = g.prisonerOf(f.id, index = g.colonists.size - 2)
+        // A prisoner with a poor mood tries to escape, which blocks the offer (Events.kt). These two are kept content.
+        for (p in listOf(a, b)) p.addThought("Settled", 0.5f, g.tick, 30 * TICKS_PER_DAY)
         var n = 0
         while ((g.ransomOfferFor(a.id) == null || g.ransomOfferFor(b.id) == null) && n++ < 400) g.run(TICKS_PER_HOUR)
         val oa = g.ransomOfferFor(a.id)!!; val ob = g.ransomOfferFor(b.id)!!
@@ -1673,7 +1710,7 @@ class RansomTest {
     }
 
     @Test fun capturedBattleEnemiesKeepTheirFactionSoTheyCanBeRansomed() {
-        val g = newGame(126, Scenario.LOST_TRIBE); g.quiet()
+        val g = newGame(126, Scenario.QUIET_ENCLAVE); g.quiet()
         g.addComms()
         val f = g.world.factions.first { it.kind == 1 }
         g.world.goodwill[f.id] = 10

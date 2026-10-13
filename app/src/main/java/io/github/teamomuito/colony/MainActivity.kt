@@ -572,10 +572,10 @@ class MainActivity : Activity() {
         if (hot != null) out += Alert("${hot.name.substringBefore(' ')} is overheating", 2, hot.x, hot.y)
         if (g.bedCount() < cols.size) out += Alert("Need ${cols.size - g.bedCount()} more bed(s)", 1)
         if (g.map.zones.values.none { it.kind == ZoneKind.STOCKPILE }) out += Alert("No stockpile zone", 1)
-        if (g.researchCurrent == null && g.map.buildings().any { it != null && it.built && it.def == BuildDef.RESEARCH_BENCH }) out += Alert("No research selected", 1)
+        if (g.researchCurrent == null && g.map.buildings().any { it != null && it.built && it.def == BuildDef.STUDY_DESK }) out += Alert("No research selected", 1)
         if (g.power.nets > 0 && g.power.consumed > g.power.produced + 1f && g.power.stored <= 0f) out += Alert("Power shortage", 2)
-        if (g.solarFlareUntil > g.tick) out += Alert("Solar flare", 2)
-        if (g.toxicFalloutUntil > g.tick) out += Alert("Toxic fallout", 3)
+        if (g.solarFlareUntil > g.tick) out += Alert("Corona surge", 2)
+        if (g.toxicFalloutUntil > g.tick) out += Alert("Fume cloud", 3)
         val idle = cols.count { it.job?.type == io.github.teamomuito.colony.sim.JobType.IDLE && !it.downed && it.priority.any { x -> x in 1..2 } }
         if (idle >= 2 && g.hour in 7..20) out += Alert("$idle colonists idle", 0)
         if (g.trader() != null) { val t = g.pawnById(g.trader()!!.pawnId); out += Alert("Trader here", 1, t?.x ?: -1, t?.y ?: -1) }
@@ -709,7 +709,7 @@ class MainActivity : Activity() {
         if (m.terrain[i] == io.github.teamomuito.colony.sim.Terrain.ROCK) sb.append(" (${m.rockType[i].label}${if (m.ore[i] != io.github.teamomuito.colony.sim.Ore.NONE) ", " + m.ore[i].label + " ore" else ""})")
         if (m.terrain[i].fertility > 0f) sb.append("  ·  fertility ${(m.terrain[i].fertility * 100).toInt()}%")
         m.floor[i]?.let { sb.append("\n${it.label}") }
-        if (m.conduit[i]) sb.append("\nPower conduit")
+        if (m.conduit[i]) sb.append("\nPower cable")
         m.building[i]?.let { b ->
             sb.append("\n${b.displayName}${if (b.built && b.quality != io.github.teamomuito.colony.sim.Quality.NORMAL) " (${b.quality.label})" else ""}")
             if (!b.built) {
@@ -723,7 +723,7 @@ class MainActivity : Activity() {
                 if (b.def.sleeps && b.ownerId >= 0) sb.append("\nOwner: ${g.pawnById(b.ownerId)?.name ?: "?"}")
                 if (b.def.sleeps && b.prisonerBed) sb.append("\nPrisoner bed")
                 if (b.def == BuildDef.BATTERY) sb.append("\nCharge ${b.charge.toInt()}/600")
-                if (b.def == BuildDef.MORTAR) sb.append("\nShells ${b.shells}/5")
+                if (b.def == BuildDef.LOBBING_TUBE) sb.append("\nShells ${b.shells}/5")
             }
         }
         m.plant[i]?.let { pl ->

@@ -39,14 +39,17 @@ fun Pawn.filtrationEff(): Float = HealthRules.bloodFiltration(
 )
 
 /** The pain level at which this pawn goes into shock. */
-fun Pawn.painShockThreshold(): Float = HealthRules.painShockThreshold(Trait.WIMP in traits)
+fun Pawn.painShockThreshold(): Float = HealthRules.painShockThreshold(Trait.TENDER_FRAME in traits)
 
 /** Whether this pawn's current capacities and pain put them on the ground. */
 fun Pawn.shouldBeDowned(): Boolean = HealthRules.shouldBeDowned(cap[Cap.CONSCIOUSNESS.ordinal], cap[Cap.MOVING.ordinal], pain, painShockThreshold())
 
 private fun Pawn.hasTag(tag: PartTag) = race.body.any { it.tag == tag }
 
-fun Game.recomputeHealth(p: Pawn) {
+/** Recomputes the cached pain and capacities of [p] from its injuries, hediffs, blood loss and pregnancy. Pure in the pawn. */
+fun Game.recomputeHealth(p: Pawn) = refreshHealthCache(p)
+
+internal fun refreshHealthCache(p: Pawn) {
     p.healthDirty = false
     var pain = 0f
     for (inj in p.injuries) {
@@ -54,10 +57,10 @@ fun Game.recomputeHealth(p: Pawn) {
         pain += HealthRules.woundPain(inj.kind.pain, inj.severity, p.race.hpScale)
     }
     for (h in p.hediffs) pain += h.kind.pain * h.severity
-    // A wimp's low pain shock threshold is applied in painShockThreshold().
-    if (Trait.TOUGH in p.traits) pain *= 0.7f
-    // Painkilling drugs (yayo, go-juice) already lower pain through their hediff values above.
-    p.pain = pain.coerceIn(0f, 1f)
+    // A tender-frame colonist's low pain shock threshold is applied in painShockThreshold().
+    if (Trait.THICK_HIDE in p.traits) pain *= 0.7f
+    // Painkilling drugs (white rush, surge tonic) already lower pain through their hediff values above.
+    p.painCache = pain.coerceIn(0f, 1f)
 
     val legs = p.avgEff(PartTag.LEG)
     var moving = HealthRules.moving(legs, p.avgEff(PartTag.FOOT), p.avgEff(PartTag.TOE))
@@ -81,27 +84,27 @@ fun Game.recomputeHealth(p: Pawn) {
         eating *= (1f - h.kind.eat * s)
         sight *= (1f - h.kind.sight * s)
         hearing *= (1f - h.kind.hearing * s)
-        if (h.kind == HediffKind.ANESTHESIA) cons = 0f
+        if (h.kind == HediffKind.NUMB_SLEEP) cons = 0f
     }
     if (p.pregnantUntil > 0L && p.race == Race.HUMAN) moving *= 0.88f
     // Pain and sickness slow people down a bit.
     moving *= (1f - p.pain * 0.2f)
     manip *= (1f - p.pain * 0.2f)
 
-    p.cap[Cap.CONSCIOUSNESS.ordinal] = cons.coerceIn(0f, 1f)
-    p.cap[Cap.MOVING.ordinal] = moving.coerceIn(0f, 1.2f).let { if (legs <= 0.01f) min(it, 0.0f) else it }
-    p.cap[Cap.MANIPULATION.ordinal] = manip.coerceIn(0f, 1f)
-    p.cap[Cap.SIGHT.ordinal] = sight
-    p.cap[Cap.HEARING.ordinal] = hearing
-    p.cap[Cap.TALKING.ordinal] = jaw
-    p.cap[Cap.EATING.ordinal] = eating.coerceIn(0f, 1f)
-    p.cap[Cap.BREATHING.ordinal] = breathing
-    p.cap[Cap.PUMPING.ordinal] = pumping
-    p.cap[Cap.FILTRATION.ordinal] = filtration.coerceIn(0f, 1f)
-    p.cap[Cap.METABOLISM.ordinal] = metabolism.coerceIn(0f, 1f)
+    p.capCache[Cap.CONSCIOUSNESS.ordinal] = cons.coerceIn(0f, 1f)
+    p.capCache[Cap.MOVING.ordinal] = moving.coerceIn(0f, 1.2f).let { if (legs <= 0.01f) min(it, 0.0f) else it }
+    p.capCache[Cap.MANIPULATION.ordinal] = manip.coerceIn(0f, 1f)
+    p.capCache[Cap.SIGHT.ordinal] = sight
+    p.capCache[Cap.HEARING.ordinal] = hearing
+    p.capCache[Cap.TALKING.ordinal] = jaw
+    p.capCache[Cap.EATING.ordinal] = eating.coerceIn(0f, 1f)
+    p.capCache[Cap.BREATHING.ordinal] = breathing
+    p.capCache[Cap.PUMPING.ordinal] = pumping
+    p.capCache[Cap.FILTRATION.ordinal] = filtration.coerceIn(0f, 1f)
+    p.capCache[Cap.METABOLISM.ordinal] = metabolism.coerceIn(0f, 1f)
 }
 
-private fun Game.pickOuterPart(p: Pawn): Int {
+internal fun Game.pickOuterPart(p: Pawn): Int {
     val body = p.race.body
     var total = 0f
     for ((i, d) in body.withIndex()) if (!d.inner && !p.partMissing(i)) total += d.coverage
@@ -132,31 +135,48 @@ fun Game.dealDamage(
     var part = if (partHint >= 0) partHint else pickOuterPart(target)
     val def = target.race.body[part]
     var dmg = amount / max(0.6f, Math.sqrt(target.race.hpScale.toDouble()).toFloat()).let { if (target.race.isAnimal) 1f else it }
-    // Armor.
+    // Armor, layer by layer (Verse/ArmorUtility.cs:13-56). Covering apparel comes first, outermost layer first; natural armor
+    // after it. A layer takes a share of the damage that reaches it, then rolls against its rating after penetration. A roll can
+    // deflect the hit, or halve it and make a sharp hit blunt. See docs/fidelity/combat.md.
     val cover = if (def.cover != 0) def.cover else if (def.inner) target.race.body[def.parent].cover else 0
+    var k = kind
+    var deflected = false
+    // The rating is read once, from the kind the hit arrives with (Verse/ArmorUtility.cs:21). A halved sharp hit becomes blunt for
+    // the wound, but the later layers and the natural armor keep the sharp rating for the rest of the hit.
     val sharp = kind.sharp || kind == DamageKind.BLAST
-    val armor = max(0f, target.armorFor(cover, sharp) - armorPen)
-    if (armor > 0f) {
-        val roll = rng.float()
-        if (roll < armor * 0.5f && dmg * (1f - armor) < 2.5f) {
-            // Deflected.
-            for (w in target.apparel) w.hp -= dmg * 0.08f
-            return
-        }
-        dmg *= (1f - armor)
-        for (w in target.apparel) if ((w.type.apparel?.cover ?: 0) and cover != 0) w.hp -= dmg * 0.1f
-        target.apparel.removeAll { it.hp <= 0f }
+    val layers = target.apparel
+        .filter { w -> w.type.apparel?.let { (it.cover and cover) != 0 } == true }
+        .sortedByDescending { it.type.apparel?.slot?.ordinal ?: -1 }
+    for (w in layers) {
+        val rating = max(0f, w.armorRating(sharp) - armorPen)
+        w.hp -= dmg * APPAREL_DAMAGE_SHARE
+        val step = armorStep(dmg, rating, if (rating > 0f) rng.float() else 0f)
+        dmg = step.damage
+        if (step.halved && k.sharp) k = DamageKind.BRUISE
+        if (step.deflected) { deflected = true; break }
     }
+    if (!deflected) {
+        val rating = max(0f, target.naturalArmor(sharp) - armorPen)
+        val step = armorStep(dmg, rating, if (rating > 0f) rng.float() else 0f)
+        dmg = step.damage
+        if (step.halved && k.sharp) k = DamageKind.BRUISE
+        deflected = step.deflected
+    }
+    target.apparel.removeAll { it.hp <= 0f }
+    if (deflected) return
     // Harder or softer colonists on the difficulty setting: applies to the people the player commands.
     if (target.faction == Faction.PLAYER && !target.isAnimal) dmg *= difficulty.colonistDamage
-    if (dmg < 0.3f) return
-    if (Trait.TOUGH in target.traits) dmg *= 0.75f
-    applyWound(target, part, kind, dmg, source)
-    // Penetration into organs.
-    if (!def.inner && (kind.sharp || kind == DamageKind.BLAST) && dmg >= def.hp * target.race.hpScale * 0.35f && rng.chance(0.55f)) {
-        val child = pickChild(target, part)
-        if (child >= 0) applyWound(target, child, kind, dmg * 0.55f, source)
+    if (dmg >= 0.3f) {
+        if (Trait.THICK_HIDE in target.traits) dmg *= 0.75f
+        applyWound(target, part, k, dmg, source)
+        // Penetration into organs.
+        if (!def.inner && (k.sharp || k == DamageKind.BLAST) && dmg >= def.hp * target.race.hpScale * 0.35f && rng.chance(0.55f)) {
+            val child = pickChild(target, part)
+            if (child >= 0) applyWound(target, child, k, dmg * 0.55f, source)
+        }
     }
+    // A flame hit that was not deflected may set the pawn alight (DamageWorker_Flame.cs:21-24).
+    if (k == DamageKind.BURN) flameIgnition(target)
     target.healthDirty = true
     checkDeath(target, source)
 }
@@ -172,6 +192,7 @@ internal fun Game.applyWound(target: Pawn, part: Int, kind: DamageKind, dmg: Flo
     if (kind == DamageKind.BRUISE || kind == DamageKind.CRUSH) inj.bleed *= 0.1f
     inj.infectable = kind.infect > 0f
     target.injuries.add(inj)
+    target.healthDirty = true
     if (cur + dmg >= maxHp) destroyPart(target, part, kind, source)
     // Blood spatter.
     val i = map.idx(target.x, target.y)
@@ -199,7 +220,7 @@ private fun Game.destroyPart(p: Pawn, part: Int, kind: DamageKind, source: Pawn?
 
 fun Game.addHediff(p: Pawn, kind: HediffKind, severity: Float, part: Int = -1): Hediff {
     val ex = p.hediffs.firstOrNull { it.kind == kind && it.part == part }
-    if (ex != null) { ex.severity = min(1f, ex.severity + severity); return ex }
+    if (ex != null) { ex.severity = min(1f, ex.severity + severity); p.healthDirty = true; return ex }
     val h = Hediff(kind, severity)
     h.part = part
     p.hediffs.add(h)
@@ -225,7 +246,7 @@ internal fun Game.checkDeath(p: Pawn, source: Pawn?) {
     val lungs = body.indices.filter { body[it].tag == PartTag.LUNG }
     if (cause == null && lungs.isNotEmpty() && lungs.all { p.partEff(it) <= 0.001f }) cause = "suffocation"
     if (cause == null && (body.any { it.tag == PartTag.LIVER || it.tag == PartTag.KIDNEY }) && p.filtrationEff() <= 0.001f) cause = "organ failure"
-    if (cause == null && p.bloodLoss >= 1f) cause = "blood loss"
+    if (cause == null && p.bloodLoss >= 1f) cause = "bleed-out"
     if (cause == null && p.injuries.any { it.infection >= 1f }) cause = "infection"
     if (cause == null) for (h in p.hediffs) if (h.kind.lethal && h.severity >= 1f) { cause = h.kind.label.lowercase(); break }
     if (cause != null) die(p, cause, source)
@@ -315,7 +336,7 @@ fun Game.healthTick(p: Pawn, dt: Int) {
             0 -> {
                 if (h.tended && h.age % tk(15000) < dt) h.tended = false
                 val per = dt / TICKS_PER_DAY.toFloat()
-                var imm = h.kind.immunityPerDay * per * (if (Trait.SUPER_IMMUNE in p.traits) 1.4f else 1f)
+                var imm = h.kind.immunityPerDay * per * (if (Trait.HARDY_BODY in p.traits) 1.4f else 1f)
                 if (h.tended) imm *= 1f + 0.5f * h.tendQuality
                 if (resting) imm *= 1.25f
                 h.immunity += imm
@@ -343,7 +364,9 @@ fun Game.healthTick(p: Pawn, dt: Int) {
             5 -> { /* chronic: stays for life */ }
         }
     }
-    if (p.healthDirty) recomputeHealth(p)
+    // Healing, infection and hediff severity were changed in place above, without a mark on each change.
+    p.healthDirty = true
+    recomputeHealth(p)
     // Dropping into shock or unconsciousness.
     if (!p.downed && p.shouldBeDowned()) {
         if (!p.dead) downPawn(p)
@@ -375,7 +398,7 @@ fun Game.tendQuality(doctor: Pawn?, med: ItemType?, hospital: Boolean, self: Boo
     val potency = med?.potency?.takeIf { it > 0f } ?: HealthRules.NO_MEDICINE_POTENCY
     val maxQuality = if (med != null && med.potency > 0f) med.maxTendQuality else HealthRules.NO_MEDICINE_MAX_QUALITY
     return HealthRules.tendQuality(
-        doctor?.level(SkillType.MEDICINE) ?: HealthRules.DEFAULT_DOCTOR_SKILL,
+        doctor?.level(SkillType.HEALING) ?: HealthRules.DEFAULT_DOCTOR_SKILL,
         doctor?.cap?.get(Cap.MANIPULATION.ordinal) ?: 1f,
         potency, maxQuality, hospital, self, rng.float(),
     )
@@ -396,7 +419,7 @@ fun Game.tendPawn(doctor: Pawn?, patient: Pawn, med: ItemType?) {
     }
     for (h in patient.hediffs) if (h.kind.needsTend) { h.tended = true; h.tendQuality = q; h.age = 0; any = true }
     if (any) patient.healthDirty = true
-    doctor?.gainXp(SkillType.MEDICINE, 220f)
+    doctor?.gainXp(SkillType.HEALING, SkillRules.tendXp(patient.isAnimal))
 }
 
 fun Game.die(p: Pawn, cause: String, source: Pawn? = null) {

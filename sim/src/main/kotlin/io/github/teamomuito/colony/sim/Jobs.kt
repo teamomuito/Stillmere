@@ -33,7 +33,7 @@ fun Game.endJob(p: Pawn) {
     p.warmup = 0
 }
 
-/** A hospital bed is held by its patient, and stays held until that patient's job ends. */
+/** An infirmary cot is held by its patient, and stays held until that patient's job ends. */
 internal fun Game.releaseMedicalBeds(p: Pawn) {
     for (b in map.buildings()) if (b.def.medical && b.occupant == p.id) b.occupant = -1
 }
@@ -125,6 +125,7 @@ fun Game.goTo(p: Pawn, tx: Int, ty: Int, adjacent: Boolean = false, breach: Bool
     val prevIdx = map.idx(p.x, p.y)
     p.fromX = p.x; p.fromY = p.y
     p.x = map.xOf(next); p.y = map.yOf(next)
+    if (!p.isAnimal) map.doorEntered(next)
     p.pathI++
     p.moveTotal = max(tk(3), p.moveSpeedTicks() * map.stepCost(next) / 10)
     p.moveCd = p.moveTotal
@@ -159,8 +160,8 @@ fun Game.threatNear(p: Pawn): Boolean {
     return false
 }
 
-/** Below these a pawn drops whatever it is doing to eat or sleep, if it can. */
-internal const val URGENT_FOOD = 0.15f
+/** Below these a pawn drops whatever it is doing to eat or sleep, if it can. Food is the urgently hungry level (see NeedRules). */
+internal const val URGENT_FOOD = NeedRules.URGENT_FOOD
 internal const val URGENT_REST = 0.1f
 
 /** Jobs that are never dropped for a need: the need itself, threats, breaks, and work that must finish. */
@@ -201,7 +202,7 @@ fun Game.think(p: Pawn) {
     findFeedBaby(p)?.let { p.job = it; return }
     if (p.surgeries.isNotEmpty() && map.building[map.idx(p.x, p.y)]?.def?.sleeps != true && startRest(p)) return
     if (p.needsMedical && p.priority[WorkType.PATIENT.ordinal] > 0 && patientShouldRest(p) && startRest(p)) return
-    val sleepHourRest = if (Trait.NIGHT_OWL in p.traits) 0.7f else 0.92f
+    val sleepHourRest = if (Trait.NOCTURNAL in p.traits) 0.7f else 0.92f
     val sleepy = p.rest < 0.25f || (act == 3 && p.rest < sleepHourRest)
     if (sleepy && startSleep(p)) return
     // Gear.
@@ -227,7 +228,7 @@ fun Game.think(p: Pawn) {
 }
 
 private fun Game.patientShouldRest(p: Pawn): Boolean =
-    p.pain > 0.12f || p.bloodLoss > 0.1f || p.hediffs.any { it.kind.category == 0 && it.severity > 0.25f } || p.healthFraction() < 0.6f || p.injuries.any { it.infection > 0f } || p.hediffs.any { it.kind == HediffKind.HYPOTHERMIA && it.severity > 0.35f }
+    p.pain > 0.12f || p.bloodLoss > 0.1f || p.hediffs.any { it.kind.category == 0 && it.severity > 0.25f } || p.healthFraction() < 0.6f || p.injuries.any { it.infection > 0f } || p.hediffs.any { it.kind == HediffKind.COLD_CORE && it.severity > 0.35f }
 
 internal fun Game.tryWork(p: Pawn, w: WorkType): Job? = when (w) {
     WorkType.FIREFIGHT -> findFirefight(p)
@@ -254,21 +255,21 @@ internal fun Game.tryWork(p: Pawn, w: WorkType): Job? = when (w) {
 
 private fun Game.foodScore(p: Pawn, t: ItemType, rot: Float): Int {
     if (!t.humanFood || !t.isFood || t == ItemType.HAY) return -1
-    if (t == ItemType.KIBBLE && p.food > 0.12f) return -1
-    if (t == ItemType.HUMAN_MEAT && Trait.CANNIBAL !in p.traits && p.food > 0.08f) return -1
+    if (t == ItemType.FEED_PELLETS && p.food > 0.12f) return -1
+    if (t == ItemType.MANFLESH && Trait.FLESH_EATER !in p.traits && p.food > 0.08f) return -1
     if (rot > 0.88f) return -1
     val raw = t.cat == ItemCat.FOOD_PLANT || t.cat == ItemCat.FOOD_MEAT && t != ItemType.MILK
     if (p.foodPolicy == 2 && t.cat != ItemCat.FOOD_MEAL && p.food > 0.1f) return -1
     if (p.foodPolicy == 1 && raw && p.food > 0.1f) return -1
     return when (t) {
-        ItemType.MEAL_FINE -> 0
-        ItemType.MEAL_SIMPLE -> 1
-        ItemType.MEAL_PACKAGED -> 1
-        ItemType.PEMMICAN -> 2
+        ItemType.MEAL_ROASTED_PLATTER -> 0
+        ItemType.MEAL_HEARTH_STEW -> 1
+        ItemType.MEAL_RATION -> 1
+        ItemType.TRAIL_CAKE -> 2
         ItemType.MILK -> 3
         ItemType.EGGS, ItemType.STRAWBERRIES -> 5
-        ItemType.KIBBLE -> 9
-        ItemType.HUMAN_MEAT -> 8
+        ItemType.FEED_PELLETS -> 9
+        ItemType.MANFLESH -> 8
         else -> 6
     }
 }
@@ -338,6 +339,25 @@ internal fun Game.findBedFor(p: Pawn, forceMedical: Boolean = false): Int {
     return -1
 }
 
+/**
+ * True when the pawn was given a bed, has reached it, and the bed still stands. This is the one in-bed test: the rest gain and
+ * the outdoors need both use it. A pawn that collapses onto a bed cell has no bed (amount 0, see [startSleepInPlace]), so it is
+ * not in bed. A downed pawn has no job at all (see [downPawn]), so it is not in bed either.
+ */
+internal fun Game.isInBed(p: Pawn): Boolean {
+    val j = p.job ?: return false
+    if (j.type != JobType.SLEEP && j.type != JobType.REST) return false
+    if (j.stage != 1 || j.amount != 1) return false
+    val b = map.building[map.idx(p.x, p.y)] ?: return false
+    return b.built && b.def.sleeps
+}
+
+/** Lies down where the pawn stands, for exhaustion that overcomes it. Nothing else is set up: the sleep job rests it. */
+internal fun Game.startSleepInPlace(p: Pawn) {
+    endJob(p)
+    p.job = Job(JobType.SLEEP).also { it.stage = 1; it.amount = 0 }
+}
+
 internal fun Game.startSleep(p: Pawn): Boolean {
     val bed = findBedFor(p)
     val j = Job(JobType.SLEEP)
@@ -354,8 +374,8 @@ internal fun Game.startSleep(p: Pawn): Boolean {
 
 internal fun Game.startJoy(p: Pawn): Job? {
     // Drugs, when allowed.
-    if ((p.allowDrugs || p.drugPolicy == 2 || p.drugPolicy == 1 && pawns.any { it !== p && it.colonist && it.alive && distance(p.x, p.y, it.x, it.y) < 8f }) && p.joy < 0.6f && p.hediff(HediffKind.ALCOHOL_HIGH) == null) {
-        val s = nearestItem(p) { it.type == ItemType.BEER || it.type == ItemType.JOINT || (it.type == ItemType.FLAKE || it.type == ItemType.YAYO) && rng.chance(0.4f) || it.type == ItemType.PSYCHITE_TEA && rng.chance(0.3f) }
+    if ((p.allowDrugs || p.drugPolicy == 2 || p.drugPolicy == 1 && pawns.any { it !== p && it.colonist && it.alive && distance(p.x, p.y, it.x, it.y) < 8f }) && p.joy < 0.6f && p.hediff(HediffKind.BREW_HAZE) == null) {
+        val s = nearestItem(p) { it.type == ItemType.BEER || it.type == ItemType.JOINT || (it.type == ItemType.PALE_DUST || it.type == ItemType.WHITE_RUSH) && rng.chance(0.4f) || it.type == ItemType.LUCID_DRAUGHT && rng.chance(0.3f) }
         if (s != null) {
             val j = Job(JobType.SMOKE, s.x, s.y); j.key = key(map.idx(s.x, s.y), K_ITEM); reserve(p, j.key); j.item = s.type
             return j
@@ -364,7 +384,7 @@ internal fun Game.startJoy(p: Pawn): Job? {
     val b = nearestCell(p, K_STATION) {
         val bd = map.building[it]
         bd != null && bd.built && bd.def.joy > 0f && !bd.forbidden && (!bd.def.consumesPower || bd.powered) &&
-            (bd.def != BuildDef.HORSESHOES || weather != Weather.RAIN && weather != Weather.THUNDER && !map.roofed(it))
+            (bd.def != BuildDef.QUOITS || weather != Weather.RAIN && weather != Weather.THUNDER && !map.roofed(it))
     }
     if (b >= 0) {
         reserve(p, key(b, K_STATION))
@@ -390,7 +410,7 @@ internal fun Game.apparelValue(it: ItemStack): Float {
 internal fun Game.findGear(p: Pawn): Job? {
     if (p.drafted || p.prisoner || p.isAnimal) return null
     // Weapon.
-    val wantRanged = p.skill[SkillType.SHOOTING.ordinal] >= p.skill[SkillType.MELEE.ordinal] && Trait.BRAWLER !in p.traits || Trait.TRIGGER_HAPPY in p.traits
+    val wantRanged = p.skill[SkillType.MARKSMANSHIP.ordinal] >= p.skill[SkillType.CLOSE_COMBAT.ordinal] && Trait.STREET_SCRAPPER !in p.traits || Trait.QUICK_TRIGGER in p.traits
     fun weaponScore(t: ItemType?, q: Quality): Float {
         val w = t?.weapon ?: return 0f
         var sc = w.damage * w.burst / (w.cooldown / 50f) * q.mult
@@ -398,14 +418,14 @@ internal fun Game.findGear(p: Pawn): Job? {
         return sc
     }
     val cur = weaponScore(p.weaponItem, p.weaponQuality)
-    val ws = nearestItem(p) { it.type.weapon != null && weaponScore(it.type, it.quality) > cur * 1.2f && (!it.type.weapon!!.ranged || Trait.BRAWLER !in p.traits) && abs(it.x - p.x) + abs(it.y - p.y) < 45 }
+    val ws = nearestItem(p) { it.type.weapon != null && weaponScore(it.type, it.quality) > cur * 1.2f && (!it.type.weapon!!.ranged || Trait.STREET_SCRAPPER !in p.traits) && abs(it.x - p.x) + abs(it.y - p.y) < 45 }
     if (ws != null) {
         reserve(p, key(map.idx(ws.x, ws.y), K_ITEM))
         val j = Job(JobType.EQUIP, ws.x, ws.y); j.key = key(map.idx(ws.x, ws.y), K_ITEM)
         return j
     }
     // Apparel: wear a better piece for any slot; swap tattered clothes.
-    if (Trait.NUDIST in p.traits || p.outfit == 3) return null
+    if (Trait.BARE_SKINNED in p.traits || p.outfit == 3) return null
     val temp = outdoorTemp()
     var best: ItemStack? = null
     var bs = 0f
@@ -503,12 +523,12 @@ internal fun Game.findDoctor(p: Pawn): Job? {
     var med: ItemStack? = null
     if (o.careLevel > 0 && !o.isAnimal) {
         med = nearestItem(p, shared = true) {
-            it.type.cat == ItemCat.MEDICINE && it.type.potency > 0f && (o.careLevel >= 2 || it.type == ItemType.MEDS_HERBAL) &&
+            it.type.cat == ItemCat.MEDICINE && it.type.potency > 0f && (o.careLevel >= 2 || it.type == ItemType.MEDS_LEAF_POULTICE) &&
                 map.zoneKind(map.idx(it.x, it.y)) != ZoneKind.NONE || (it.type.potency > 0f && it.type.cat == ItemCat.MEDICINE && o.careLevel >= 2)
         }
         // Prefer the best medicine for serious wounds.
-        if (med != null && (o.bleeding < 0.0002f && o.injuries.none { it.infection > 0f }) && med.type == ItemType.MEDS_INDUSTRIAL) {
-            val herb = nearestItem(p, shared = true) { it.type == ItemType.MEDS_HERBAL }
+        if (med != null && (o.bleeding < 0.0002f && o.injuries.none { it.infection > 0f }) && med.type == ItemType.MEDS_STERILE_DRESSING) {
+            val herb = nearestItem(p, shared = true) { it.type == ItemType.MEDS_LEAF_POULTICE }
             if (herb != null) med = herb
         }
     }
@@ -542,13 +562,14 @@ internal fun Game.findGrow(p: Pawn): Job? {
     }
     val s = nearestCell(p, K_PLANT) {
         val z = map.zoneAt(it)
-        if (z == null || z.kind != ZoneKind.GROWING || !z.sow || map.plant[it] != null) return@nearestCell false
+        val under = map.plant[it]
+        if (z == null || z.kind != ZoneKind.GROWING || !z.sow || (under != null && under.type != PlantType.GRASS)) return@nearestCell false
         val bd = map.building[it]
-        if (bd != null && bd.def != BuildDef.HYDROPONICS) return@nearestCell false
-        val fert = if (bd?.def == BuildDef.HYDROPONICS && bd.powered) 2f else map.terrain[it].fertility
+        if (bd != null && bd.def != BuildDef.GROW_TRAY) return@nearestCell false
+        val fert = if (bd?.def == BuildDef.GROW_TRAY && bd.powered) GROW_TRAY_GROWTH_FACTOR else map.terrain[it].fertility
         if (fert <= 0f) return@nearestCell false
         val t = map.tempAt(it, outdoorTemp())
-        t > max(6f, z.crop.minTemp) && t < z.crop.maxTemp - 3f && !map.fires.containsKey(it)
+        growthSeasonOk(t, z.crop) && !map.fires.containsKey(it)
     }
     if (s >= 0) {
         reserve(p, key(s, K_PLANT))
@@ -583,7 +604,7 @@ internal fun Game.findResearch(p: Pawn): Job? {
     val highTech = cur.tier >= 3
     val bench = nearestCell(p, K_STATION) {
         val b = map.building[it]
-        b != null && b.built && (b.def == BuildDef.HI_TECH_BENCH && b.powered || b.def == BuildDef.RESEARCH_BENCH && !highTech) && !b.forbidden
+        b != null && b.built && (b.def == BuildDef.PRECISION_BENCH && b.powered || b.def == BuildDef.STUDY_DESK && !highTech) && !b.forbidden
     }
     if (bench < 0) return null
     reserve(p, key(bench, K_STATION))
@@ -648,8 +669,18 @@ internal fun Game.findConstruct(p: Pawn): Job? {
         val j = Job(JobType.REPAIR, map.xOf(r), map.yOf(r)); j.key = key(r, K_DESIG)
         return j
     }
-    return null
+    return findRoof(p)
 }
+
+/** A designated roof cell that can be built now (Roofs.kt). Built after repair, under the construct work type. */
+internal fun Game.findRoof(p: Pawn): Job? {
+    val i = nearestCell(p, K_DESIG) { map.desig[it].toInt() == Desig.ROOF && map.canBuildRoofAt(it) }
+    if (i < 0) return null
+    reserve(p, key(i, K_DESIG))
+    val j = Job(JobType.BUILD_ROOF, map.xOf(i), map.yOf(i)); j.key = key(i, K_DESIG)
+    return j
+}
+
 
 internal fun Game.zoneBestFor(p: Pawn, s: ItemStack, from: Int): Int {
     // Highest-priority stockpile that accepts the item and has room; nearest within a priority.
@@ -680,7 +711,7 @@ internal fun Game.zoneBestFor(p: Pawn, s: ItemStack, from: Int): Int {
 }
 
 internal fun Game.findHaul(p: Pawn): Job? {
-    // Fuel first: campfires, torches, smithies, stoves and generators.
+    // Fuel first: campfires, torches, forges, stoves and generators.
     val fire = nearestCell(p, K_STATION) {
         val b = map.building[it]
         b != null && b.built && b.def.fuelCap > 0f && b.fuel < b.def.fuelCap * 0.4f && !b.forbidden
@@ -693,8 +724,8 @@ internal fun Game.findHaul(p: Pawn): Job? {
             return j
         }
     }
-    // Mortars need shells.
-    val mortar = nearestCell(p, K_STATION) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.MORTAR && b.shells < 5 }
+    // Tubes need shells.
+    val mortar = nearestCell(p, K_STATION) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.LOBBING_TUBE && b.shells < 5 }
     if (mortar >= 0) {
         val s = nearestItem(p) { it.type == ItemType.SHELL }
         if (s != null && reserveAll(p, key(mortar, K_STATION), key(map.idx(s.x, s.y), K_ITEM))) {
@@ -789,7 +820,7 @@ internal fun Game.billRunnable(b: Building, bill: Bill, p: Pawn): Boolean {
     if (bill.paused) return false
     val r = bill.recipe
     if (!r.available(researchDone)) return false
-    if (p.level(r.workType.skill() ?: SkillType.CRAFTING) < max(bill.minSkill, r.minSkill)) return false
+    if (p.level(r.workType.skill() ?: SkillType.WORKMANSHIP) < max(bill.minSkill, r.minSkill)) return false
     when (bill.mode) {
         BillMode.DO_X -> if (bill.done >= bill.target) return false
         BillMode.UNTIL_HAVE -> {
@@ -825,7 +856,7 @@ internal fun Game.findBill(p: Pawn, wt: WorkType): Job? {
         val k = key(i, K_STATION)
         if (!isFree(p, k) || isBad(p, k)) continue
         // Fuelled benches need fuel to be useful.
-        if (b.def.fuelCap > 0f && b.fuel <= 0.5f && b.def != BuildDef.TORCH_LAMP) continue
+        if (b.def.fuelCap > 0f && b.fuel <= 0.5f && b.def != BuildDef.PITCH_POST) continue
         val d = abs(b.x - p.x) + abs(b.y - p.y)
         if (d >= bd) continue
         for ((bi, bill) in b.bills.withIndex()) {
@@ -844,7 +875,7 @@ internal fun Game.findBill(p: Pawn, wt: WorkType): Job? {
 }
 
 internal fun Game.findButcher(p: Pawn): Job? {
-    val table = nearestCell(p, K_STATION) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.BUTCHER_TABLE && !b.forbidden }
+    val table = nearestCell(p, K_STATION) { val b = map.building[it]; b != null && b.built && b.def == BuildDef.CARVING_SLAB && !b.forbidden }
     if (table < 0) return null
     val corpse = nearestStack(p) {
         it.corpseOf != null && it.corpseRace != null && it.corpseRace != Race.HUMAN && !it.forbidden && it.rot < 0.7f &&

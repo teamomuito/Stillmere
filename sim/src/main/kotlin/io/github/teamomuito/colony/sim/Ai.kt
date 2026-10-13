@@ -13,7 +13,7 @@ internal fun Game.autoFightTarget(p: Pawn): Pawn? {
         if (!h.hostile || !h.alive || h.downed || h === p) continue
         if (h.faction == p.faction && !h.hostileFlag) continue
         val d = distance(p.x, p.y, h.x, h.y)
-        val ok = d < 2.1f || (p.weapon.ranged && d <= p.weapon.range * 0.8f && map.lineOfSight(p.x, p.y, h.x, h.y) && p.cap[Cap.MANIPULATION.ordinal] > 0.3f)
+        val ok = d <= MELEE_REACH || (p.weapon.ranged && d <= p.weapon.range * 0.8f && map.lineOfSight(p.x, p.y, h.x, h.y) && p.cap[Cap.MANIPULATION.ordinal] > 0.3f)
         if (ok && d < bd) { best = h; bd = d }
     }
     return best
@@ -26,52 +26,90 @@ fun Game.shouldReact(p: Pawn): Boolean {
 }
 
 /** What a ranged shot meets on the way to its target. */
-internal class ShotPath(val blocked: Boolean, val interceptor: Pawn?, val cover: Float)
+internal class ShotPath(val blocked: Boolean, val interceptor: Pawn?)
 
 /**
  * Walks the cells between shooter and target. A building that blocks sight stops the shot. The first pawn on the line
- * takes it, friend or foe, as in the game it imitates. Cover is the best cover anywhere on the line.
+ * takes it, friend or foe, as in the game it imitates. Cover is read from the target's neighbours (see [coverAgainst]).
  */
 internal fun Game.shotPath(p: Pawn, t: Pawn): ShotPath {
     for (c in map.cellsBetween(p.x, p.y, t.x, t.y)) {
         val b = map.building[c]
-        if (b != null && b.built && b.def.blocksSight) return ShotPath(blocked = true, interceptor = null, cover = 0f)
+        if (b != null && b.built && b.def.blocksSight) return ShotPath(blocked = true, interceptor = null)
         val x = map.xOf(c); val y = map.yOf(c)
         val occupant = pawnAt(x, y)
-        if (occupant != null && occupant !== p) return ShotPath(blocked = false, interceptor = occupant, cover = targetCover(t))
+        if (occupant != null && occupant !== p) return ShotPath(blocked = false, interceptor = occupant)
     }
-    return ShotPath(blocked = false, interceptor = null, cover = targetCover(t))
+    return ShotPath(blocked = false, interceptor = null)
 }
 
-/** Cover a target stands behind: the best cover beside it. Cover that is only somewhere along the line does not count. */
-private fun Game.targetCover(t: Pawn): Float {
-    var cover = 0f
+/**
+ * The cover beside the target that a shot from (sx, sy) can be stopped by. The eight cells around the target are checked, and
+ * the shooter's own cell is skipped (Verse/CoverUtility.cs:18-25).
+ */
+internal fun Game.coverAgainst(sx: Int, sy: Int, t: Pawn): List<CoverBlock> {
+    val out = ArrayList<CoverBlock>(4)
     for (dy in -1..1) for (dx in -1..1) {
-        if (dx == 0 && dy == 0 || !map.inB(t.x + dx, t.y + dy)) continue
-        val b = map.building[map.idx(t.x + dx, t.y + dy)]
-        if (b != null && b.built) cover = max(cover, b.def.cover)
+        if (dx == 0 && dy == 0) continue
+        val nx = t.x + dx; val ny = t.y + dy
+        if (!map.inB(nx, ny) || (nx == sx && ny == sy)) continue
+        val b = map.building[map.idx(nx, ny)] ?: continue
+        if (!b.built) continue
+        val base = coverBase(b.def)
+        if (base <= 0f) continue
+        val block = coverBlockChance(base, dx, dy, sx - t.x, sy - t.y, sx - nx, sy - ny)
+        if (block > 0f) out.add(CoverBlock(b, block))
     }
-    return cover
+    return out
 }
 
-internal fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float): Float {
-    val skill = p.level(if (w.ranged) SkillType.SHOOTING else SkillType.MELEE)
+/**
+ * Aim chance of a ranged shot before cover (Verse/ShotReport.cs:58-76). The shooter factor `f ^ distance` times the equipment
+ * band factor, times the Stillmere factors (sight, traits, fog, suppression, manipulation), with execution applied, then the
+ * floor of 0.0201. Then the target size factor and the prone factor. Clamped to 0 to 1. See docs/fidelity/combat.md.
+ */
+internal fun Game.aimChance(p: Pawn, t: Pawn, w: Weapon, d: Float): Float {
+    var standard = shooterFactor(shooterAccuracy(p.level(SkillType.MARKSMANSHIP)), d) * equipmentFactor(w, d)
+    if (Trait.STEADY_AIM in p.traits) standard *= 1.12f
+    if (weather == Weather.FOG) standard *= 0.85f
+    if (Trait.QUICK_TRIGGER in p.traits) standard *= 0.92f
+    if (p.suppressedUntil > tick) standard *= 0.7f
+    standard *= p.cap[Cap.SIGHT.ordinal].coerceAtLeast(0.2f)
+    standard *= p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.35f, 1f).let { if (p.isAnimal) 1f else it }
+    if (t.downed && d <= EXECUTION_DISTANCE_CELLS) standard *= EXECUTION_AIM_FACTOR
+    standard = max(standard, MIN_AIM_CHANCE)
+    var chance = standard * targetSizeFactor(t.race.size)
+    if (t.downed && d >= PRONE_DISTANCE_CELLS) chance *= PRONE_AIM_FACTOR
+    return chance.coerceIn(0f, 1f)
+}
+
+/** The chance a ranged shot hits: the aim chance times the chance that cover does not stop it. */
+internal fun Game.hitChance(p: Pawn, t: Pawn, w: Weapon, d: Float, cover: Float): Float = aimChance(p, t, w, d) * (1f - cover)
+
+/**
+ * The attacker's non-miss chance for a melee swing, the first of the two rolls (RimWorld/Verb_MeleeAttack.cs:43-45). This is
+ * Stillmere's formula; the target's skill term moved to the dodge roll.
+ */
+internal fun Game.meleeNonMissChance(p: Pawn, w: Weapon): Float {
+    val skill = p.level(SkillType.CLOSE_COMBAT)
     var base = w.accuracy * (0.62f + 0.03f * skill) * p.weaponDamageMult().coerceIn(0.8f, 1.15f)
-    if (w.ranged) {
-        base *= (1.15f - d / (w.range * 1.35f)).coerceIn(0.2f, 1.1f)
-        base *= p.cap[Cap.SIGHT.ordinal].coerceAtLeast(0.2f)
-        base *= (1f - cover).coerceAtLeast(0.2f)
-        if (Trait.CAREFUL_SHOOTER in p.traits) base *= 1.12f
-        if (weather == Weather.FOG) base *= 0.85f
-        if (Trait.TRIGGER_HAPPY in p.traits) base *= 0.92f
-        if (p.suppressedUntil > tick) base *= 0.7f
-        base *= (0.55f + 0.45f * t.race.size.coerceIn(0.5f, 1.4f)) // small animals are harder to hit
-    } else {
-        if (Trait.BRAWLER in p.traits) base *= 1.12f
-        base *= (1f - 0.04f * t.level(SkillType.MELEE)).coerceAtLeast(0.55f)
-    }
+    if (Trait.STREET_SCRAPPER in p.traits) base *= 1.12f
     base *= p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.35f, 1f).let { if (p.isAnimal) 1f else it }
     return base.coerceIn(0.05f, 0.95f)
+}
+
+/** The target's dodge chance, the second melee roll (RimWorld/Verb_MeleeAttack.cs:159-176). A downed target cannot dodge. */
+internal fun dodgeChance(t: Pawn): Float =
+    if (t.downed) 0f else min(DODGE_MAX, DODGE_PER_SKILL * t.level(SkillType.CLOSE_COMBAT))
+
+/**
+ * One melee swing: a non-miss roll, then a dodge roll. A downed target is hit with no rolls, as an immobile target is in the
+ * reference (RimWorld/Verb_MeleeAttack.cs:126-134, 159-176).
+ */
+internal fun Game.meleeSwingHits(p: Pawn, t: Pawn): Boolean {
+    if (t.downed) return true
+    if (!rng.chance(meleeNonMissChance(p, p.weapon))) return false
+    return !rng.chance(dodgeChance(t))
 }
 
 /**
@@ -89,7 +127,8 @@ fun Game.fire(p: Pawn, t: Pawn) {
     val w = p.weapon
     val d = distance(p.x, p.y, t.x, t.y)
     if (w.ranged) {
-        if (d > w.range + 1) return
+        // Out of range once past the weapon's range, with no tolerance (Verse/Verb.cs:810).
+        if (d > w.range) return
         aim(p, t)
         if (p.warmup < w.warmupTicks) { p.warmup++; return }
         p.warmup = 0
@@ -97,38 +136,100 @@ fun Game.fire(p: Pawn, t: Pawn) {
         // The shot meets whatever is first on its line; a wall on the line stops it outright.
         val target = path.interceptor ?: t
         val td = distance(p.x, p.y, target.x, target.y)
+        // The aim roll comes first, then the cover roll (docs/fidelity/combat.md). A blocked line has no aim at all.
+        val chanceToAim = if (path.blocked) 0f else aimChance(p, target, w, td)
         for (k in 0 until w.burst) {
             var anyHit = false
             for (pellet in 0 until w.pellets) {
-                if (path.blocked || !rng.chance(hitChance(p, target, w, td, path.cover))) continue
-                anyHit = true
+                if (path.blocked || !rng.chance(chanceToAim)) continue
+                // The cover is read again for each pellet: a cover shot apart by an earlier pellet or burst stops nothing more
+                // (Verse/Verb_LaunchProjectile.cs:167-178).
+                val covers = coverAgainst(p.x, p.y, target)
+                val coverBlock = overallBlock(covers)
+                // Projectile damage is deterministic: the base times the weapon damage multiplier. It stays a float here; the
+                // reference rounds it to an integer (Verse/ProjectileProperties.cs:145), see docs/fidelity/combat.md.
                 // Each pellet is armored separately, which is why shotguns do little against armor.
-                val dmg = w.damage / w.pellets * (0.85f + rng.float() * 0.3f) * p.weaponDamageMult()
-                if (w.aoe > 0f) explode(target.x, target.y, w.aoe, dmg, p, w == Weapon.MOLOTOV)
-                else dealDamage(target, w.kind, dmg, w.armorPen, p)
+                val dmg = w.damage / w.pellets * p.weaponDamageMult()
+                if (covers.isNotEmpty() && rng.chance(coverBlock)) {
+                    // Cover stops this pellet: the cover building takes it instead of the target.
+                    absorbByCover(pickCover(covers), dmg)
+                    continue
+                }
+                anyHit = true
+                if (w.aoe > 0f) explode(target.x, target.y, w.aoe, dmg, p, w == Weapon.FIRE_FLASK)
+                else dealDamage(target, w.kind, dmg, penetrationOf(w), p)
             }
             // A volley that hits nothing pins down whoever it was aimed at.
             if (!anyHit && !target.dead) {
                 target.suppressedUntil = max(target.suppressedUntil, tick + TICKS_PER_HOUR)
                 target.addThought("Under fire", -0.04f, tick, TICKS_PER_HOUR)
             }
-            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + tk(5) + k * tk(2), anyHit, if (w == Weapon.BOW || w == Weapon.GREATBOW) 3 else 0))
+            shots.add(Shot(p.interpX(), p.interpY(), t.x.toFloat(), t.y.toFloat(), tick + tk(5) + k * tk(2), anyHit, if (w == Weapon.BOW || w == Weapon.LONGSTAVE) 3 else 0))
         }
-        p.attackCd = max(tk(8), (w.cooldownTicks * (if (Trait.TRIGGER_HAPPY in p.traits) 0.85f else if (Trait.CAREFUL_SHOOTER in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
-        p.gainXp(SkillType.SHOOTING, 4f * w.burst)
+        val cooldown = max(tk(8), (w.cooldownTicks * (if (Trait.QUICK_TRIGGER in p.traits) 0.85f else if (Trait.STEADY_AIM in p.traits) 1.25f else 1f) / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.attackCd = cooldown
+        shootingXp(p, t, w, cooldown)
     } else {
-        if (d > 2.1f) return
-        val hit = rng.chance(hitChance(p, t, w, d, cover = 0f))
+        // Melee reaches adjacent cells only (Verse/ShootTuning.cs:13).
+        if (d > MELEE_REACH) return
+        val hit = meleeSwingHits(p, t)
         shots.add(Shot(p.x.toFloat(), p.y.toFloat(), t.x.toFloat(), t.y.toFloat(), tick + tk(4), hit, 4))
         if (hit) {
-            var dmg = w.damage * (0.85f + rng.float() * 0.3f) * p.weaponDamageMult()
+            // Melee damage varies from 0.8 to 1.2 of the base (RimWorld/Verb_MeleeAttackDamage.cs:22).
+            var dmg = w.damage * (MELEE_DAMAGE_MIN + (MELEE_DAMAGE_MAX - MELEE_DAMAGE_MIN) * rng.float()) * p.weaponDamageMult()
             if (p.isAnimal) dmg *= (0.7f + 0.3f * p.race.size)
-            dealDamage(t, w.kind, dmg, w.armorPen, p)
+            // A hit under 1 is raised to 1 and becomes blunt (RimWorld/Verb_MeleeAttackDamage.cs:26-37).
+            val (swingDmg, swingKind) = meleeFloor(dmg, w.kind)
+            dealDamage(t, swingKind, swingDmg, penetrationOf(w), p)
         }
-        p.attackCd = max(tk(10), (w.cooldownTicks / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
-        p.gainXp(SkillType.MELEE, 4f)
+        val cooldown = max(tk(10), (w.cooldownTicks / p.cap[Cap.MANIPULATION.ordinal].coerceIn(0.4f, 1f).let { if (p.isAnimal) 1f else it }).toInt())
+        p.attackCd = cooldown
+        // A swing that leaves the target alive and on the map staggers it, hit or miss (RimWorld/Verb_MeleeAttack.cs:96-98).
+        // A pawn that has left the map is no longer in `pawns`, which stands for the reference's Spawned check.
+        if (!t.dead && t in pawns) t.staggerUntil = max(t.staggerUntil, tick + STAGGER_TICKS)
+        // Every attack learns, hit or miss, unless the target is downed or a colony mechanoid (RimWorld/Verb_MeleeAttack.cs:31).
+        if (!t.downed && !colonyMech(t)) p.gainXp(SkillType.CLOSE_COMBAT, SkillRules.MELEE_XP_PER_SECOND * SkillRules.cycleSeconds(fullCycleTicks(w, cooldown)))
     }
 }
+
+/** The cover a stopped shot lands on: picked with weight equal to each cover's block chance (Verse/ShotReport.cs:249-256). */
+private fun Game.pickCover(covers: List<CoverBlock>): Building {
+    val total = covers.sumOf { it.block.toDouble() }.toFloat()
+    var r = rng.float() * total
+    for (c in covers) {
+        r -= c.block
+        if (r <= 0f) return c.building
+    }
+    return covers.last().building
+}
+
+/** The cover takes the damage of the shot it stops, and comes down when its hit points run out (a Stillmere choice, docs/fidelity/combat.md). */
+private fun Game.absorbByCover(b: Building, dmg: Float) {
+    b.hp -= dmg
+    if (b.hp <= 0f) {
+        map.removeBuilding(b)
+        map.roomDirty = true
+        say("A ${b.def.label.lowercase()} was shot apart.", 2)
+    }
+}
+
+/**
+ * The full cycle of one attack in ticks: warm-up, cooldown, and the spacing between a burst's shots (Stillmere spaces them
+ * tk(2) apart). Melee weapons carry no warm-up in the data and fire one shot, so their cycle is their cooldown
+ * (Verse/VerbProperties.cs:579-581).
+ */
+private fun fullCycleTicks(w: Weapon, cooldown: Int): Int = w.warmupTicks + cooldown + (w.burst - 1) * tk(2)
+
+/** Shooting XP for one burst, at warm-up completion, for a standing target that is not a colony mechanoid (Verse/Verb_Shoot.cs:14-16). */
+private fun Game.shootingXp(p: Pawn, t: Pawn, w: Weapon, cooldown: Int) {
+    if (t.downed || colonyMech(t)) return
+    p.gainXp(SkillType.MARKSMANSHIP, SkillRules.shootingXpPerSecond(hostileBetween(p, t)) * SkillRules.cycleSeconds(fullCycleTicks(w, cooldown)))
+}
+
+private fun colonyMech(t: Pawn) = t.race.mech && t.faction == Faction.PLAYER
+
+/** Hostile when the two pawns are on different sides and at least one is hostile. A stand-in for vanilla's HostileTo (**C**). */
+private fun hostileBetween(p: Pawn, t: Pawn) = t.faction != p.faction && (t.hostile || p.hostile)
 
 internal fun Game.draftedAI(p: Pawn) {
     // Retreating pawns walk to the edge and leave, whatever else they could be doing.
@@ -144,18 +245,18 @@ internal fun Game.draftedAI(p: Pawn) {
                 if (d <= w.range * 0.9f && map.lineOfSight(p.x, p.y, t.x, t.y)) { if (p.moveCd > 0) p.moveCd-- else fire(p, t) }
                 else if (goTo(p, t.x, t.y, adjacent = true) == -1) p.job = null
             } else {
-                if (d < 1.9f) fire(p, t) else if (goTo(p, t.x, t.y, adjacent = true) == -1) p.job = null
+                if (d <= MELEE_REACH) fire(p, t) else if (goTo(p, t.x, t.y, adjacent = true) == -1) p.job = null
             }
             return
         }
     }
     // Keep the current target while it can still be hit; only then look for the nearest one.
-    val reach = if (p.weapon.ranged) p.weapon.range else 1.9f
+    val reach = if (p.weapon.ranged) p.weapon.range else MELEE_REACH
     fun inReach(h: Pawn): Boolean {
         if (!h.hostile || !h.alive || h.downed || h === p) return false
         if (h.faction == p.faction && !h.hostileFlag) return false
         val d = distance(p.x, p.y, h.x, h.y)
-        return d <= reach && (d < 1.9f || map.lineOfSight(p.x, p.y, h.x, h.y))
+        return d <= reach && (d <= MELEE_REACH || map.lineOfSight(p.x, p.y, h.x, h.y))
     }
     var target: Pawn? = pawnById(p.fightTarget)?.takeIf { inReach(it) }
     if (target == null) {
@@ -218,7 +319,7 @@ private fun Game.digWall(p: Pawn, wall: Building) {
     if (p.attackCd == 0) {
         p.attackCd = p.weapon.cooldownTicks
         wall.hp -= 6f
-        if (wall.hp <= 0f) { map.removeBuilding(wall); map.roomDirty = true; say("Sappers broke through a ${wall.def.label.lowercase()}!", 3) }
+        if (wall.hp <= 0f) { map.removeBuilding(wall); map.roomDirty = true; say("Tunnelers broke through a ${wall.def.label.lowercase()}!", 3) }
     }
 }
 
@@ -234,12 +335,12 @@ private fun Game.pickTurretTarget(p: Pawn): Building? {
     return best
 }
 
-/** Dormant mechanoids lie still until someone gets close; the whole cluster wakes together. */
+/** Dormant iron swarms lie still until someone gets close; the whole cluster wakes together. */
 internal fun Game.dormantTick(p: Pawn) {
     if (tick % tk(20) != (p.id % tk(20)).toLong()) return
     if (pawns.any { it.alive && it.faction == Faction.PLAYER && !it.isAnimal && distance(p.x, p.y, it.x, it.y) < 11f }) {
         for (o in pawns) if (o.dormant && o.raidId == p.raidId) o.dormant = false
-        say("The mechanoid cluster has awoken!", 3)
+        say("The iron swarm has awoken!", 3)
     }
 }
 
@@ -258,7 +359,7 @@ internal fun Game.hostileAI(p: Pawn) {
     // A badly hurt raider may break and run, but not within the first hour of their wounds.
     if (!p.colonist && !p.retreating && p.healthFraction() < 0.45f && rng.chance(0.00005f / TIME_SCALE)) { p.retreating = true; endJob(p); return }
     j.timer++
-    // Siege: wait at the camp and lob mortar shells until the clock runs out.
+    // Shelling camp: wait at the camp and lob shells until the clock runs out.
     if (p.raidMode == 2 && p.campX >= 0 && day * TICKS_PER_DAY + 0 < tick) {
         val waitUntil = raidStartedAt + tk(9000)
         if (tick < waitUntil) {
@@ -273,7 +374,7 @@ internal fun Game.hostileAI(p: Pawn) {
         t = pickRaidTarget(p)
         j.targetPawn = t?.id ?: -1
     }
-    // Sappers dig in: with no one close, they break through the nearest wall.
+    // Tunnelers dig in: with no one close, they break through the nearest wall.
     if (p.raidMode == 1 && (t == null || distance(p.x, p.y, t.x, t.y) > 10f)) {
         nearestWall(p)?.let { digWall(p, it); return }
     }
@@ -298,7 +399,7 @@ internal fun Game.hostileAI(p: Pawn) {
         }
         if (goTo(p, t.x, t.y, adjacent = true, breach = true) == -1) wanderAround(p)
     } else {
-        if (d < 1.9f) { fire(p, t); return }
+        if (d <= MELEE_REACH) { fire(p, t); return }
         if (goTo(p, t.x, t.y, adjacent = true, breach = true) == -1) wanderAround(p)
     }
 }
@@ -451,7 +552,7 @@ internal fun Game.findHandle(p: Pawn): Job? {
         // Feed the hungry.
         if (a.food < 0.3f) {
             val carn = a.race.diet == Diet.CARNIVORE
-            val s = nearestItem(p) { (it.type == ItemType.KIBBLE || (!carn && it.type == ItemType.HAY) || (carn && it.type == ItemType.MEAT) || it.type == ItemType.HAY && a.race.diet != Diet.CARNIVORE) }
+            val s = nearestItem(p) { (it.type == ItemType.FEED_PELLETS || (!carn && it.type == ItemType.HAY) || (carn && it.type == ItemType.MEAT) || it.type == ItemType.HAY && a.race.diet != Diet.CARNIVORE) }
             if (s != null && reserveAll(p, k, key(map.idx(s.x, s.y), K_ITEM))) {
                 val j = Job(JobType.FEED_ANIMAL, s.x, s.y); j.targetPawn = a.id; j.dx = s.x; j.dy = s.y; j.key = k
                 return j
@@ -475,7 +576,7 @@ internal fun Game.findHandle(p: Pawn): Job? {
 }
 
 internal fun Game.findHunt(p: Pawn): Job? {
-    if (p.weaponItem == null && Trait.BRAWLER !in p.traits) return null
+    if (p.weaponItem == null && Trait.STREET_SCRAPPER !in p.traits) return null
     var best: Pawn? = null
     var bd = Int.MAX_VALUE
     for (a in pawns) {
@@ -502,6 +603,6 @@ internal fun Game.allyAI(p: Pawn) {
     }
     val w = p.weapon
     val d = distance(p.x, p.y, h.x, h.y)
-    val inReach = if (w.ranged) d <= w.range * 0.9f && map.lineOfSight(p.x, p.y, h.x, h.y) else d < 1.9f
+    val inReach = if (w.ranged) d <= w.range * 0.9f && map.lineOfSight(p.x, p.y, h.x, h.y) else d <= MELEE_REACH
     if (inReach) { if (p.moveCd > 0) p.moveCd-- else fire(p, h) } else goTo(p, h.x, h.y, adjacent = true)
 }

@@ -83,6 +83,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         Terrain.SAND -> 0xFFCDBA86.toInt()
         Terrain.MARSH -> 0xFF4D6A44.toInt()
         Terrain.MUD -> 0xFF5A4A36.toInt()
+        Terrain.GRASS -> 0xFF60803F.toInt()
         Terrain.ICE -> 0xFFD2E8F2.toInt()
         Terrain.WATER_SHALLOW -> 0xFF5E92B8.toInt()
         Terrain.WATER_DEEP -> 0xFF325A86.toInt()
@@ -100,7 +101,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         box(c, sx, sy, sx + s + 1, sy + s + 1, base)
         val lw = max(1f, s * 0.04f)
         when (t) {
-            Terrain.SOIL, Terrain.RICH_SOIL -> {
+            Terrain.SOIL, Terrain.RICH_SOIL, Terrain.GRASS -> {
                 // Soft mottling plus tufts of grass.
                 disc(c, sx + s * (0.2f + 0.6f * h(x, y, 2)), sy + s * (0.2f + 0.6f * h(x, y, 3)), s * 0.28f, withAlpha(shade(base, 0.9f), 70))
                 val tuft = shade(base, 1.28f)
@@ -217,13 +218,13 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
 
     /** Base colour of the slab under long workbenches. */
     fun slabColor(def: BuildDef): Int = when (def) {
-        BuildDef.STOVE_FUEL, BuildDef.STOVE_ELEC -> 0xFF4A4C52.toInt()
-        BuildDef.BUTCHER_TABLE -> 0xFFA88A6A.toInt()
-        BuildDef.TAILOR_BENCH -> 0xFF8A6A4A.toInt()
-        BuildDef.SMITHY, BuildDef.MACHINING, BuildDef.FAB_BENCH -> 0xFF3A3D44.toInt()
-        BuildDef.RESEARCH_BENCH -> 0xFF6B5A44.toInt()
-        BuildDef.HI_TECH_BENCH -> 0xFF2E4A5E.toInt()
-        BuildDef.DRUG_LAB -> 0xFF6AAE88.toInt()
+        BuildDef.EMBER_OVEN, BuildDef.HOTPLATE -> 0xFF4A4C52.toInt()
+        BuildDef.CARVING_SLAB -> 0xFFA88A6A.toInt()
+        BuildDef.STITCH_FRAME -> 0xFF8A6A4A.toInt()
+        BuildDef.COAL_FORGE, BuildDef.SHAPING_RIG, BuildDef.FAB_BENCH -> 0xFF3A3D44.toInt()
+        BuildDef.STUDY_DESK -> 0xFF6B5A44.toInt()
+        BuildDef.PRECISION_BENCH -> 0xFF2E4A5E.toInt()
+        BuildDef.TINCTURE_RIG -> 0xFF6AAE88.toInt()
         else -> 0xFF8E8E92.toInt()
     }
 
@@ -237,7 +238,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
     fun wall(c: Canvas, m: GameMap, x: Int, y: Int, mat: ItemType, sx: Float, sy: Float, s: Float, alpha: Int) {
         fun col(argb: Int): Int = (argb and 0x00FFFFFF) or (alpha shl 24)
         val l = wallish(m, x - 1, y); val r = wallish(m, x + 1, y); val u = wallish(m, x, y - 1); val d = wallish(m, x, y + 1)
-        val base = when (mat) { ItemType.WOOD -> 0xFF8E6A3A.toInt(); ItemType.STONE -> 0xFF93939A.toInt(); ItemType.PLASTEEL -> 0xFF9FD0CC.toInt(); else -> 0xFFB6C0CA.toInt() }
+        val base = when (mat) { ItemType.WOOD -> 0xFF8E6A3A.toInt(); ItemType.STONE -> 0xFF93939A.toInt(); ItemType.HARDALLOY -> 0xFF9FD0CC.toInt(); else -> 0xFFB6C0CA.toInt() }
         // Soft drop shadow on the ground to the south-east.
         if (alpha > 200) {
             if (!d) box(c, sx + s * 0.08f, sy + s, sx + s * 1.1f, sy + s * 1.14f, 0x33000000)
@@ -291,7 +292,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
             rr(c, sx + s * 0.32f, sy + s * 0.2f, sx + s * 0.68f, sy + s * 0.8f, s * 0.05f, col(leaf))
             line(c, sx + s * 0.32f, sy + s * 0.5f, sx + s * 0.68f, sy + s * 0.5f, col(0x66201408), max(1f, s * 0.03f))
         }
-        disc(c, sx + s * 0.62f, sy + s * 0.5f, s * 0.04f, col(if (def == BuildDef.AUTODOOR) 0xFF62B0FF.toInt() else 0xFFE6C878.toInt()))
+        disc(c, sx + s * 0.62f, sy + s * 0.5f, s * 0.04f, col(if (def == BuildDef.SHUTTER_DOOR) 0xFF62B0FF.toInt() else 0xFFE6C878.toInt()))
         stroke.color = col(0xFF1C130B.toInt()); stroke.strokeWidth = ow * 0.5f; c.drawRect(sx + 1, sy + 1, sx + s, sy + s, stroke)
     }
 
@@ -353,7 +354,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
                     disc(c, cx + cos(a) * s * 0.4f, cy + sin(a) * s * 0.4f, s * 0.03f, 0xFFC9C0A0.toInt())
                 }
             }
-            PlantType.WILD_HEALROOT -> {
+            PlantType.FERAL_MIREWORT -> {
                 for (k in 0 until 5) { val a = k * 1.2566f; oval(c, cx + cos(a) * s * 0.12f - s * 0.08f, cy + sin(a) * s * 0.12f - s * 0.05f, cx + cos(a) * s * 0.12f + s * 0.08f, cy + sin(a) * s * 0.12f + s * 0.05f, 0xFF63D18F.toInt()) }
                 disc(c, cx, cy, s * 0.05f, 0xFFE8F4C8.toInt())
             }
@@ -396,17 +397,17 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
                     disc(c, px, py, s * (0.06f + 0.09f * gr), 0xFF5E9A44.toInt())
                     if (mature) { disc(c, px - s * 0.05f, py - s * 0.04f, s * 0.05f, 0xFFF4F4EC.toInt()); disc(c, px + s * 0.05f, py, s * 0.05f, 0xFFF4F4EC.toInt()) }
                 }
-                PlantType.HEALROOT -> {
+                PlantType.MIREWORT -> {
                     for (k in 0 until 3) { val a = -1.1f - k * 0.45f; line(c, px, py, px + cos(a) * s * 0.17f * gr, py + sin(a) * s * 0.17f * gr, 0xFF4CBF86.toInt(), max(2f, s * 0.05f)) }
                 }
-                PlantType.SMOKELEAF -> {
+                PlantType.HUSHMOSS -> {
                     for (k in -1..1) oval(c, px + k * s * 0.07f - s * 0.04f, py - s * 0.2f * gr, px + k * s * 0.07f + s * 0.04f, py + s * 0.04f, shade(0xFF3F7A3A.toInt(), 0.8f + 0.25f * gr))
                 }
-                PlantType.PSYCHOID -> {
+                PlantType.DREAMWEED -> {
                     disc(c, px, py, s * (0.05f + 0.09f * gr), 0xFF6B4A7A.toInt())
                     if (mature) { disc(c, px - s * 0.04f, py - s * 0.05f, s * 0.04f, 0xFFD27AE0.toInt()); disc(c, px + s * 0.05f, py - s * 0.02f, s * 0.04f, 0xFFD27AE0.toInt()) }
                 }
-                else -> { // hay grass
+                else -> { // meadow grass
                     val col = shade(0xFFB6C45A.toInt(), 0.75f + 0.3f * gr)
                     for (k in -2..2) line(c, px + k * s * 0.035f, py + s * 0.08f, px + k * s * 0.06f + sway, py - s * (0.06f + 0.2f * gr), col, lw)
                 }
@@ -437,7 +438,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
                 fill.color = 0xFFA6A6AA.toInt(); c.drawPath(path, fill)
                 line(c, cx - z * 0.28f, cy - z * 0.25f, cx, cy + z * 0.05f, 0x55000000, lw); line(c, cx + z * 0.42f, cy - z * 0.05f, cx, cy + z * 0.05f, 0x55000000, lw)
             }
-            ItemType.STEEL, ItemType.PLASTEEL -> {
+            ItemType.STEEL, ItemType.HARDALLOY -> {
                 val b = if (type == ItemType.STEEL) 0xFF9FB4C8.toInt() else 0xFF6CC9BC.toInt()
                 for (k in 0 until 2) { val oy = cy + (k - 0.5f) * z * 0.36f; rr(c, cx - z * 0.42f, oy - z * 0.14f, cx + z * 0.42f, oy + z * 0.14f, z * 0.05f, b); box(c, cx - z * 0.38f, oy - z * 0.12f, cx + z * 0.38f, oy - z * 0.06f, shade(b, 1.3f)) }
             }
@@ -457,27 +458,27 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
             ItemType.POTATOES -> { for (k in 0 until 3) oval(c, cx + (k - 1) * z * 0.25f - z * 0.16f, cy + (k % 2) * z * 0.18f - z * 0.18f, cx + (k - 1) * z * 0.25f + z * 0.16f, cy + (k % 2) * z * 0.18f + z * 0.12f, 0xFFB08A58.toInt()) }
             ItemType.CORN -> { for (k in 0 until 2) { oval(c, cx - z * 0.34f + k * z * 0.28f, cy - z * 0.3f, cx - z * 0.1f + k * z * 0.28f, cy + z * 0.3f, 0xFFF2D54A.toInt()); line(c, cx - z * 0.22f + k * z * 0.28f, cy - z * 0.3f, cx - z * 0.22f + k * z * 0.28f, cy + z * 0.3f, 0x44A07A10, lw) } }
             ItemType.STRAWBERRIES -> { for (k in 0 until 4) { val ox = cx + (k % 2 - 0.5f) * z * 0.4f; val oy = cy + (k / 2 - 0.5f) * z * 0.36f; disc(c, ox, oy, z * 0.17f, 0xFFD2384B.toInt()); disc(c, ox, oy - z * 0.14f, z * 0.06f, 0xFF3F8A3A.toInt()) } }
-            ItemType.MEAT, ItemType.HUMAN_MEAT, ItemType.INSECT_MEAT -> {
-                oval(c, cx - z * 0.4f, cy - z * 0.28f, cx + z * 0.3f, cy + z * 0.3f, if (type == ItemType.INSECT_MEAT) 0xFFB9B060.toInt() else 0xFFD9605A.toInt())
+            ItemType.MEAT, ItemType.MANFLESH, ItemType.CHITIN_CUTS -> {
+                oval(c, cx - z * 0.4f, cy - z * 0.28f, cx + z * 0.3f, cy + z * 0.3f, if (type == ItemType.CHITIN_CUTS) 0xFFB9B060.toInt() else 0xFFD9605A.toInt())
                 oval(c, cx - z * 0.28f, cy - z * 0.18f, cx + z * 0.1f, cy + z * 0.05f, 0xFFEB8A82.toInt()); rr(c, cx + z * 0.2f, cy - z * 0.07f, cx + z * 0.46f, cy + z * 0.07f, z * 0.05f, 0xFFF4EEDF.toInt())
             }
             ItemType.EGGS -> { for (k in 0 until 3) oval(c, cx + (k - 1) * z * 0.26f - z * 0.13f, cy + (k % 2) * z * 0.18f - z * 0.16f, cx + (k - 1) * z * 0.26f + z * 0.13f, cy + (k % 2) * z * 0.18f + z * 0.12f, 0xFFF4EFE0.toInt()) }
             ItemType.MILK -> { rr(c, cx - z * 0.17f, cy - z * 0.1f, cx + z * 0.17f, cy + z * 0.4f, z * 0.05f, 0xFFF4F4F4.toInt()); rr(c, cx - z * 0.1f, cy - z * 0.3f, cx + z * 0.1f, cy - z * 0.08f, z * 0.04f, 0xFFD8E4F0.toInt()) }
-            ItemType.MEAL_SIMPLE, ItemType.MEAL_FINE, ItemType.MEAL_LAVISH -> {
+            ItemType.MEAL_HEARTH_STEW, ItemType.MEAL_ROASTED_PLATTER, ItemType.MEAL_BANQUET_SPREAD -> {
                 disc(c, cx, cy, z * 0.4f, 0xFFE8E4DC.toInt()); disc(c, cx, cy, z * 0.3f, 0xFFF6F2EA.toInt())
-                if (type == ItemType.MEAL_FINE || type == ItemType.MEAL_LAVISH) { disc(c, cx - z * 0.08f, cy, z * 0.13f, 0xFFC66A3A.toInt()); disc(c, cx + z * 0.1f, cy - z * 0.05f, z * 0.1f, 0xFF7BB05A.toInt()); disc(c, cx + z * 0.05f, cy + z * 0.1f, z * 0.08f, 0xFFF0C84A.toInt()) }
+                if (type == ItemType.MEAL_ROASTED_PLATTER || type == ItemType.MEAL_BANQUET_SPREAD) { disc(c, cx - z * 0.08f, cy, z * 0.13f, 0xFFC66A3A.toInt()); disc(c, cx + z * 0.1f, cy - z * 0.05f, z * 0.1f, 0xFF7BB05A.toInt()); disc(c, cx + z * 0.05f, cy + z * 0.1f, z * 0.08f, 0xFFF0C84A.toInt()) }
                 else { disc(c, cx, cy, z * 0.2f, 0xFFD89A4C.toInt()); disc(c, cx + z * 0.08f, cy - z * 0.06f, z * 0.07f, 0xFF8AB05A.toInt()) }
             }
-            ItemType.MEAL_PACKAGED -> { rr(c, cx - z * 0.36f, cy - z * 0.26f, cx + z * 0.36f, cy + z * 0.26f, z * 0.06f, 0xFFC9B26A.toInt()); box(c, cx - z * 0.26f, cy - z * 0.12f, cx + z * 0.26f, cy + z * 0.12f, 0xFFF4EBCB.toInt()); box(c, cx - z * 0.14f, cy - z * 0.04f, cx + z * 0.14f, cy + z * 0.04f, 0xFFB03030.toInt()) }
-            ItemType.PEMMICAN -> { for (k in 0 until 3) rr(c, cx - z * 0.4f, cy + (k - 1) * z * 0.22f - z * 0.08f, cx + z * 0.4f, cy + (k - 1) * z * 0.22f + z * 0.08f, z * 0.05f, 0xFF8A5A3A.toInt()) }
-            ItemType.KIBBLE -> { for (k in 0 until 9) disc(c, cx + (h(seed, k, 3) - 0.5f) * z * 0.7f, cy + (h(seed, k, 4) - 0.5f) * z * 0.55f, z * 0.07f, 0xFF8A5E34.toInt()) }
+            ItemType.MEAL_RATION -> { rr(c, cx - z * 0.36f, cy - z * 0.26f, cx + z * 0.36f, cy + z * 0.26f, z * 0.06f, 0xFFC9B26A.toInt()); box(c, cx - z * 0.26f, cy - z * 0.12f, cx + z * 0.26f, cy + z * 0.12f, 0xFFF4EBCB.toInt()); box(c, cx - z * 0.14f, cy - z * 0.04f, cx + z * 0.14f, cy + z * 0.04f, 0xFFB03030.toInt()) }
+            ItemType.TRAIL_CAKE -> { for (k in 0 until 3) rr(c, cx - z * 0.4f, cy + (k - 1) * z * 0.22f - z * 0.08f, cx + z * 0.4f, cy + (k - 1) * z * 0.22f + z * 0.08f, z * 0.05f, 0xFF8A5A3A.toInt()) }
+            ItemType.FEED_PELLETS -> { for (k in 0 until 9) disc(c, cx + (h(seed, k, 3) - 0.5f) * z * 0.7f, cy + (h(seed, k, 4) - 0.5f) * z * 0.55f, z * 0.07f, 0xFF8A5E34.toInt()) }
             ItemType.HAY -> { for (k in 0 until 6) line(c, cx - z * 0.4f + k * z * 0.14f, cy + z * 0.25f, cx - z * 0.3f + k * z * 0.14f + (h(seed, k, 5) - 0.5f) * z * 0.2f, cy - z * 0.28f, 0xFFD8C65A.toInt(), max(1.5f, z * 0.07f)) }
-            ItemType.HEALROOT, ItemType.MEDS_HERBAL -> { for (k in 0 until 4) { val a = -2.4f + k * 0.55f; line(c, cx, cy + z * 0.25f, cx + cos(a) * z * 0.4f, cy + z * 0.25f + sin(a) * z * 0.55f, 0xFF63D18F.toInt(), max(2f, z * 0.1f)) }; if (type == ItemType.MEDS_HERBAL) box(c, cx - z * 0.3f, cy + z * 0.16f, cx + z * 0.3f, cy + z * 0.26f, 0xFFB08A58.toInt()) }
-            ItemType.MEDS_INDUSTRIAL -> { rr(c, cx - z * 0.34f, cy - z * 0.26f, cx + z * 0.34f, cy + z * 0.26f, z * 0.06f, 0xFFF2F2F2.toInt()); box(c, cx - z * 0.05f, cy - z * 0.18f, cx + z * 0.05f, cy + z * 0.18f, 0xFFD03030.toInt()); box(c, cx - z * 0.18f, cy - z * 0.05f, cx + z * 0.18f, cy + z * 0.05f, 0xFFD03030.toInt()) }
+            ItemType.MIREWORT, ItemType.MEDS_LEAF_POULTICE -> { for (k in 0 until 4) { val a = -2.4f + k * 0.55f; line(c, cx, cy + z * 0.25f, cx + cos(a) * z * 0.4f, cy + z * 0.25f + sin(a) * z * 0.55f, 0xFF63D18F.toInt(), max(2f, z * 0.1f)) }; if (type == ItemType.MEDS_LEAF_POULTICE) box(c, cx - z * 0.3f, cy + z * 0.16f, cx + z * 0.3f, cy + z * 0.26f, 0xFFB08A58.toInt()) }
+            ItemType.MEDS_STERILE_DRESSING -> { rr(c, cx - z * 0.34f, cy - z * 0.26f, cx + z * 0.34f, cy + z * 0.26f, z * 0.06f, 0xFFF2F2F2.toInt()); box(c, cx - z * 0.05f, cy - z * 0.18f, cx + z * 0.05f, cy + z * 0.18f, 0xFFD03030.toInt()); box(c, cx - z * 0.18f, cy - z * 0.05f, cx + z * 0.18f, cy + z * 0.05f, 0xFFD03030.toInt()) }
             ItemType.BEER -> { rr(c, cx - z * 0.14f, cy - z * 0.1f, cx + z * 0.14f, cy + z * 0.38f, z * 0.05f, 0xFF7A4A1E.toInt()); rr(c, cx - z * 0.06f, cy - z * 0.36f, cx + z * 0.06f, cy - z * 0.08f, z * 0.03f, 0xFF7A4A1E.toInt()); box(c, cx - z * 0.14f, cy + z * 0.04f, cx + z * 0.14f, cy + z * 0.2f, 0xFFE8D8A0.toInt()) }
-            ItemType.SMOKELEAF, ItemType.PSYCHOID -> { val b = if (type == ItemType.SMOKELEAF) 0xFF4A8A3A.toInt() else 0xFF8A5AA8.toInt(); for (k in 0 until 3) oval(c, cx + (k - 1) * z * 0.22f - z * 0.1f, cy - z * 0.3f, cx + (k - 1) * z * 0.22f + z * 0.1f, cy + z * 0.3f, shade(b, 0.85f + 0.15f * k)) }
+            ItemType.HUSHMOSS, ItemType.DREAMWEED -> { val b = if (type == ItemType.HUSHMOSS) 0xFF4A8A3A.toInt() else 0xFF8A5AA8.toInt(); for (k in 0 until 3) oval(c, cx + (k - 1) * z * 0.22f - z * 0.1f, cy - z * 0.3f, cx + (k - 1) * z * 0.22f + z * 0.1f, cy + z * 0.3f, shade(b, 0.85f + 0.15f * k)) }
             ItemType.JOINT -> { rr(c, cx - z * 0.4f, cy - z * 0.05f, cx + z * 0.4f, cy + z * 0.05f, z * 0.04f, 0xFFF2EEE0.toInt()); disc(c, cx + z * 0.4f, cy, z * 0.06f, 0xFFE0762E.toInt()) }
-            ItemType.PSYCHITE_TEA -> { disc(c, cx, cy, z * 0.3f, 0xFFE8E4DC.toInt()); disc(c, cx, cy, z * 0.22f, 0xFFA05AC8.toInt()); rr(c, cx + z * 0.26f, cy - z * 0.08f, cx + z * 0.42f, cy + z * 0.08f, z * 0.05f, 0xFFE8E4DC.toInt()) }
+            ItemType.LUCID_DRAUGHT -> { disc(c, cx, cy, z * 0.3f, 0xFFE8E4DC.toInt()); disc(c, cx, cy, z * 0.22f, 0xFFA05AC8.toInt()); rr(c, cx + z * 0.26f, cy - z * 0.08f, cx + z * 0.42f, cy + z * 0.08f, z * 0.05f, 0xFFE8E4DC.toInt()) }
             ItemType.SCULPTURE_SMALL, ItemType.SCULPTURE_LARGE -> { oval(c, cx - z * 0.3f, cy + z * 0.15f, cx + z * 0.3f, cy + z * 0.38f, 0xFF8A8A8E.toInt()); path.reset(); path.moveTo(cx, cy - z * 0.38f); path.lineTo(cx + z * 0.22f, cy + z * 0.28f); path.lineTo(cx - z * 0.22f, cy + z * 0.28f); path.close(); fill.color = 0xFFD2CEC2.toInt(); c.drawPath(path, fill) }
             ItemType.SHELL -> { rr(c, cx - z * 0.14f, cy - z * 0.3f, cx + z * 0.14f, cy + z * 0.3f, z * 0.07f, 0xFF6A6F52.toInt()); box(c, cx - z * 0.14f, cy + z * 0.08f, cx + z * 0.14f, cy + z * 0.14f, 0xFFC9A14A.toInt()) }
             else -> when {
@@ -500,7 +501,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         val steel = 0xFFB9C0C8.toInt(); val dark = 0xFF3A3D42.toInt(); val wood = 0xFF8A5A33.toInt()
         val lw = max(2f, z * 0.1f)
         when {
-            w == io.github.teamomuito.colony.sim.Weapon.BOW || w == io.github.teamomuito.colony.sim.Weapon.GREATBOW -> {
+            w == io.github.teamomuito.colony.sim.Weapon.BOW || w == io.github.teamomuito.colony.sim.Weapon.LONGSTAVE -> {
                 stroke.color = wood; stroke.strokeWidth = lw
                 rect.set(cx - z * 0.1f, cy - z * 0.42f, cx + z * 0.5f, cy + z * 0.42f); c.drawArc(rect, 110f, 140f, false, stroke)
                 line(c, cx + z * 0.1f, cy - z * 0.4f, cx + z * 0.1f, cy + z * 0.4f, 0xFFE8E0C8.toInt(), max(1f, z * 0.03f))
@@ -651,12 +652,12 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
             else -> line(c, cx - len * 0.9f, cy, cx - len * 1.25f, cy + len * 0.1f, dark, lw)
         }
         // Body.
-        val bodyH = when (race) { Race.MUFFALO, Race.BEAR, Race.COW, Race.THRUMBO -> 0.62f; else -> 0.48f }
+        val bodyH = when (race) { Race.SHAGOX, Race.BEAR, Race.COW, Race.SKYHORN -> 0.62f; else -> 0.48f }
         oval(c, cx - len, cy - len * bodyH, cx + len * 0.9f, cy + len * bodyH, col)
         oval(c, cx - len * 0.8f, cy - len * bodyH * 0.8f, cx + len * 0.6f, cy - len * bodyH * 0.1f, withAlpha(light, 110))
         when (race) {
             Race.COW -> { disc(c, cx - len * 0.3f, cy - len * 0.2f, len * 0.28f, 0xFF2A2420.toInt()); disc(c, cx + len * 0.3f, cy + len * 0.22f, len * 0.22f, 0xFF2A2420.toInt()); disc(c, cx - len * 0.55f, cy + len * 0.25f, len * 0.16f, 0xFF2A2420.toInt()) }
-            Race.MUFFALO -> { oval(c, cx - len * 0.2f, cy - len * 0.7f, cx + len * 0.8f, cy + len * 0.7f, dark); for (k in -2..2) line(c, cx - len * 0.9f, cy + k * len * 0.2f, cx - len * 0.3f, cy + k * len * 0.2f, shade(col, 0.6f), max(1f, len * 0.05f)) }
+            Race.SHAGOX -> { oval(c, cx - len * 0.2f, cy - len * 0.7f, cx + len * 0.8f, cy + len * 0.7f, dark); for (k in -2..2) line(c, cx - len * 0.9f, cy + k * len * 0.2f, cx - len * 0.3f, cy + k * len * 0.2f, shade(col, 0.6f), max(1f, len * 0.05f)) }
             Race.DEER -> for (k in 0 until 4) disc(c, cx - len * 0.5f + (k % 2) * len * 0.5f, cy + (if (k < 2) -1 else 1) * len * 0.2f, len * 0.06f, 0xFFF0E4D0.toInt())
             Race.BOAR -> line(c, cx - len * 0.9f, cy, cx + len * 0.6f, cy, 0xFF1E1612.toInt(), lw)
             Race.WOLF -> oval(c, cx - len * 0.2f, cy - len * 0.2f, cx + len * 0.6f, cy + len * 0.2f, shade(col, 0.82f))
@@ -665,19 +666,19 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         }
         // Head.
         val hx = cx + len * 1.0f
-        val hr = len * when (race) { Race.HARE, Race.RAT -> 0.3f; Race.BEAR, Race.THRUMBO, Race.MUFFALO -> 0.42f; else -> 0.34f }
+        val hr = len * when (race) { Race.HARE, Race.RAT -> 0.3f; Race.BEAR, Race.SKYHORN, Race.SHAGOX -> 0.42f; else -> 0.34f }
         // Ears and horns first so the head covers their roots.
         when (race) {
             Race.ELEPHANT -> { oval(c, hx - hr * 1.6f, cy - hr * 1.9f, hx - hr * 0.1f, cy - hr * 0.2f, dark); oval(c, hx - hr * 1.6f, cy + hr * 0.2f, hx - hr * 0.1f, cy + hr * 1.9f, dark); line(c, hx + hr * 0.6f, cy, hx + hr * 2.0f, cy + hr * 0.5f, shade(col, 0.9f), max(3f, len * 0.22f)); line(c, hx + hr * 0.4f, cy - hr * 0.5f, hx + hr * 1.6f, cy - hr * 0.8f, 0xFFF4EEDF.toInt(), max(2f, len * 0.1f)); line(c, hx + hr * 0.4f, cy + hr * 0.5f, hx + hr * 1.6f, cy + hr * 0.8f, 0xFFF4EEDF.toInt(), max(2f, len * 0.1f)) }
             Race.RHINO -> { line(c, hx + hr * 0.8f, cy, hx + hr * 1.7f, cy, 0xFFE8E0C8.toInt(), max(3f, len * 0.16f)); disc(c, hx - hr * 0.5f, cy - hr * 0.85f, hr * 0.3f, dark); disc(c, hx - hr * 0.5f, cy + hr * 0.85f, hr * 0.3f, dark) }
             Race.HARE -> { oval(c, hx - hr * 1.2f, cy - hr * 1.7f, hx - hr * 0.1f, cy - hr * 0.3f, col); oval(c, hx - hr * 1.2f, cy + hr * 0.3f, hx - hr * 0.1f, cy + hr * 1.7f, col) }
-            Race.WOLF, Race.HUSKY, Race.WARG, Race.COUGAR, Race.FOX, Race.CAT, Race.LABRADOR -> { path.reset(); path.moveTo(hx - hr * 0.5f, cy - hr * 0.5f); path.lineTo(hx - hr * 0.9f, cy - hr * 1.3f); path.lineTo(hx + hr * 0.1f, cy - hr * 0.8f); path.close(); fill.color = dark; c.drawPath(path, fill); path.reset(); path.moveTo(hx - hr * 0.5f, cy + hr * 0.5f); path.lineTo(hx - hr * 0.9f, cy + hr * 1.3f); path.lineTo(hx + hr * 0.1f, cy + hr * 0.8f); path.close(); c.drawPath(path, fill) }
+            Race.WOLF, Race.HUSKY, Race.ASHHOUND, Race.COUGAR, Race.FOX, Race.CAT, Race.LABRADOR -> { path.reset(); path.moveTo(hx - hr * 0.5f, cy - hr * 0.5f); path.lineTo(hx - hr * 0.9f, cy - hr * 1.3f); path.lineTo(hx + hr * 0.1f, cy - hr * 0.8f); path.close(); fill.color = dark; c.drawPath(path, fill); path.reset(); path.moveTo(hx - hr * 0.5f, cy + hr * 0.5f); path.lineTo(hx - hr * 0.9f, cy + hr * 1.3f); path.lineTo(hx + hr * 0.1f, cy + hr * 0.8f); path.close(); c.drawPath(path, fill) }
             Race.DEER, Race.ELK, Race.CARIBOU -> { val ac = 0xFFE8DCC0.toInt(); line(c, hx - hr * 0.3f, cy - hr * 0.5f, hx - hr * 1.2f, cy - hr * 1.5f, ac, max(1f, len * 0.07f)); line(c, hx - hr * 0.9f, cy - hr * 1.1f, hx - hr * 0.4f, cy - hr * 1.7f, ac, max(1f, len * 0.06f)); line(c, hx - hr * 0.3f, cy + hr * 0.5f, hx - hr * 1.2f, cy + hr * 1.5f, ac, max(1f, len * 0.07f)); line(c, hx - hr * 0.9f, cy + hr * 1.1f, hx - hr * 0.4f, cy + hr * 1.7f, ac, max(1f, len * 0.06f)) }
-            Race.MUFFALO, Race.COW, Race.BISON, Race.BOOMALOPE -> { val hc = 0xFFE8E0C8.toInt(); line(c, hx - hr * 0.2f, cy - hr * 0.7f, hx + hr * 0.3f, cy - hr * 1.5f, hc, max(1.5f, len * 0.09f)); line(c, hx - hr * 0.2f, cy + hr * 0.7f, hx + hr * 0.3f, cy + hr * 1.5f, hc, max(1.5f, len * 0.09f)) }
-            Race.THRUMBO -> { line(c, hx + hr * 0.2f, cy, hx + hr * 2.0f, cy, 0xFFF4EEDF.toInt(), max(2f, len * 0.12f)); line(c, hx - hr * 0.2f, cy - hr * 0.7f, hx - hr * 0.8f, cy - hr * 1.5f, 0xFFD8C8E0.toInt(), max(1.5f, len * 0.09f)); line(c, hx - hr * 0.2f, cy + hr * 0.7f, hx - hr * 0.8f, cy + hr * 1.5f, 0xFFD8C8E0.toInt(), max(1.5f, len * 0.09f)) }
+            Race.SHAGOX, Race.COW, Race.BISON, Race.SWELLGRAZER -> { val hc = 0xFFE8E0C8.toInt(); line(c, hx - hr * 0.2f, cy - hr * 0.7f, hx + hr * 0.3f, cy - hr * 1.5f, hc, max(1.5f, len * 0.09f)); line(c, hx - hr * 0.2f, cy + hr * 0.7f, hx + hr * 0.3f, cy + hr * 1.5f, hc, max(1.5f, len * 0.09f)) }
+            Race.SKYHORN -> { line(c, hx + hr * 0.2f, cy, hx + hr * 2.0f, cy, 0xFFF4EEDF.toInt(), max(2f, len * 0.12f)); line(c, hx - hr * 0.2f, cy - hr * 0.7f, hx - hr * 0.8f, cy - hr * 1.5f, 0xFFD8C8E0.toInt(), max(1.5f, len * 0.09f)); line(c, hx - hr * 0.2f, cy + hr * 0.7f, hx - hr * 0.8f, cy + hr * 1.5f, 0xFFD8C8E0.toInt(), max(1.5f, len * 0.09f)) }
             else -> { disc(c, hx - hr * 0.5f, cy - hr * 0.85f, hr * 0.38f, dark); disc(c, hx - hr * 0.5f, cy + hr * 0.85f, hr * 0.38f, dark) }
         }
-        val snout = when (race) { Race.WOLF, Race.HUSKY, Race.BOAR, Race.DEER, Race.THRUMBO, Race.MUFFALO, Race.COW -> 1.5f; else -> 1.1f }
+        val snout = when (race) { Race.WOLF, Race.HUSKY, Race.BOAR, Race.DEER, Race.SKYHORN, Race.SHAGOX, Race.COW -> 1.5f; else -> 1.1f }
         oval(c, hx - hr, cy - hr * 0.85f, hx + hr * snout, cy + hr * 0.85f, shade(col, 0.92f))
         if (race == Race.HUSKY) oval(c, hx - hr * 0.2f, cy - hr * 0.55f, hx + hr * 1.3f, cy + hr * 0.55f, 0xFFF0F0F2.toInt())
         if (race == Race.BOAR) { path.reset(); path.moveTo(hx + hr * 1.1f, cy - hr * 0.5f); path.lineTo(hx + hr * 1.6f, cy - hr * 0.95f); path.lineTo(hx + hr * 1.3f, cy - hr * 0.3f); path.close(); fill.color = 0xFFF4EEDF.toInt(); c.drawPath(path, fill); path.reset(); path.moveTo(hx + hr * 1.1f, cy + hr * 0.5f); path.lineTo(hx + hr * 1.6f, cy + hr * 0.95f); path.lineTo(hx + hr * 1.3f, cy + hr * 0.3f); path.close(); c.drawPath(path, fill) }
@@ -704,7 +705,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
     private fun bug(c: Canvas, race: Race, cx: Float, cy: Float, len: Float, frame: Int, walking: Boolean, id: Int) {
         val col = race.color
         val lw = max(1.5f, len * 0.07f)
-        val legs = if (race == Race.MEGASPIDER) 4 else 3
+        val legs = if (race == Race.PITWEAVER) 4 else 3
         val ph = if (walking) sin(frame * 0.6f + id) * len * 0.15f else 0f
         for (k in 0 until legs) {
             val ox = len * (0.55f - 0.5f * k * (3f / legs))
@@ -712,8 +713,8 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
             line(c, cx + ox, cy, cx + ox - ph * (if (k % 2 == 0) 1 else -1), cy + len * 0.95f, shade(col, 0.6f), lw)
         }
         when (race) {
-            Race.SPELOPEDE -> { for (k in 0 until 5) oval(c, cx - len * 1.2f + k * len * 0.5f, cy - len * 0.34f, cx - len * 0.7f + k * len * 0.5f, cy + len * 0.34f, shade(col, 0.8f + 0.08f * k)) }
-            Race.MEGASPIDER -> { oval(c, cx - len * 1.1f, cy - len * 0.65f, cx + len * 0.1f, cy + len * 0.65f, shade(col, 0.85f)); oval(c, cx - len * 0.1f, cy - len * 0.45f, cx + len * 0.9f, cy + len * 0.45f, col) }
+            Race.CAVECRAWLER -> { for (k in 0 until 5) oval(c, cx - len * 1.2f + k * len * 0.5f, cy - len * 0.34f, cx - len * 0.7f + k * len * 0.5f, cy + len * 0.34f, shade(col, 0.8f + 0.08f * k)) }
+            Race.PITWEAVER -> { oval(c, cx - len * 1.1f, cy - len * 0.65f, cx + len * 0.1f, cy + len * 0.65f, shade(col, 0.85f)); oval(c, cx - len * 0.1f, cy - len * 0.45f, cx + len * 0.9f, cy + len * 0.45f, col) }
             else -> { oval(c, cx - len * 0.9f, cy - len * 0.55f, cx + len * 0.5f, cy + len * 0.55f, col); line(c, cx - len * 0.9f, cy, cx + len * 0.5f, cy, shade(col, 0.5f), lw); oval(c, cx - len * 0.6f, cy - len * 0.4f, cx, cy - len * 0.1f, withAlpha(0xFFFFFFFF.toInt(), 60)) }
         }
         disc(c, cx + len * 0.85f, cy, len * 0.28f, shade(col, 0.9f))
@@ -726,18 +727,18 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         val metal = 0xFFB8C4D0.toInt()
         val glow = if ((frame / 8) % 2 == 0) 0xFFFF3A2A.toInt() else 0xFFC02418.toInt()
         when (race) {
-            Race.SCYTHER -> {
+            Race.HOOKTALON -> {
                 line(c, cx + len * 0.2f, cy - len * 0.3f, cx + len * 1.4f, cy - len * 0.95f, metal, max(3f, len * 0.16f)); line(c, cx + len * 0.2f, cy + len * 0.3f, cx + len * 1.4f, cy + len * 0.95f, metal, max(3f, len * 0.16f))
                 for (sx in intArrayOf(-1, 1)) { line(c, cx - len * 0.6f, cy + sx * len * 0.35f, cx - len * 0.6f - gait * sx, cy + sx * len * 0.8f, shade(col, 0.6f), max(2f, len * 0.12f)) }
                 oval(c, cx - len * 0.95f, cy - len * 0.45f, cx + len * 0.75f, cy + len * 0.45f, col); oval(c, cx - len * 0.6f, cy - len * 0.3f, cx + len * 0.2f, cy - len * 0.05f, withAlpha(0xFFFFFFFF.toInt(), 70))
                 disc(c, cx + len * 0.6f, cy, len * 0.14f, glow)
             }
-            Race.LANCER -> {
+            Race.PIKEWALKER -> {
                 oval(c, cx - len * 0.9f, cy - len * 0.55f, cx + len * 0.7f, cy + len * 0.55f, col)
                 rr(c, cx + len * 0.1f, cy - len * 0.1f, cx + len * 1.5f, cy + len * 0.1f, len * 0.05f, metal)
                 disc(c, cx - len * 0.1f, cy, len * 0.3f, shade(col, 0.7f)); disc(c, cx - len * 0.1f, cy, len * 0.14f, glow)
             }
-            else -> { // centipede
+            else -> { // siegeframe
                 for (k in 0 until 5) {
                     val x0 = cx - len * 1.3f + k * len * 0.55f
                     line(c, x0, cy, x0 + gait * (if (k % 2 == 0) 1 else -1), cy - len * 0.7f, shade(col, 0.55f), max(2f, len * 0.1f)); line(c, x0, cy, x0 - gait * (if (k % 2 == 0) 1 else -1), cy + len * 0.7f, shade(col, 0.55f), max(2f, len * 0.1f))

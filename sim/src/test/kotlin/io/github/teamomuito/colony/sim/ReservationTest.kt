@@ -8,7 +8,7 @@ import org.junit.Test
 
 private fun newGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE; g.nextWanderer = Long.MAX_VALUE; g.nextTrader = Long.MAX_VALUE
@@ -118,7 +118,7 @@ class ReservationTest {
     @Test fun twoPawnsNeverGetTheSameHospitalBed() {
         val g = newGame(309)
         val bedX = g.homeX - 4; val bedY = g.homeY + 6
-        g.map.setBuilding(Building(BuildDef.HOSPITAL_BED, bedX, bedY, true))
+        g.map.setBuilding(Building(BuildDef.INFIRMARY_COT, bedX, bedY, true))
         val first = g.findBedFor(g.colonists[0], forceMedical = true)
         val second = g.findBedFor(g.colonists[1], forceMedical = true)
         assertTrue(first >= 0)
@@ -136,7 +136,7 @@ class ReservationTest {
     @Test fun aSavedAndLoadedGameStartsWithNoClaimsAndAFreedHospitalBed() {
         val g = newGame(312)
         val bx = g.homeX - 4; val by = g.homeY + 6
-        g.map.setBuilding(Building(BuildDef.HOSPITAL_BED, bx, by, true))
+        g.map.setBuilding(Building(BuildDef.INFIRMARY_COT, bx, by, true))
         val patient = g.colonists[0]
         val bed = g.findBedFor(patient, forceMedical = true)
         assertEquals(patient.id, g.map.building[bed]!!.occupant)
@@ -147,7 +147,7 @@ class ReservationTest {
         val loadedPatient = l.pawns.first { it.id == patient.id }
         assertEquals(setOf(key(40, K_ITEM)), loadedPatient.reserved.toSet())
         assertEquals(setOf(patient.id), l.reservations[key(40, K_ITEM)])
-        // A patient with no job does not hold a hospital bed after a load.
+        // A patient with no job does not hold an infirmary cot after a load.
         assertEquals("the bed is free after a load", -1, l.map.building[bed]!!.occupant)
     }
 }

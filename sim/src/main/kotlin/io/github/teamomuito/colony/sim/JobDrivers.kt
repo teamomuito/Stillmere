@@ -2,13 +2,24 @@ package io.github.teamomuito.colony.sim
 
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
-private fun Game.doWork(p: Pawn, j: Job, skill: SkillType?, total: Float): Boolean {
-    // Work and skill gain are per tick, so they are divided by TIME_SCALE to keep their effect per game hour.
+/** Rounds [x] up with a chance equal to its fraction, otherwise down. Always draws one number, so the sim stays deterministic. */
+private fun Game.roundRandom(x: Float): Int {
+    val f = floor(x)
+    return f.toInt() + if (rng.float() < x - f) 1 else 0
+}
+
+/**
+ * One tick of work. Work progress is per tick, so it is divided by TIME_SCALE to keep its effect per game hour. The XP
+ * is per tick at the reference rate for the job (docs/fidelity/skills-traits.md); a job with no reference rate keeps
+ * the old rate, which is the default.
+ */
+private fun Game.doWork(p: Pawn, j: Job, skill: SkillType?, total: Float, xpPerTick: Float = 0.07f / TIME_SCALE): Boolean {
     j.work += p.workSpeed(skill) / TIME_SCALE
-    if (skill != null) p.gainXp(skill, 0.07f / TIME_SCALE)
+    if (skill != null && xpPerTick > 0f) p.gainXp(skill, xpPerTick)
     return j.work >= total
 }
 
@@ -58,6 +69,7 @@ fun Game.driveJob(p: Pawn) {
         JobType.BUILD -> driveBuild(p, j)
         JobType.DECONSTRUCT -> driveDecon(p, j)
         JobType.REPAIR -> driveRepair(p, j)
+        JobType.BUILD_ROOF -> driveBuildRoof(p, j)
         JobType.BILL -> driveBill(p, j)
         JobType.RESEARCH -> driveResearch(p, j)
         JobType.TEND -> driveTend(p, j)
@@ -268,24 +280,25 @@ private fun Game.driveEat(p: Pawn, j: Job) {
                 } }
                 val dur = (0.8f * TICKS_PER_DAY).toInt()
                 when (t) {
-                    ItemType.MEAL_FINE -> p.addThought("Ate a fine meal", 0.05f, tick, dur)
-                    ItemType.MEAL_SIMPLE, ItemType.PEMMICAN -> {}
-                    ItemType.HUMAN_MEAT -> if (Trait.CANNIBAL in p.traits) p.addThought("Ate human flesh (loved it)", 0.12f, tick, dur) else p.addThought("Ate human flesh", -0.35f, tick, 3 * TICKS_PER_DAY)
-                    ItemType.INSECT_MEAT -> p.addThought("Ate insect meat", -0.1f, tick, dur)
-                    ItemType.KIBBLE -> p.addThought("Ate kibble", -0.1f, tick, dur)
+                    ItemType.MEAL_ROASTED_PLATTER -> p.addThought("Ate a roasted platter", 0.05f, tick, dur)
+                    ItemType.MEAL_HEARTH_STEW, ItemType.TRAIL_CAKE -> {}
+                    ItemType.MANFLESH -> if (Trait.FLESH_EATER in p.traits) p.addThought("Ate manflesh (loved it)", 0.12f, tick, dur) else p.addThought("Ate manflesh", -0.35f, tick, 3 * TICKS_PER_DAY)
+                    ItemType.CHITIN_CUTS -> p.addThought("Ate chitin cuts", -0.1f, tick, dur)
+                    ItemType.FEED_PELLETS -> p.addThought("Ate feed pellets", -0.1f, tick, dur)
                     ItemType.MILK -> {}
-                    else -> p.addThought("Ate raw food", -0.07f, tick, (1.5f * TICKS_PER_DAY).toInt())
+                    else -> p.addThought("Gulped raw fare", -0.07f, tick, (1.5f * TICKS_PER_DAY).toInt())
                 }
                 if (t.cat == ItemCat.FOOD_MEAL) {
                     if (atTable) p.addThought("Ate at a table", 0.03f, tick, dur)
-                    else p.addThought("Ate without a table", -0.03f, tick, dur)
+                    else p.addThought("Floor meal", -0.03f, tick, dur)
                     if (chair && atTable) p.addThought("Sat in a chair", 0.02f, tick, dur)
                 }
-                if (Trait.GOURMAND in p.traits) p.addThought("Gourmand's feast", 0.05f, tick, dur)
-                if (Trait.CARNIVORE in p.traits && t.cat == ItemCat.FOOD_MEAT) p.addThought("Ate meat", 0.05f, tick, dur)
+                if (Trait.HEARTY_APPETITE in p.traits) p.addThought("Full belly", 0.05f, tick, dur)
+                if (Trait.MEAT_FIRST in p.traits && t.cat == ItemCat.FOOD_MEAT) p.addThought("Ate meat", 0.05f, tick, dur)
                 // Rotten food can make people ill.
-                if (j.heldRot > 0.65f && rng.chance(0.4f)) { addHediff(p, HediffKind.FOOD_POISONING, 0.25f); say("${p.name} got food poisoning.", 2) }
-                else if (t.cat == ItemCat.FOOD_MEAT && rng.chance(0.01f)) addHediff(p, HediffKind.FOOD_POISONING, 0.2f)
+                // Raw meat is fresh until it is destroyed at full rot, so only the raw-meat roll applies to it (RimWorld/ThingDefGenerator_Meat.cs:37, 68).
+                if (j.heldRot > 0.65f && t != ItemType.MEAT && rng.chance(0.4f)) { addHediff(p, HediffKind.SPOILED_STOMACH, 0.25f); say("${p.name} got a spoiled stomach.", 2) }
+                else if (t.cat == ItemCat.FOOD_MEAT && rng.chance(if (t == ItemType.MEAT) RAW_MEAT_POISON_CHANCE else 0.01f)) addHediff(p, HediffKind.SPOILED_STOMACH, 0.2f)
                 p.carryCount = 0; p.carryType = null
                 endJob(p)
             }
@@ -308,7 +321,7 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
         if (r == 0) { j.stage = 1; if (b.def.medical) b.occupant = p.id }
         return
     }
-    val inBed = j.amount == 1
+    val inBed = isInBed(p)
     val bed = if (inBed) map.building[map.idx(p.x, p.y)] else null
     val comfort = bed?.def?.comfort ?: 0f
     // Rest gain is per tick: divided by TIME_SCALE so a bed restores the same amount per game hour.
@@ -323,7 +336,7 @@ private fun Game.driveSleep(p: Pawn, j: Job) {
         return
     }
     p.rest = min(1f, p.rest + gain)
-    val done = p.rest >= 0.985f || (p.schedule[hour] != 3 && p.rest > 0.82f)
+    val done = p.rest >= 1f || (p.schedule[hour] != 3 && p.rest > 0.82f)
     if (done) {
         val i = map.idx(p.x, p.y)
         if (!inBed) p.addThought("Slept on the ground", -0.05f, tick, TICKS_PER_DAY)
@@ -365,7 +378,7 @@ private fun Game.driveJoy(p: Pawn, j: Job) {
     p.joy = min(1f, p.joy + b.def.joy * 0.6f / (LEGACY_TICKS_PER_HOUR * TIME_SCALE) * tol)
     if (j.timer++ > tk(3200) || p.joy >= 0.98f) {
         p.lastJoyKind = b.def.name
-        if (b.def == BuildDef.HORSESHOES) p.addThought("Played horseshoes", 0.04f, tick, TICKS_PER_DAY / 2)
+        if (b.def == BuildDef.QUOITS) p.addThought("Played quoits", 0.04f, tick, TICKS_PER_DAY / 2)
         endJob(p)
     }
 }
@@ -384,26 +397,28 @@ private fun Game.driveSmoke(p: Pawn, j: Job) {
 
 fun Game.applyDrug(p: Pawn, t: ItemType) {
     val (high, addict) = when (t) {
-        ItemType.BEER -> HediffKind.ALCOHOL_HIGH to HediffKind.ALCOHOL_ADDICTION
-        ItemType.JOINT -> HediffKind.SMOKELEAF_HIGH to HediffKind.SMOKELEAF_ADDICTION
-        ItemType.PSYCHITE_TEA -> HediffKind.PSYCHITE_HIGH to HediffKind.PSYCHITE_ADDICTION
-        ItemType.FLAKE -> HediffKind.FLAKE_HIGH to HediffKind.FLAKE_ADDICTION
-        ItemType.YAYO -> HediffKind.YAYO_HIGH to HediffKind.YAYO_ADDICTION
-        ItemType.GO_JUICE -> HediffKind.GOJUICE_HIGH to HediffKind.GOJUICE_ADDICTION
-        ItemType.WAKE_UP -> { p.rest = min(1f, p.rest + 0.45f); addHediff(p, HediffKind.WAKEUP_HIGH, 0.5f).duration = tk(3000); p.addThought("Drug use", 0.04f, tick, TICKS_PER_DAY / 2); return }
+        ItemType.BEER -> HediffKind.BREW_HAZE to HediffKind.BREW_DEPENDENCE
+        ItemType.JOINT -> HediffKind.HUSHMOSS_HIGH to HediffKind.HUSHMOSS_ADDICTION
+        ItemType.LUCID_DRAUGHT -> HediffKind.LUCID_HIGH to HediffKind.LUCID_ADDICTION
+        ItemType.PALE_DUST -> HediffKind.PALE_DUST_HIGH to HediffKind.PALE_DUST_ADDICTION
+        ItemType.WHITE_RUSH -> HediffKind.WHITE_RUSH_HIGH to HediffKind.WHITE_RUSH_ADDICTION
+        ItemType.SURGE_TONIC -> HediffKind.SURGE_TONIC_HIGH to HediffKind.SURGE_TONIC_ADDICTION
+        ItemType.DAWN_TABLET -> { p.rest = min(1f, p.rest + 0.45f); addHediff(p, HediffKind.DAWN_TABLET_HIGH, 0.5f).duration = tk(3000); p.addThought("Drug use", 0.04f, tick, TICKS_PER_DAY / 2); return }
         else -> return
     }
     val h = addHediff(p, high, 0.5f)
-    h.duration = if (t == ItemType.BEER) tk(3500) else if (t == ItemType.GO_JUICE) tk(4000) else tk(2600)
-    if (t == ItemType.FLAKE) p.addThought("Flake rush", 0.28f, tick, TICKS_PER_DAY)
-    if (t == ItemType.YAYO) p.addThought("Yayo rush", 0.3f, tick, TICKS_PER_DAY)
-    // Existing addiction is satisfied again.
+    h.duration = if (t == ItemType.BEER) tk(3500) else if (t == ItemType.SURGE_TONIC) tk(4000) else tk(2600)
+    if (t == ItemType.PALE_DUST) p.addThought("Pale dust high", 0.28f, tick, TICKS_PER_DAY)
+    if (t == ItemType.WHITE_RUSH) p.addThought("White rush high", 0.3f, tick, TICKS_PER_DAY)
+    // Existing addiction is satisfied again. A new one is rolled at the chance the tolerance allows, before this dose adds tolerance.
+    val tolerance = p.drugTolerance[t] ?: 0f
     val ad = p.hediff(addict)
-    if (ad != null) { ad.severity = 1f; removeHediff(p, HediffKind.WITHDRAWAL) }
-    else if (rng.chance(when (t) { ItemType.PSYCHITE_TEA -> 0.1f; ItemType.BEER -> 0.03f; ItemType.FLAKE -> 0.45f; ItemType.YAYO -> 0.3f; ItemType.GO_JUICE -> 0.06f; else -> 0.015f })) {
+    if (ad != null) { ad.severity = 1f; removeHediff(p, HediffKind.CRAVING_ACHE) }
+    else if (rng.chance(min(1f, DrugRules.addictionChance(t) * DrugRules.addictionMultiplier(tolerance)))) {
         addHediff(p, addict, 1f)
         say("${p.name} is now addicted to ${t.label.lowercase()}.", 3)
     }
+    if (t in DrugRules.ADDICTIVE) p.drugTolerance[t] = min(1f, tolerance + DrugRules.TOLERANCE_PER_DOSE)
     p.addThought("Drug use", 0.06f, tick, TICKS_PER_DAY / 2)
 }
 
@@ -434,7 +449,7 @@ private fun Game.driveMine(p: Pawn, j: Job) {
     }
     val ore = map.ore[i]
     val total = if (ore != Ore.NONE) ore.work else 1000f
-    if (doWork(p, j, SkillType.MINING, total)) {
+    if (doWork(p, j, SkillType.QUARRYING, total, 0.07f)) {
         if (ore != Ore.NONE && ore.item != null) {
             map.drop(ore.item, rng.range(ore.yieldMin, ore.yieldMax), p.x, p.y)
         } else if (rng.chance(0.55f)) map.drop(ItemType.STONE_CHUNK, 1, p.x, p.y)
@@ -443,7 +458,8 @@ private fun Game.driveMine(p: Pawn, j: Job) {
         map.markWalkChanged()
         map.desig[i] = 0
         map.roomDirty = true
-        // Cave-ins are not modelled; mined rock stays roofed (natRoof).
+        // Mined rock was a roof holder: built roofs it held may fall (Roofs.kt). Natural roof stays (natRoof).
+        map.holderRemoved(map.xOf(i), map.yOf(i))
         endJob(p)
     }
 }
@@ -457,14 +473,20 @@ private fun Game.driveCut(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    if (doWork(p, j, SkillType.PLANTS, pl.type.harvestWork.toFloat() * (if (pl.growth < 1f) 0.5f else 1f))) {
+    // Harvest and cut learn only from a fully grown plant that yields. This is Stillmere's own gate (C). The reference gates the
+    // cut's learning on the plant being able to yield now (RimWorld/JobDriver_PlantCut.cs:11-13), which for a crop starts above
+    // 65% growth. Not changed this round; see docs/fidelity/economy.md.
+    val cutXp = if (pl.type.yieldType != null && pl.growth >= 1f) 0.085f else 0f
+    if (doWork(p, j, SkillType.HORTICULTURE, pl.type.harvestWork.toFloat() * (if (pl.growth < 1f) 0.5f else 1f), cutXp)) {
         val yt = pl.type.yieldType
         if (yt != null) {
-            var n = (pl.type.yieldCount * (0.5f + 0.5f * p.workSpeed(SkillType.PLANTS).coerceAtMost(1.6f)) * (if (pl.growth < 1f) pl.growth else 1f)).toInt()
-            if (pl.type.crop) n = (pl.type.yieldCount * (0.75f + 0.25f * (p.level(SkillType.PLANTS) / 10f))).toInt()
+            // Yield is zero at or below the harvest minimum, and above it rises from about half to full at full growth
+            // (RimWorld/Plant.cs:115, 917-919, 934-947). Plant health is not modelled, so its term is 1, and the crop difficulty
+            // factor is 1. No skill or work-speed term (the reference has none).
+            val n = roundRandom(harvestYieldExact(pl.type.yieldCount, pl.growth))
             if (n > 0) map.drop(yt, n, p.x, p.y)
         }
-        if (Trait.GREEN_THUMB in p.traits) p.addThought("Worked with plants", 0.04f, tick, TICKS_PER_DAY / 2)
+        if (Trait.GARDEN_SENSE in p.traits) p.addThought("Worked with plants", 0.04f, tick, TICKS_PER_DAY / 2)
         if (pl.type.regrows && map.desig[i].toInt() == Desig.HARVEST) { pl.growth = 0.05f; map.desig[i] = 0 }
         else { map.plant[i] = null; map.desig[i] = 0 }
         endJob(p)
@@ -474,14 +496,17 @@ private fun Game.driveCut(p: Pawn, j: Job) {
 private fun Game.driveSow(p: Pawn, j: Job) {
     val i = map.idx(j.tx, j.ty)
     val z = map.zoneAt(i)
-    if (map.plant[i] != null || z == null || z.kind != ZoneKind.GROWING) { endJob(p); return }
+    // A grass cover does not stop sowing; the crop replaces it when the sowing is done (docs/fidelity/grass.md, decision 8).
+    val under = map.plant[i]
+    if ((under != null && under.type != PlantType.GRASS) || z == null || z.kind != ZoneKind.GROWING) { endJob(p); return }
     if (j.stage == 0) {
         val r = goTo(p, j.tx, j.ty)
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    if (doWork(p, j, SkillType.PLANTS, z.crop.sowWork.toFloat())) {
-        map.plant[i] = Plant(z.crop, j.tx, j.ty, 0.02f)
+    if (doWork(p, j, SkillType.HORTICULTURE, z.crop.sowWork.toFloat(), 0.085f)) {
+        // A sown crop starts at 0.0001 growth (RimWorld/JobDriver_PlantSow.cs:61).
+        map.plant[i] = Plant(z.crop, j.tx, j.ty, 0.0001f)
         endJob(p)
     }
 }
@@ -602,7 +627,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
     val i = map.idx(j.tx, j.ty)
     val b = map.building[i]
     if (b == null || b.built) { endJob(p); return }
-    val skill = if (b.def.art) SkillType.ARTISTIC else SkillType.CONSTRUCTION
+    val skill = if (b.def.art) SkillType.ARTISTRY else SkillType.ARCHITECTURE
     when (j.stage) {
         0 -> {
             var k = -1
@@ -647,8 +672,8 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
         }
         4 -> {
             b.progress = j.work
-            if (doWork(p, j, skill, b.def.work.toFloat())) {
-                val q = if (b.def.category == "Furniture" || b.def.isFloor || b.def.workbench) rollQuality(p.level(skill) + (if ((Trait.CREATIVE in p.traits || Trait.TORTURED_ARTIST in p.traits) && b.def.art) 4 else 0), b.def.art) else Quality.NORMAL
+            if (doWork(p, j, skill, b.def.work.toFloat(), 0.25f)) {
+                val q = if (b.def.category == "Furniture" || b.def.isFloor || b.def.workbench) rollQuality(p.level(skill) + (if ((Trait.CREATIVE in p.traits || Trait.BROODING_MUSE in p.traits) && b.def.art) 4 else 0), b.def.art) else Quality.NORMAL
                 if (b.def.isFloor) {
                     map.floor[i] = b.def
                     map.floorQuality[i] = q
@@ -657,6 +682,13 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                     map.conduit[i] = true
                     map.removeBuilding(b)
                 } else {
+                    // A subsoil auger drills out the rock under it. The ore stays in the cell, so the auger pulls it from there.
+                    if (b.def == BuildDef.SUBSOIL_AUGER && map.terrain[i] == Terrain.ROCK) {
+                        map.terrain[i] = Terrain.GRAVEL
+                        map.holderRemoved(map.xOf(i), map.yOf(i))
+                        map.markWalkChanged()
+                        map.roomDirty = true
+                    }
                     b.built = true
                     map.markWalkChanged()
                     b.hp = b.maxHp
@@ -664,7 +696,7 @@ private fun Game.driveBuild(p: Pawn, j: Job) {
                     if (b.def.blocksMove || b.def.isWall || b.def.isDoor) ejectPawns(i)
                     if (b.def == BuildDef.GRAVE) b.occupant = -1
                     if (b.def.isShip) say("${b.def.label} constructed.", 1)
-                    if (b.def == BuildDef.SHIP_CASKET || shipComplete()) { if (shipComplete()) say("The escape ship is ready! Open the Ship panel to launch.", 1) }
+                    if (b.def == BuildDef.COLD_POD || shipComplete()) { if (shipComplete()) say("The escape ship is ready! Open the Ship panel to launch.", 1) }
                 }
                 if (b.def.art && b.def.beauty >= 6f) p.addThought("Created art", 0.08f, tick, 2 * TICKS_PER_DAY)
                 map.roomDirty = true
@@ -686,7 +718,7 @@ private fun Game.driveDecon(p: Pawn, j: Job) {
         return
     }
     val def = b?.def ?: fl ?: BuildDef.CONDUIT
-    if (doWork(p, j, SkillType.CONSTRUCTION, def.work * 0.5f)) {
+    if (doWork(p, j, SkillType.ARCHITECTURE, def.work * 0.5f, 0.25f)) {
         for ((t, n) in b?.cost ?: def.cost) map.drop(t, max(1, n / 2), p.x, p.y)
         if (b != null) map.removeBuilding(b) else if (fl != null) map.floor[i] = null else map.conduit[i] = false
         map.desig[i] = 0
@@ -704,9 +736,29 @@ private fun Game.driveRepair(p: Pawn, j: Job) {
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    b.hp = min(b.maxHp, b.hp + 0.4f * p.workSpeed(SkillType.CONSTRUCTION) / TIME_SCALE)
-    p.gainXp(SkillType.CONSTRUCTION, 0.04f / TIME_SCALE)
+    b.hp = min(b.maxHp, b.hp + 0.4f * p.workSpeed(SkillType.ARCHITECTURE) / TIME_SCALE)
+    p.gainXp(SkillType.ARCHITECTURE, 0.05f)
     if (b.hp >= b.maxHp) { map.desig[i] = 0; endJob(p) }
+}
+
+private fun Game.driveBuildRoof(p: Pawn, j: Job) {
+    val i = map.idx(j.tx, j.ty)
+    if (map.desig[i].toInt() != Desig.ROOF) { endJob(p); return }
+    if (map.roofed(i)) { map.desig[i] = 0; endJob(p); return }
+    if (!map.canBuildRoofAt(i)) { endJob(p); return }
+    if (j.stage == 0) {
+        val r = goTo(p, j.tx, j.ty, adjacent = true)
+        if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
+        return
+    }
+    // Progress per tick is the work speed times ROOF_WORK_RATE, against ROOF_WORK. Both numbers are D (RimWorld/JobDriver_AffectRoof.cs:15,
+    // :43, :47; see Roofs.kt). The stat they multiply is Stillmere's own mapping (C). docs/fidelity/roofs.md, constants table.
+    j.work += p.workSpeed(SkillType.ARCHITECTURE) * ROOF_WORK_RATE
+    // XP per tick is Stillmere's generic default rate (JobDrivers.kt doWork). Neither vanilla roof driver calls a learn method; see docs/fidelity/roofs.md.
+    p.gainXp(SkillType.ARCHITECTURE, 0.07f / TIME_SCALE)
+    if (j.work < ROOF_WORK) return
+    map.finishRoofBlock(j.tx, j.ty)
+    endJob(p)
 }
 
 private fun Game.driveClean(p: Pawn, j: Job) {
@@ -833,16 +885,16 @@ private fun Game.driveBill(p: Pawn, j: Job) {
         }
         3 -> {
             bench.inUse = tk(700)
-            val sk = r.workType.skill() ?: SkillType.CRAFTING
-            if (doWork(p, j, sk, r.work.toFloat() * (if (bench.def.workbench) 1f else 1f))) {
+            val sk = r.workType.skill() ?: SkillType.WORKMANSHIP
+            // Recipe XP is 0.1 per work tick times the recipe's learning factor, which is 1 here (Verse.AI/Toils_Recipe.cs:188).
+            // There is no flat award per product in the reference, so none is given.
+            if (doWork(p, j, sk, r.work.toFloat() * (if (bench.def.workbench) 1f else 1f), 0.1f)) {
                 j.held.clear()
                 val gear = r.out.isGear
                 val q = if (gear) rollQuality(p.level(sk), false) else Quality.NORMAL
                 map.drop(r.out, r.outCount, p.x, p.y, q)
                 bill.done++
                 if (bill.mode == BillMode.DO_X && bill.done >= bill.target) bench.bills.remove(bill)
-                if (r.out == ItemType.MEAL_SIMPLE || r.out == ItemType.MEAL_FINE) p.gainXp(SkillType.COOKING, 40f)
-                if (r.out == ItemType.A_RECON || r.out.isGear) p.gainXp(sk, 60f)
                 endJob(p)
             }
         }
@@ -851,19 +903,26 @@ private fun Game.driveBill(p: Pawn, j: Job) {
 
 // ---------------------------------------------------------------- research
 
+/**
+ * Research points added in one tick: the reference rate per work tick (RimWorld/ResearchManager.cs:38) on Stillmere's point
+ * scale, times the researcher's speed, the bench factor and the keen-mind factor. Stillmere's own keen-mind factor (C).
+ */
+internal fun researchPointsPerTick(workSpeed: Float, benchFactor: Float, keenMind: Boolean): Float =
+    workSpeed * RESEARCH_BASE_RATE * RESEARCH_POINT_SCALE * benchFactor * (if (keenMind) 1.35f else 1f)
+
 private fun Game.driveResearch(p: Pawn, j: Job) {
     val bench = map.building[map.idx(j.tx, j.ty)]
     val cur = researchCurrent
     if (bench == null || !bench.built || cur == null) { endJob(p); return }
-    if (bench.def == BuildDef.HI_TECH_BENCH && !bench.powered) { endJob(p); return }
+    if (bench.def == BuildDef.PRECISION_BENCH && !bench.powered) { endJob(p); return }
     if (j.stage == 0) {
         val r = goTo(p, j.tx, j.ty, adjacent = true)
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
         return
     }
-    p.gainXp(SkillType.INTELLECTUAL, 0.07f / TIME_SCALE)
-    val mult = if (bench.def == BuildDef.HI_TECH_BENCH) 1.6f else 1f
-    val prog = (researchProgress[cur] ?: 0f) + p.workSpeed(SkillType.INTELLECTUAL) / TIME_SCALE * 0.25f * mult * (if (Trait.TOO_SMART in p.traits) 1.35f else 1f)
+    p.gainXp(SkillType.SCHOLARSHIP, 0.1f)
+    val mult = if (bench.def == BuildDef.PRECISION_BENCH) 1.6f else 1f
+    val prog = (researchProgress[cur] ?: 0f) + researchPointsPerTick(p.workSpeed(SkillType.SCHOLARSHIP), mult, Trait.KEEN_MIND in p.traits)
     researchProgress[cur] = prog
     if (prog >= cur.cost) {
         researchDone.add(cur)
@@ -872,7 +931,7 @@ private fun Game.driveResearch(p: Pawn, j: Job) {
         endJob(p)
         return
     }
-    if (++j.timer > tk(900)) endJob(p)
+    if (++j.timer > RESEARCH_SESSION_TICKS) endJob(p)
 }
 
 // ---------------------------------------------------------------- medical
@@ -896,7 +955,8 @@ private fun Game.driveTend(p: Pawn, j: Job) {
         1 -> {
             val self = o === p
             val bedsite = o.carriedBy >= 0
-            if (doWork(p, j, SkillType.MEDICINE, if (self) 360f else 200f)) {
+            // Tending learns only once, at completion (Health.kt tendPawn). Vanilla gives no per-tick tending XP (RimWorld/Toils_Tend.cs:70).
+            if (doWork(p, j, SkillType.HEALING, if (self) 360f else 200f, 0f)) {
                 val med = if (p.carryCount > 0) p.carryType else null
                 tendPawn(p, o, med)
                 if (med != null) { p.carryCount = 0; p.carryType = null }
@@ -982,8 +1042,8 @@ private fun Game.driveWarden(p: Pawn, j: Job) {
         return
     }
     if (++j.timer > tk(240)) {
-        val soc = p.level(SkillType.SOCIAL)
-        p.gainXp(SkillType.SOCIAL, 120f)
+        val soc = p.level(SkillType.RAPPORT)
+        p.gainXp(SkillType.RAPPORT, 120f)
         if (o.recruitMode == 0) {
             o.resistance = max(0f, o.resistance - (0.12f + soc * 0.012f))
             if (o.resistance <= 0.01f) {
@@ -1064,7 +1124,7 @@ private fun Game.driveFeedAnimal(p: Pawn, j: Job) {
                 val t = p.carryType
                 if (t != null) a.food = min(1f, a.food + t.nutrition * p.carryCount * 1.2f)
                 p.carryCount = 0; p.carryType = null
-                p.gainXp(SkillType.ANIMALS, 60f)
+                p.gainXp(SkillType.HUSBANDRY, 60f)
                 endJob(p)
             }
         }
@@ -1079,7 +1139,7 @@ private fun Game.driveGather(p: Pawn, j: Job) {
         if (r == -1) abort(p) else if (r == 0) { j.stage = 1; j.timer = 0 }
         return
     }
-    if (doWork(p, j, SkillType.ANIMALS, 280f)) {
+    if (doWork(p, j, SkillType.HUSBANDRY, 280f, 0.13f)) {
         val n = (a.race.productPerDay * a.animalProductTimer / TICKS_PER_DAY.toFloat()).toInt()
         val prod = a.race.product!!
         if (n > 0) map.drop(prod, n, p.x, p.y)
@@ -1117,8 +1177,8 @@ private fun Game.driveTrain(p: Pawn, j: Job) {
     }
     if (++j.timer >= tk(300)) {
         j.timer = 0
-        p.gainXp(SkillType.ANIMALS, 60f)
-        val chance = (0.25f + p.level(SkillType.ANIMALS) * 0.05f) * (1.2f - a.race.wildness)
+        p.gainXp(SkillType.HUSBANDRY, 60f)
+        val chance = (0.25f + p.level(SkillType.HUSBANDRY) * 0.05f) * (1.2f - a.race.wildness)
         if (rng.float() < chance.coerceIn(0.05f, 0.9f)) {
             a.trained++
             say("${p.name} taught ${a.name} a trick.", 0)
@@ -1137,9 +1197,9 @@ private fun Game.driveTame(p: Pawn, j: Job) {
     }
     if (++j.timer >= tk(260)) {
         j.timer = 0
-        val skill = p.level(SkillType.ANIMALS)
+        val skill = p.level(SkillType.HUSBANDRY)
         val chance = (0.18f + skill * 0.035f - a.race.tameDifficulty * 0.1f).coerceIn(0.03f, 0.9f) * (0.5f + (1f - a.race.wildness) * 0.6f)
-        p.gainXp(SkillType.ANIMALS, 150f)
+        p.gainXp(SkillType.HUSBANDRY, 150f)
         if (rng.float() < chance) {
             a.faction = Faction.PLAYER; a.tame = true; a.manhunter = false; a.tameMark = false
             a.name = rng.pick(Names.animal)
@@ -1188,10 +1248,11 @@ private fun Game.driveButcher(p: Pawn, j: Job) {
         2 -> {
             val s = j.stack ?: run { endJob(p); return }
             val race = s.corpseRace ?: Race.HARE
-            if (doWork(p, j, SkillType.COOKING, 160f + race.meat * 1.2f)) {
-                val eff = 0.55f + p.workSpeed(SkillType.COOKING).coerceAtMost(1.5f) * 0.3f
-                val meat = (race.meat * eff * (1f - s.rot * 0.5f)).toInt()
-                if (meat > 0) map.drop(if (race.insect) ItemType.INSECT_MEAT else ItemType.MEAT, meat, p.x, p.y)
+            if (doWork(p, j, SkillType.GALLEY, 160f + race.meat * 1.2f)) {
+                val eff = 0.55f + p.workSpeed(SkillType.GALLEY).coerceAtMost(1.5f) * 0.3f
+                // Meat is round-random of the meat amount times efficiency, with no rot term (Verse/Pawn.cs:2962).
+                val meat = roundRandom(race.meat * eff)
+                if (meat > 0) map.drop(if (race.insect) ItemType.CHITIN_CUTS else ItemType.MEAT, meat, p.x, p.y)
                 val leather = (race.leather * eff).toInt()
                 if (leather > 0) map.drop(ItemType.LEATHER, leather, p.x, p.y)
                 j.stack = null

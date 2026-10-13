@@ -9,7 +9,7 @@ import org.junit.Test
 
 private fun itemGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     val never = Long.MAX_VALUE
@@ -41,11 +41,11 @@ class ItemsTest {
 
     @Test fun takingGoodsRemovesThemFromTheRightLots() {
         val s = Stock()
-        s.add(Lot(ItemType.A_FLAK_VEST, Quality.GOOD, 100), 1)
-        s.add(Lot(ItemType.A_FLAK_VEST, Quality.POOR, 50), 2)
-        val taken = s.take(ItemType.A_FLAK_VEST, 2)
+        s.add(Lot(ItemType.A_RIBBED_VEST, Quality.GOOD, 100), 1)
+        s.add(Lot(ItemType.A_RIBBED_VEST, Quality.POOR, 50), 2)
+        val taken = s.take(ItemType.A_RIBBED_VEST, 2)
         assertEquals(2, taken.sumOf { it.second })
-        assertEquals("one good vest is left", 1, s.count(ItemType.A_FLAK_VEST))
+        assertEquals("one good vest is left", 1, s.count(ItemType.A_RIBBED_VEST))
         assertTrue(s.entries().isNotEmpty())
     }
 
@@ -72,9 +72,9 @@ class ItemsTest {
         val g = itemGame(901)
         val p = g.colonists[0]
         p.apparel.clear()
-        p.apparel.add(Worn(ItemType.A_FLAK_VEST, Quality.GOOD, 80f))   // half of its 160 hit points
+        p.apparel.add(Worn(ItemType.A_RIBBED_VEST, Quality.GOOD, 80f))   // half of its 160 hit points
         g.die(p, "test")
-        val vest = g.map.items.values.firstOrNull { it.type == ItemType.A_FLAK_VEST }
+        val vest = g.map.items.values.firstOrNull { it.type == ItemType.A_RIBBED_VEST }
         assertNotNull(vest)
         assertEquals(Quality.GOOD, vest!!.quality)
         assertEquals("the vest is still half worn", 0.5f, vest.hp, 0.01f)
@@ -88,10 +88,10 @@ class ItemsTest {
         c.members.add(p)
         g.caravans.add(c)
         p.weaponItem = ItemType.W_RIFLE; p.weaponQuality = Quality.GOOD
-        p.apparel.clear(); p.apparel.add(Worn(ItemType.A_FLAK_VEST, Quality.GOOD, 80f))
+        p.apparel.clear(); p.apparel.add(Worn(ItemType.A_RIBBED_VEST, Quality.GOOD, 80f))
         g.caravanDeath(p, "test")
         assertEquals(1, c.inventory.count(Lot(ItemType.W_RIFLE, Quality.GOOD, 100)))
-        assertEquals("the cargo keeps the vest's wear", 1, c.inventory.count(Lot(ItemType.A_FLAK_VEST, Quality.GOOD, 50)))
+        assertEquals("the cargo keeps the vest's wear", 1, c.inventory.count(Lot(ItemType.A_RIBBED_VEST, Quality.GOOD, 50)))
     }
 
     @Test fun unloadingACaravanKeepsQualityAndCondition() {
@@ -115,7 +115,8 @@ class ItemsTest {
         info.silver = 2000
         g.sellItem(info, ItemType.W_RIFLE, 1)
         assertEquals("the trader holds the rifle at its quality", 1, info.stock.count(Lot(ItemType.W_RIFLE, Quality.GOOD, 100)))
-        assertFalse("the rifle left the map", g.map.items.values.any { it.type == ItemType.W_RIFLE })
+        // Only the rifle this test put down must leave: a generated ruin can hold rifles of its own (docs/fidelity/ruins.md).
+        assertFalse("the rifle left the map", g.map.items.values.any { it === rifle })
 
         g.map.drop(ItemType.SILVER, 1000, g.homeX, g.homeY)   // buying back costs more than the sale earned
         assertTrue(g.buyItem(info, ItemType.W_RIFLE, 1))
@@ -128,7 +129,7 @@ class ItemsTest {
         val g = itemGame(905)
         val c = Caravan(g.nextCaravanId++, "Test", g.world.homeTile)
         g.caravans.add(c)
-        c.inventory.add(Lot(ItemType.A_FLAK_VEST, Quality.EXCELLENT, 62), 1)
+        c.inventory.add(Lot(ItemType.A_RIBBED_VEST, Quality.EXCELLENT, 62), 1)
         c.inventory.add(ItemType.STEEL, 40)
         val loaded = SaveGame.read(SaveGame.write(g))
         assertEquals(c.inventory, loaded.caravans.first { it.name == "Test" }.inventory)

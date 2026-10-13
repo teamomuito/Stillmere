@@ -5,15 +5,15 @@ import kotlin.math.min
 
 enum class Implant(
     val label: String, val eff: Float, val tags: Set<PartTag>, val research: Research?, val cost: List<Pair<ItemType, Int>>,
-    val bionic: Boolean = false,
+    val augmented: Boolean = false,
 ) {
-    PEG_LEG("Peg leg", 0.55f, setOf(PartTag.LEG, PartTag.FOOT), Research.BIONICS_BASIC, listOf(ItemType.WOOD to 20)),
-    HOOK_HAND("Hook hand", 0.5f, setOf(PartTag.HAND, PartTag.ARM), Research.BIONICS_BASIC, listOf(ItemType.WOOD to 10, ItemType.STEEL to 8)),
-    BIONIC_ARM("Bionic arm", 1.3f, setOf(PartTag.ARM, PartTag.HAND), Research.BIONICS, listOf(ItemType.PLASTEEL to 15, ItemType.GOLD to 8, ItemType.COMPONENT to 6), true),
-    BIONIC_LEG("Bionic leg", 1.3f, setOf(PartTag.LEG, PartTag.FOOT), Research.BIONICS, listOf(ItemType.PLASTEEL to 15, ItemType.GOLD to 8, ItemType.COMPONENT to 6), true),
-    BIONIC_EYE("Bionic eye", 1.25f, setOf(PartTag.EYE), Research.BIONICS, listOf(ItemType.PLASTEEL to 6, ItemType.GOLD to 8, ItemType.COMPONENT to 4), true),
-    BIONIC_EAR("Bionic ear", 1.2f, setOf(PartTag.EAR), Research.BIONICS, listOf(ItemType.PLASTEEL to 4, ItemType.GOLD to 4, ItemType.COMPONENT to 3), true),
-    BIONIC_HEART("Bionic heart", 1.3f, setOf(PartTag.HEART), Research.BIONICS, listOf(ItemType.PLASTEEL to 12, ItemType.GOLD to 12, ItemType.COMPONENT to 6), true),
+    WOODEN_SHANK("Wooden shank", 0.55f, setOf(PartTag.LEG, PartTag.FOOT), Research.LIMB_CRAFTING, listOf(ItemType.WOOD to 20)),
+    GAFF_GRIP("Gaff grip", 0.5f, setOf(PartTag.HAND, PartTag.ARM), Research.LIMB_CRAFTING, listOf(ItemType.WOOD to 10, ItemType.STEEL to 8)),
+    SERVO_LIMB("Servo limb", 1.3f, setOf(PartTag.ARM, PartTag.HAND), Research.AUGMENTATION, listOf(ItemType.HARDALLOY to 15, ItemType.GOLD to 8, ItemType.COMPONENT to 6), true),
+    SERVO_STRIDER("Servo strider", 1.3f, setOf(PartTag.LEG, PartTag.FOOT), Research.AUGMENTATION, listOf(ItemType.HARDALLOY to 15, ItemType.GOLD to 8, ItemType.COMPONENT to 6), true),
+    OPTIC_LENS("Optic lens", 1.25f, setOf(PartTag.EYE), Research.AUGMENTATION, listOf(ItemType.HARDALLOY to 6, ItemType.GOLD to 8, ItemType.COMPONENT to 4), true),
+    COIL_LISTENER("Coil listener", 1.2f, setOf(PartTag.EAR), Research.AUGMENTATION, listOf(ItemType.HARDALLOY to 4, ItemType.GOLD to 4, ItemType.COMPONENT to 3), true),
+    PUMP_CORE("Pump core", 1.3f, setOf(PartTag.HEART), Research.AUGMENTATION, listOf(ItemType.HARDALLOY to 12, ItemType.GOLD to 12, ItemType.COMPONENT to 6), true),
 }
 
 enum class SurgeryKind { AMPUTATE, INSTALL }
@@ -36,8 +36,8 @@ fun Game.availableSurgeries(p: Pawn): List<SurgeryOrder> {
             if (d.tag !in imp.tags) continue
             if (imp.research != null && imp.research !in researchDone) continue
             if (has != null) continue
-            if (!missing && !imp.bionic) continue
-            if (!missing && p.partDamage(i) <= 0f && !imp.bionic) continue
+            if (!missing && !imp.augmented) continue
+            if (!missing && p.partDamage(i) <= 0f && !imp.augmented) continue
             out += SurgeryOrder(SurgeryKind.INSTALL, i, imp)
         }
     }
@@ -50,7 +50,7 @@ fun Game.queueSurgery(p: Pawn, o: SurgeryOrder) {
 }
 
 internal fun Game.findSurgery(doc: Pawn): Job? {
-    if (doc.level(SkillType.MEDICINE) < 3) return null
+    if (doc.level(SkillType.HEALING) < 3) return null
     for (o in pawns) {
         if (!o.alive || o.surgeries.isEmpty() || o.carriedBy >= 0) continue
         if (o.faction != Faction.PLAYER && !o.prisoner) continue
@@ -114,12 +114,12 @@ internal fun Game.driveSurgery(p: Pawn, j: Job) {
             if (r == -1) abortSurg(p, j) else if (r == 0) { j.stage = 3; j.work = 0f }
         }
         3 -> {
-            j.work += p.workSpeed(SkillType.MEDICINE) / TIME_SCALE
-            p.gainXp(SkillType.MEDICINE, 0.08f / TIME_SCALE)
+            j.work += p.workSpeed(SkillType.HEALING) / TIME_SCALE
+            p.gainXp(SkillType.HEALING, 0.08f / TIME_SCALE)
             if (j.work >= 700f) {
                 val hospital = map.building[map.idx(o.x, o.y)]?.def?.medical == true
-                val chance = (0.5f + 0.03f * p.level(SkillType.MEDICINE) + (if (hospital) 0.1f else 0f) + (if (order.kind == SurgeryKind.AMPUTATE) 0.3f else 0f)).coerceIn(0.3f, 0.98f)
-                val h = addHediff(o, HediffKind.ANESTHESIA, 0.5f); h.duration = tk(3000)
+                val chance = (0.5f + 0.03f * p.level(SkillType.HEALING) + (if (hospital) 0.1f else 0f) + (if (order.kind == SurgeryKind.AMPUTATE) 0.3f else 0f)).coerceIn(0.3f, 0.98f)
+                val h = addHediff(o, HediffKind.NUMB_SLEEP, 0.5f); h.duration = tk(3000)
                 j.held.clear()
                 if (rng.float() < chance) {
                     applySurgery(o, order)

@@ -10,7 +10,7 @@ import java.security.MessageDigest
 
 private fun timeTestColony(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.CRASHLANDED)
+    g.startNewColony(Scenario.SALVAGE_CREW)
     return g
 }
 

@@ -5,26 +5,26 @@ Plan and reference for the calendar and the time-dependent rules. Gap-report sec
 ## Vanilla reference
 
 Confidence **V**: a secondary summary of the RimWorld Wiki (Ticks, Time pages), via web search on 2026-10-09. Direct access to the
-wiki was not available. Re-check against the pages before a release.
+wiki was not available. Each V row gives its page URL; the pages were not read. Re-check against the pages before a release.
 
 | Quantity | Value | Conf |
 |---|---|---|
-| Ticks per in-game hour | 2,500 | V |
-| Ticks per day | 60,000 | V |
-| Days per quadrum (season) | 15 | V |
-| Quadrums per year | 4 (60 days) | V |
-| Ticks per real second at normal speed | 60 | V |
+| Ticks per in-game hour | 2,500 | V (https://rimworldwiki.com/wiki/Ticks) |
+| Ticks per day | 60,000 | V (https://rimworldwiki.com/wiki/Ticks) |
+| Days per quadrum (season) | 15 | V (https://rimworldwiki.com/wiki/Time) |
+| Quadrums per year | 4 (60 days) | V (https://rimworldwiki.com/wiki/Time) |
+| Ticks per real second at normal speed | 60 | V (https://rimworldwiki.com/wiki/Ticks) |
 | Day/night | sunlight from dawn to dusk, dark through the night | M (shape only; the timing is set by the constants in `Game.daylight`) |
 
 ## What the code now does
 
 | Constant (`Defs.kt`) | Value | Source |
 |---|---|---|
-| `TICKS_PER_HOUR` | 2,500 | V |
-| `TICKS_PER_DAY` | 60,000 | V |
-| `DAYS_PER_SEASON` | 15 | V |
-| `SEASONS_PER_YEAR` | 4 | V |
-| `DAYS_PER_YEAR` | 60 | V (derived) |
+| `TICKS_PER_HOUR` | 2,500 | V (https://rimworldwiki.com/wiki/Ticks) |
+| `TICKS_PER_DAY` | 60,000 | V (https://rimworldwiki.com/wiki/Ticks) |
+| `DAYS_PER_SEASON` | 15 | V (https://rimworldwiki.com/wiki/Time) |
+| `SEASONS_PER_YEAR` | 4 | V (https://rimworldwiki.com/wiki/Time) |
+| `DAYS_PER_YEAR` | 60 | V (derived; https://rimworldwiki.com/wiki/Time) |
 | `HOURS_PER_DAY` | 24 | M |
 | `LEGACY_TICKS_PER_HOUR` | 1,000 | the previous base, kept for conversion |
 | `TIME_SCALE` | 2.5 | derived: 2,500 / 1,000 |
@@ -62,8 +62,8 @@ the draws happen in a different order now, so outcomes diverge even for the same
 
 ## Existing saves: migration (option 1, done)
 
-The save format is now version 25. Versions 14 to 24 are still readable. Each tick-valued quantity is converted on read when the
-save is older than version 25:
+The time base changed in save version 25 (the format is now version 31; the renames of saved text since version 25 are in `names.md`). Versions
+14 to 24 are still readable. Each tick-valued quantity is converted on read when the save is older than version 25:
 
 * **Absolute times** (game tick, channel timers, raid and weather end times, incident history, trader leave times, quest and
   request deadlines, battle start, ransom expiry and cooldown, unreachable marks, log timestamps, pawn break, escape, social,
@@ -78,7 +78,7 @@ save is older than version 25:
   was stored. The day in the header is a day count, so it does not change.
 
 The audit that found these fields is recorded in the commit history (`save-tick-audit`). Four raw literals it found are fixed:
-the insult cooldown (120), the wake-up duration (3000), the bench in-use timer (700), and the blast fade in the app (14).
+the insult cooldown (120), the dawn tablet duration (3000), the bench in-use timer (700), and the blast fade in the app (14).
 
 Test: `LegacySaveMigrationTest` loads a real version-24 save written by the pre-change game, and checks each converted value
 against what the old game held. It also checks that the calendar (day, hour, season) comes out the same in both bases.

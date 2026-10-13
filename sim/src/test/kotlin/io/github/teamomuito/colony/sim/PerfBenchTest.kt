@@ -54,11 +54,11 @@ class PerfBenchTest {
     /** A colony of [pawns] colonists, [animals] wild animals, [items] loose stacks, [fires] fires and some plants. */
     private fun loaded(seed: Long, pawns: Int, animals: Int, items: Int, fires: Int): Game {
         val g = Game(seed)
-        g.startNewColony(Scenario.LOST_TRIBE)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
         g.mentalBreaksEnabled = true
         val r = java.util.Random(seed)
         while (g.colonists.size < pawns) g.newHuman(g.homeX + r.nextInt(12) - 6, g.homeY + r.nextInt(12) - 6)
-        val races = listOf(Race.DEER, Race.BOAR, Race.HARE, Race.WOLF, Race.TURKEY, Race.MUFFALO)
+        val races = listOf(Race.DEER, Race.BOAR, Race.HARE, Race.WOLF, Race.TURKEY, Race.SHAGOX)
         repeat(animals) {
             val x = r.nextInt(g.map.w - 2) + 1; val y = r.nextInt(g.map.h - 2) + 1
             if (g.map.walkable(g.map.idx(x, y))) g.newAnimal(races[r.nextInt(races.size)], x, y)
@@ -174,4 +174,27 @@ class PerfBenchTest {
     @Test fun benchTenPawns() { if (enabled) bench("small", 10, 10, 200, 0, 4_000) }
     @Test fun benchFiftyPawns() { if (enabled) bench("medium", 50, 40, 1_500, 5, 4_000) }
     @Test fun benchHundredPawns() { if (enabled) bench("large", 100, 100, 4_000, 20, 4_000) }
+
+    /**
+     * One in-game day ([TICKS_PER_DAY] steps) of a fresh five-colonist colony on a [side] by [side] map. Each size gets the same seed
+     * and scenario, so the area is the only difference. The map generation and the start are timed apart from the steps.
+     */
+    private fun oneDay(side: Int) {
+        val seed = 4242L
+        val t0 = System.nanoTime()
+        val g = Game(seed, GameMap.generateFor(side, side, seed, Biome.TEMPERATE))
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
+        val setup = System.nanoTime() - t0
+        val start = System.nanoTime()
+        repeat(TICKS_PER_DAY) { g.step() }
+        val run = System.nanoTime() - start
+        println(
+            "BENCH day ${side}x$side ticks=$TICKS_PER_DAY setup=${"%.0f".format(ms(setup))}ms run=${"%.0f".format(ms(run))}ms " +
+                "perTick=${"%.3f".format(ms(run) / TICKS_PER_DAY)}ms colonists=${g.colonists.size} " +
+                "ore=${g.map.ore.count { it != Ore.NONE }} state=${stateHash(g)}"
+        )
+    }
+
+    @Test fun benchOneDayHundredByHundred() { if (enabled) oneDay(100) }
+    @Test fun benchOneDayTwoFiftyByTwoFifty() { if (enabled) oneDay(250) }
 }

@@ -38,13 +38,13 @@ fun Game.igniteCell(i: Int, intensity: Float = 0.3f) {
 
 fun Game.fireTick() {
     if (map.fires.isEmpty()) return
-    // Firefoam poppers burst when flames reach them.
+    // Quench vents burst when flames reach them.
     for (b in map.buildings()) {
-        if (!b.built || b.def != BuildDef.FOAM_POPPER) continue
+        if (!b.built || b.def != BuildDef.QUENCH_VENT) continue
         if (map.fires.keys.any { val fx = it % map.w; val fy = it / map.w; Math.abs(fx - b.x) <= 3 && Math.abs(fy - b.y) <= 3 }) {
             for (dy in -6..6) for (dx in -6..6) { val x = b.x + dx; val y = b.y + dy; if (map.inB(x, y)) map.fires.remove(map.idx(x, y)) }
             map.removeBuilding(b)
-            say("A firefoam popper smothers the flames.", 1)
+            say("A quench vent smothers the flames.", 1)
             break
         }
     }
@@ -73,7 +73,15 @@ fun Game.fireTick() {
                 st.count -= max(1, (st.count * 0.15f * f.intensity).toInt())
                 if (st.count <= 0) map.items.remove(i)
             }
-            for (p in pawns) if (p.alive && p.x == i % map.w && p.y == i / map.w) dealDamage(p, DamageKind.BURN, 3.5f * f.intensity)
+        }
+        // A pawn on a large fire may catch fire, at the cumulative chance over 150 ticks. The fire does no direct damage to pawns
+        // in the cell (RimWorld/Fire.cs:267-270; docs/fidelity/combat.md).
+        if (f.age % BURN_CHECK_TICKS == 0 && f.intensity > CELL_CATCH_MIN_SIZE) {
+            val fx = i % map.w; val fy = i / map.w
+            for (p in pawns) {
+                if (!p.alive || p.burnSize > 0f || p.x != fx || p.y != fy) continue
+                if (rng.chance(cumulativeCatchChance(p.flammability(), CELL_CATCH_TICKS))) catchFire(p, f.intensity * CELL_CATCH_SIZE_SHARE)
+            }
         }
         // Spread.
         if (f.age % tk(16) == 0) {
@@ -115,17 +123,17 @@ fun Game.explode(x: Int, y: Int, radius: Float, damage: Float, source: Pawn? = n
         val d = distance(x, y, p.x, p.y)
         if (d > radius) continue
         val fall = 1f - d / (radius + 0.5f)
-        dealDamage(p, DamageKind.BLAST, damage * fall, 0f, source)
-        dealDamage(p, DamageKind.BLAST, damage * 0.5f * fall, 0f, source)
-        if (fire) dealDamage(p, DamageKind.BURN, 4f * fall, 0f, source)
+        // Each thing is hit once per explosion, with the falloff for its cell (Verse/DamageWorker.cs:302, 316). An incendiary
+        // blast is a single burn hit, so a flame hit can set the pawn alight.
+        dealDamage(p, if (fire) DamageKind.BURN else DamageKind.BLAST, damage * fall, 0f, source)
     }
 }
 
 // ----------------------------------------------------------------------------------- power
 
 fun Game.powerTick() {
-    // Autodoors open or close with the power, which changes what can be walked through.
-    if (map.buildings().any { it.def == BuildDef.AUTODOOR }) map.markWalkChanged()
+    // Slide hatches open or close with the power, which changes what can be walked through.
+    if (map.buildings().any { it.def == BuildDef.SHUTTER_DOOR }) map.markWalkChanged()
     val m = map
     val ps = power
     ps.produced = 0f; ps.consumed = 0f; ps.stored = 0f; ps.capacity = 0f
@@ -181,12 +189,12 @@ fun Game.powerTick() {
     for ((k, b) in devices.withIndex()) {
         val net = nets.getOrPut(find(attach[k][0])) { Net() }
         val d = b.def
-        if (d == BuildDef.BATTERY) { net.cap += 600f; net.stored += b.charge; net.batteries.add(b); continue }
+        if (d == BuildDef.BATTERY) { net.cap += BATTERY_CAPACITY_WD; net.stored += b.charge; net.batteries.add(b); continue }
         if (d.producesPower) {
             var out = 0f
             when (d) {
-                BuildDef.SOLAR_PANEL -> out = d.power * daylight() * (if (ps.flare) 0f else 1f)
-                BuildDef.WIND_TURBINE -> out = d.power * windFactor
+                BuildDef.SOLAR_PANEL -> out = d.power * daylight() * m.unroofedShare(b)
+                BuildDef.BREEZE_MILL -> out = d.power * min(windFactor, BREEZE_OUTPUT_WIND_CAP)
                 BuildDef.WOOD_GENERATOR -> if (b.fuel > 0f) { out = d.power; b.fuel = max(0f, b.fuel - Game.SLOW_TICK.toFloat() / TICKS_PER_HOUR * 0.8f) }
                 else -> {}
             }
@@ -202,6 +210,8 @@ fun Game.powerTick() {
         var balance = (net.prod - net.cons) * dt
         var energy = net.stored
         energy = (energy + balance).coerceIn(0f, net.cap)
+        // Each battery loses its self-discharge every tick, never more than it holds (RimWorld/CompPowerBattery.cs:70).
+        energy = max(0f, energy - net.batteries.size * BATTERY_SELF_DISCHARGE_W * dt)
         val ok = net.prod >= net.cons || (net.stored + balance >= 0f && net.stored > 0f)
         val per = if (net.batteries.isEmpty()) 0f else energy / net.batteries.size
         for (bt in net.batteries) bt.charge = per
@@ -241,11 +251,12 @@ fun Game.worldSlowTick() {
         if (weather == Weather.SNOW && out < 1f) m.snow[i] = min(1f, m.snow[i] + 0.02f)
         else if (out > 0f && m.snow[i] > 0f) m.snow[i] = max(0f, m.snow[i] - 0.01f * (1f + out / 10f))
     }
-    // Toxic fallout hurts everybody outside and kills plants.
+    // A fume cloud hurts everybody outside and kills plants.
     if (toxicFalloutUntil > tick) {
         for (p in pawns) if (p.alive && !p.isAnimal && !m.roofed(m.idx(p.x, p.y))) {
-            val h = addHediff(p, HediffKind.TOXIC_BUILDUP, 0f)
+            val h = addHediff(p, HediffKind.TOXIN_LOAD, 0f)
             h.severity = min(1f, h.severity + 0.0035f)
+            p.healthDirty = true
         }
         for (i in 0 until m.size) { val pl = m.plant[i]; if (pl != null && !m.roofed(i) && rng.chance(0.002f)) m.plant[i] = null }
     }
@@ -256,7 +267,7 @@ fun Game.worldSlowTick() {
     }
     // Windblown fire starts.
     windFactor = (windFactor + (rng.float() - 0.5f) * 0.12f).coerceIn(0.15f, 1.35f)
-    // Hunger of tamed animals: hay and kibble are consumed in animalTick.
+    // Hunger of tamed animals: fodder and feed pellets are consumed in animalTick.
 }
 
 private fun Game.updateWeather() {
@@ -338,7 +349,7 @@ internal fun Game.roomClimate(out: Float) {
         when {
             d.fuelCap > 0f -> {
                 if (b.fuel > 0f) {
-                    val use = d == BuildDef.CAMPFIRE || d == BuildDef.TORCH_LAMP || b.inUse > 0 || d == BuildDef.WOOD_GENERATOR
+                    val use = d == BuildDef.CAMPFIRE || d == BuildDef.PITCH_POST || b.inUse > 0 || d == BuildDef.WOOD_GENERATOR
                     if (use) { b.fuel = max(0f, b.fuel - 0.25f); active = true }
                     if (b.inUse > 0) b.inUse = max(0, b.inUse - Game.SLOW_TICK.toInt())
                 }
@@ -349,17 +360,100 @@ internal fun Game.roomClimate(out: Float) {
         // Weather puts out outdoor fires.
         if (r >= 0 && !m.roomIndoor[r] && d == BuildDef.CAMPFIRE && (weather == Weather.RAIN || weather == Weather.THUNDER)) b.fuel = max(0f, b.fuel - 2f)
     }
-    val next = Thermal.step(m.roomTemp, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, out)
+    val next = Thermal.step(m.roomTemp, m.roomSize, m.roomIndoor, heat, m.linkA, m.linkB, m.linkC, m.linkDoor, doorOpenShares(m), m.roomRoofs, out)
     next.copyInto(m.roomTemp)
+}
+
+/**
+ * The share of this slow step that each door is open. A pawn standing in a swing door holds it open for [Thermal.DOOR_CLOSE_DELAY]
+ * more ticks, and the open time left is spent over the step, at most the whole of it. A slide hatch is open while it is powered.
+ * Every door's hold is spent, including a door that links no rooms, so no hold is kept back. Returns one share per link door
+ * ([GameMap.doorCell]). Docs: docs/fidelity/heat-exchange.md.
+ */
+internal fun Game.doorOpenShares(m: GameMap): FloatArray {
+    for (p in pawns) {
+        if (!p.alive || p.isAnimal || !m.inB(p.x, p.y)) continue
+        val b = m.building[m.idx(p.x, p.y)] ?: continue
+        if (b.built && b.def.isDoor && b.def != BuildDef.SHUTTER_DOOR) b.doorHold = max(b.doorHold, Thermal.DOOR_CLOSE_DELAY)
+    }
+    val step = Game.SLOW_TICK
+    val share = HashMap<Int, Float>()
+    for (b in m.buildings()) {
+        if (!b.built || !b.def.isDoor) continue
+        share[m.idx(b.x, b.y)] = if (b.def == BuildDef.SHUTTER_DOOR) {
+            if (b.powered) 1f else 0f
+        } else {
+            val spent = minOf(b.doorHold.toLong(), step).toInt()
+            b.doorHold -= spent
+            spent.toFloat() / step.toFloat()
+        }
+    }
+    return FloatArray(m.doorCell.size) { d -> share[m.doorCell[d]] ?: 0f }
+}
+
+/** Fertility factor: the reference's sensitivity blend (RimWorld/PlantUtility.cs:358). */
+internal fun fertilityGrowthFactor(fertility: Float): Float =
+    fertility * PLANT_FERTILITY_SENSITIVITY + (1f - PLANT_FERTILITY_SENSITIVITY)
+
+/**
+ * Temperature factor for a plant whose optimal band is [optimalLow] to [optimalHigh] degrees. Zero at the growth limits, a
+ * straight ramp to full inside the band (RimWorld/PlantUtility.cs:370-381). The limits are the band's default distances.
+ */
+internal fun temperatureGrowthFactor(t: Float, optimalLow: Float, optimalHigh: Float): Float {
+    val growthMin = optimalLow - GROWTH_BELOW_OPTIMAL_C
+    val growthMax = optimalHigh + GROWTH_ABOVE_OPTIMAL_C
+    return when {
+        t <= growthMin || t >= growthMax -> 0f
+        t < optimalLow -> (t - growthMin) / (optimalLow - growthMin)
+        t <= optimalHigh -> 1f
+        else -> (growthMax - t) / (growthMax - optimalHigh)
+    }
+}
+
+/** Light factor: a ramp from [GROW_MIN_GLOW] to [GROW_OPTIMAL_GLOW] (RimWorld/PlantUtility.cs:361-367). */
+internal fun lightGrowthFactor(glow: Float): Float = ((glow - GROW_MIN_GLOW) / (GROW_OPTIMAL_GLOW - GROW_MIN_GLOW)).coerceIn(0f, 1f)
+
+/**
+ * The glow a cell gives a plant: the daylight, or the cell's artificial light when that is brighter. [cellLight] is the cell's
+ * light from [lightTick]: the daylight (less under a natural roof, or 85% of it indoors), with a lamp's or a fire's light on
+ * top where it is brighter. Taking the larger of the two keeps the glow on the ramp of [lightGrowthFactor] instead of stepping
+ * to full glow when the cell light passes half. Mapping the daylight to glow is Stillmere's (C); the glow ramp is
+ * RimWorld/PlantUtility.cs:361-367.
+ */
+internal fun plantGlow(daylit: Float, cellLight: Float): Float = max(daylit, cellLight)
+
+/** Whether a grower may sow this crop on a cell at [t] degrees: strictly inside the growth limits (RimWorld/PlantUtility.cs:21-33). */
+internal fun growthSeasonOk(t: Float, type: PlantType): Boolean =
+    t > type.minTemp - GROWTH_BELOW_OPTIMAL_C && t < type.maxTemp + GROWTH_ABOVE_OPTIMAL_C
+
+/**
+ * Growth added in one slow tick: the grow days set the full-rate time, and the three factors scale it (RimWorld/Plant.cs:346,
+ * 289-302). [fertFactor] is the fertility factor from [fertilityGrowthFactor], or a grow tray's factor. At full factors this is
+ * one grow-time per day, with no extra multiplier.
+ */
+internal fun growthPerSlowTick(type: PlantType, fertFactor: Float, t: Float, glow: Float): Float {
+    val days = if (type.growDays <= 0f) 1f else type.growDays
+    val factor = fertFactor * temperatureGrowthFactor(t, type.minTemp, type.maxTemp) * lightGrowthFactor(glow)
+    return Game.SLOW_TICK.toFloat() / (days * TICKS_PER_DAY) * factor
+}
+
+/**
+ * Harvest yield before random rounding (RimWorld/Plant.cs:932-947). A plant at or below the harvest minimum is not harvestable,
+ * so it yields nothing (RimWorld/Plant.cs:115, and the zero returns at 917-919 and 934-936). Above it the yield rises from about
+ * half at the minimum to full at full growth. Health is not modelled and the difficulty factor is 1.
+ */
+internal fun harvestYieldExact(count: Int, growth: Float): Float {
+    if (growth <= HARVEST_MIN_GROWTH) return 0f
+    val share = ((growth - HARVEST_MIN_GROWTH) / (1f - HARVEST_MIN_GROWTH)).coerceIn(0f, 1f)
+    return count * (0.5f + 0.5f * share)
 }
 
 private fun Game.plantsTick(out: Float) {
     val m = map
-    val light = daylight()
+    val daylit = daylight()
     for (i in 0 until m.size) {
         val pl = m.plant[i] ?: continue
         val t = m.tempAt(i, out)
-        val fert = m.terrain[i].fertility.let { f -> if (m.building[i]?.def == BuildDef.HYDROPONICS && m.building[i]?.powered == true) 2.0f else f }
         if (pl.type.crop || pl.type.isTree || pl.type.regrows) {
             pl.age += Game.SLOW_TICK.toInt()
             if (pl.growth >= 1f) {
@@ -373,13 +467,15 @@ private fun Game.plantsTick(out: Float) {
                 }
                 continue
             }
-            val lit = light > 0.2f || m.light[i] > 0.5f
-            if (t < pl.type.minTemp || t > pl.type.maxTemp || !lit) continue
-            val days = if (pl.type.growDays <= 0f) 1f else pl.type.growDays
-            var rate = 1f / (days * TICKS_PER_DAY * 0.55f) * Game.SLOW_TICK * max(0.2f, fert)
-            if (weather == Weather.RAIN) rate *= 1.1f
-            if (Trait.GREEN_THUMB in pawns.firstOrNull { it.colonist }?.traits.orEmpty()) rate *= 1.25f
-            pl.growth = min(1f, pl.growth + rate)
+            // The glow is the daylight, or a brighter lamp or fire on the cell (see plantGlow). A powered grow tray takes its own
+            // factor in place of the terrain fertility. Growth is fertility x temperature x light over the grow days, with no
+            // weather or trait term (RimWorld/Plant.cs:289-302, 346).
+            val glow = plantGlow(daylit, m.light[i])
+            val fertFactor = if (m.building[i]?.def == BuildDef.GROW_TRAY && m.building[i]?.powered == true) GROW_TRAY_GROWTH_FACTOR
+                else fertilityGrowthFactor(m.terrain[i].fertility)
+            val step = growthPerSlowTick(pl.type, fertFactor, t, glow)
+            if (step <= 0f) continue
+            pl.growth = min(1f, pl.growth + step)
         }
     }
     // Saplings: forests slowly spread.
@@ -403,8 +499,8 @@ private fun Game.plantsTick(out: Float) {
 }
 
 /** Manufactured goods left out in the open wear away; roofs, and especially rain, matter. */
-private fun deteriorates(t: ItemType) = t.isGear || t == ItemType.CLOTH || t == ItemType.LEATHER || t == ItemType.WOOL || t == ItemType.DEVILSTRAND ||
-    t == ItemType.MEDS_HERBAL || t == ItemType.MEDS_INDUSTRIAL || t == ItemType.KIBBLE || t.cat == ItemCat.ART
+private fun deteriorates(t: ItemType) = t.isGear || t == ItemType.CLOTH || t == ItemType.LEATHER || t == ItemType.WOOL || t == ItemType.WISPSILK ||
+    t == ItemType.MEDS_LEAF_POULTICE || t == ItemType.MEDS_STERILE_DRESSING || t == ItemType.FEED_PELLETS || t.cat == ItemCat.ART
 
 private fun Game.deteriorationTick() {
     val m = map
@@ -420,6 +516,24 @@ private fun Game.deteriorationTick() {
     for (i in gone) { val s = m.items.remove(i) ?: continue; if (s.type.isGear) say("A ${s.type.label.lowercase()} fell apart in the weather.", 0) }
 }
 
+/** Rot rate by temperature: none at or below 0 C, a straight ramp to full at 10 C (Verse/GenTemperature.cs:459-470). */
+internal fun rotTemperatureFactor(t: Float): Float = when {
+    t <= 0f -> 0f
+    t >= 10f -> 1f
+    else -> t / 10f
+}
+
+/** Share of a building's footprint that is not roofed. A roofed cell gives a sun array nothing (RimWorld/CompPowerPlantSolar.cs:19). */
+internal fun GameMap.unroofedShare(b: Building): Float {
+    var total = 0
+    var open = 0
+    for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) {
+        total++
+        if (inB(xx, yy) && !roofed(idx(xx, yy))) open++
+    }
+    return if (total == 0) 1f else open / total.toFloat()
+}
+
 private fun Game.spoilTick(out: Float) {
     val m = map
     val dt = Game.SLOW_TICK.toFloat()
@@ -427,15 +541,9 @@ private fun Game.spoilTick(out: Float) {
     var spoiled = 0
     val rem = ArrayList<Int>()
     for ((i, s) in m.items) {
-        val days = if (s.corpseOf != null) 2.2f else s.type.spoilDays
+        val days = if (s.corpseOf != null) CORPSE_ROT_DAYS else s.type.spoilDays
         if (days <= 0f) continue
-        val t = m.tempAt(i, out)
-        val f = when {
-            t <= 0f -> 0f
-            t < 10f -> 0.2f + t / 10f * 0.4f
-            t < 20f -> 0.6f + (t - 10f) / 10f * 0.4f
-            else -> 1f + (t - 20f) / 20f
-        }
+        val f = rotTemperatureFactor(m.tempAt(i, out))
         if (f <= 0f) continue
         s.rot += dt / (days * TICKS_PER_DAY) * f
         if (s.rot >= 1f) { rem.add(i); spoiled += s.count }
@@ -477,9 +585,9 @@ fun impressMood(score: Float): Float = when {
 
 /** The weapon a turret building fires, from the weapon table. Null for buildings that do not shoot. */
 internal fun turretWeapon(d: BuildDef): Weapon? = when (d) {
-    BuildDef.TURRET -> Weapon.TURRET_GUN
-    BuildDef.MINI_TURRET -> Weapon.MINI_TURRET_GUN
-    BuildDef.MORTAR -> Weapon.MORTAR_SHELL
+    BuildDef.TURRET -> Weapon.PIVOT_CANNON
+    BuildDef.SENTRY_POD -> Weapon.SENTRY_POD_GUN
+    BuildDef.LOBBING_TUBE -> Weapon.LOBBED_CHARGE
     else -> null
 }
 
@@ -488,7 +596,7 @@ fun Game.turretsTick() {
         if (b == null || !b.built) continue
         val w = turretWeapon(b.def) ?: continue
         if (b.cooldown > 0) { b.cooldown -= tk(10); continue }
-        if (b.def == BuildDef.MORTAR) { mortarFire(b); continue }
+        if (b.def == BuildDef.LOBBING_TUBE) { mortarFire(b); continue }
         var best: Pawn? = null
         var bd = w.range * w.range
         for (h in pawns) {
@@ -501,7 +609,7 @@ fun Game.turretsTick() {
             repeat(w.burst) {
                 val hit = rng.chance(w.accuracy)
                 shots.add(Shot(b.x.toFloat(), b.y.toFloat(), best.x.toFloat(), best.y.toFloat(), tick + tk(6) + it * tk(2), hit))
-                if (hit) dealDamage(best, w.kind, w.damage * (0.85f + rng.float() * 0.3f), w.armorPen, null)
+                if (hit) dealDamage(best, w.kind, w.damage, penetrationOf(w), null)
             }
         }
     }
@@ -517,7 +625,7 @@ private fun Game.mortarFire(b: Building) {
         if (d < bd && d > 64f) { best = h; bd = d }
     }
     if (best == null) return
-    val w = Weapon.MORTAR_SHELL
+    val w = Weapon.LOBBED_CHARGE
     b.shells--
     b.cooldown = w.cooldownTicks
     // A shell lands close to where it was aimed when it hits, and wide when it misses.
@@ -549,25 +657,25 @@ fun Game.trapsTick() {
 }
 
 /**
- * Powered production that happens without a colonist: a deep drill brings up whatever ore lies under it (stone chunks
- * when there is none), and a crematorium burns the nearest corpse within reach.
+ * Powered production that happens without a colonist: a subsoil auger brings up whatever ore lies under it (rough rocks
+ * when there is none), and a pyre house burns the nearest corpse within reach.
  */
 internal fun Game.productionTick() {
     for (b in map.buildings()) {
         if (b == null || !b.built || !b.powered) continue
-        if (b.def == BuildDef.DEEP_DRILL) {
+        if (b.def == BuildDef.SUBSOIL_AUGER) {
             if (b.cooldown > 0) { b.cooldown -= Game.SLOW_TICK.toInt(); continue }
             b.cooldown = 2 * TICKS_PER_DAY
             val ore = map.ore[map.idx(b.x, b.y)]
             val item = ore.item
             if (ore != Ore.NONE && item != null) map.drop(item, max(1, rng.range(ore.yieldMin, ore.yieldMax) / 2), b.x, b.y)
             else map.drop(ItemType.STONE_CHUNK, rng.range(1, 2), b.x, b.y)
-        } else if (b.def == BuildDef.CREMATORIUM) {
+        } else if (b.def == BuildDef.PYRE_HOUSE) {
             val body = map.items.entries.firstOrNull { (i, s) ->
                 s.corpseOf != null && distance(map.xOf(i), map.yOf(i), b.x, b.y) <= 5f
             } ?: continue
             map.items.remove(body.key)
-            say("The crematorium burned the body of ${body.value.corpseOf}.", 0)
+            say("The pyre house burned the body of ${body.value.corpseOf}.", 0)
         }
     }
 }

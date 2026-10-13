@@ -13,7 +13,7 @@ class PerformanceEquivalenceTest {
 
     private fun colony(seed: Long): Game {
         val g = Game(seed)
-        g.startNewColony(Scenario.LOST_TRIBE)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
         g.mentalBreaksEnabled = false
         g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
         val never = Long.MAX_VALUE
@@ -91,7 +91,7 @@ class PerformanceEquivalenceTest {
     @Test fun theSameSeedGivesTheSameSaveBytes() {
         fun save(seed: Long): ByteArray {
             val g = colony(seed)
-            g.research(Research.SMITHING)
+            g.research(Research.FORGEWORK)
             repeat(600) { g.step() }
             return SaveGame.write(g)
         }

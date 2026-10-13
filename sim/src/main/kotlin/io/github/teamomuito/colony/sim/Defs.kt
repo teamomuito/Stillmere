@@ -20,6 +20,51 @@ const val TIME_SCALE = TICKS_PER_HOUR / LEGACY_TICKS_PER_HOUR.toFloat()
 fun tk(legacyTicks: Int): Int = Math.round(legacyTicks * TIME_SCALE)
 fun tk(legacyTicks: Long): Long = Math.round(legacyTicks * TIME_SCALE.toDouble())
 
+// Production and economy: construction, power, plants, food and research. Each value and its source is in
+// docs/fidelity/economy.md. "D" values are read from the decompiled reference; the file and line are cited beside each.
+
+/** Capacity of one battery in watt-days (RimWorld/CompProperties_Battery.cs:5, the code default). */
+const val BATTERY_CAPACITY_WD = 1000f
+/** Each battery drains this many watts every tick (RimWorld/CompPowerBattery.cs:70, in CompTick). */
+const val BATTERY_SELF_DISCHARGE_W = 5f
+/** The breeze mill uses no more wind than this (RimWorld/CompPowerPlantWind.cs:32). */
+const val BREEZE_OUTPUT_WIND_CAP = 1.5f
+/** How far fertility moves the growth rate (RimWorld/PlantProperties.cs:97, default 0.5). */
+const val PLANT_FERTILITY_SENSITIVITY = 0.5f
+/**
+ * Growth stops this many degrees below the optimal band: the optimal minimum of 6 (RimWorld/PlantProperties.cs:89) less the
+ * growth minimum, which has no initializer and so is 0 (RimWorld/PlantProperties.cs:87).
+ */
+const val GROWTH_BELOW_OPTIMAL_C = 6f
+/**
+ * Growth stops this many degrees above the optimal band: the growth maximum of 58 (RimWorld/PlantProperties.cs:93) less the
+ * optimal maximum of 42 (RimWorld/PlantProperties.cs:91), which is 16.
+ */
+const val GROWTH_ABOVE_OPTIMAL_C = 16f
+/** Light factor is zero at this glow and full at [GROW_OPTIMAL_GLOW] (RimWorld/PlantProperties.cs:75, 77). */
+const val GROW_MIN_GLOW = 0.51f
+const val GROW_OPTIMAL_GLOW = 1f
+/**
+ * A powered grow tray's growth factor, used in place of the terrain fertility blend. A Stillmere rule (C), not a reference
+ * value; it keeps the factor the tray had before the blend, so the tray's growth does not change with the blend.
+ */
+const val GROW_TRAY_GROWTH_FACTOR = 2f
+/** A crop can be harvested once it passes this share of growth (RimWorld/Plant.cs:115, default in PlantProperties.cs:55). */
+const val HARVEST_MIN_GROWTH = 0.65f
+/** Corpses start to rot after this many days (RimWorld/ThingDefGenerator_Corpses.cs:181). */
+const val CORPSE_ROT_DAYS = 2.5f
+/** Chance that a raw meat item poisons the eater (RimWorld/ThingDefGenerator_Meat.cs:68). */
+const val RAW_MEAT_POISON_CHANCE = 0.02f
+/** Base research rate per work tick, before the unit scale below (RimWorld/ResearchManager.cs:38). */
+const val RESEARCH_BASE_RATE = 0.00825f
+/**
+ * Stillmere's unit for research points. Project costs are base cost times this, as before this round, so saved progress keeps
+ * its meaning. The scale is Stillmere's own choice (C), not a reference value.
+ */
+const val RESEARCH_POINT_SCALE = 16f
+/** A research session lasts this many ticks in Delay mode (RimWorld/JobDriver_Research.cs:48). */
+const val RESEARCH_SESSION_TICKS = 4000
+
 enum class Terrain(val label: String, val passable: Boolean, val fertility: Float, val cost: Int) {
     SOIL("Soil", true, 1f, 1),
     RICH_SOIL("Rich soil", true, 1.4f, 1),
@@ -31,6 +76,11 @@ enum class Terrain(val label: String, val passable: Boolean, val fertility: Floa
     ROCK("Rock", false, 0f, 0),
     ICE("Ice", true, 0f, 2),
     MUD("Mud", true, 0.5f, 3),
+    /**
+     * Grass ground: fertile soil under a grass cover (docs/fidelity/grass.md). Its fertility is UNVERIFIED (the vanilla value is XML),
+     * set to soil's 1.0. Appended last, so the ordinals above, which saves store, do not move.
+     */
+    GRASS("Grass", true, 1f, 1),
 }
 
 enum class RockType(val label: String, val beauty: Float) {
@@ -42,7 +92,7 @@ enum class Ore(val label: String, val item: ItemType?, val yieldMin: Int, val yi
     STEEL("Steel", ItemType.STEEL, 14, 24, 1500f),
     SILVER("Silver", ItemType.SILVER, 40, 80, 1500f),
     GOLD("Gold", ItemType.GOLD, 10, 25, 1800f),
-    PLASTEEL("Plasteel", ItemType.PLASTEEL, 10, 20, 2200f),
+    HARDALLOY("Hardalloy", ItemType.HARDALLOY, 10, 20, 2200f),
     COMPONENTS("Components", ItemType.COMPONENT, 1, 3, 2000f),
 }
 
@@ -69,23 +119,23 @@ enum class WorkType(val label: String, val short: String) {
 }
 
 enum class SkillType(val label: String) {
-    SHOOTING("Shooting"), MELEE("Melee"), CONSTRUCTION("Construction"), MINING("Mining"),
-    COOKING("Cooking"), PLANTS("Plants"), ANIMALS("Animals"), CRAFTING("Crafting"),
-    ARTISTIC("Artistic"), MEDICINE("Medicine"), SOCIAL("Social"), INTELLECTUAL("Intellectual"),
+    MARKSMANSHIP("Marksmanship"), CLOSE_COMBAT("Close combat"), ARCHITECTURE("Architecture"), QUARRYING("Quarrying"),
+    GALLEY("Galley"), HORTICULTURE("Horticulture"), HUSBANDRY("Husbandry"), WORKMANSHIP("Workmanship"),
+    ARTISTRY("Artistry"), HEALING("Healing"), RAPPORT("Rapport"), SCHOLARSHIP("Scholarship"),
 }
 
 fun WorkType.skill(): SkillType? = when (this) {
-    WorkType.DOCTOR -> SkillType.MEDICINE
-    WorkType.WARDEN -> SkillType.SOCIAL
-    WorkType.HANDLE -> SkillType.ANIMALS
-    WorkType.COOK -> SkillType.COOKING
-    WorkType.HUNT -> SkillType.SHOOTING
-    WorkType.CONSTRUCT -> SkillType.CONSTRUCTION
-    WorkType.GROW, WorkType.PLANT_CUT -> SkillType.PLANTS
-    WorkType.MINE -> SkillType.MINING
-    WorkType.SMITH, WorkType.TAILOR, WorkType.CRAFT -> SkillType.CRAFTING
-    WorkType.ART -> SkillType.ARTISTIC
-    WorkType.RESEARCH -> SkillType.INTELLECTUAL
+    WorkType.DOCTOR -> SkillType.HEALING
+    WorkType.WARDEN -> SkillType.RAPPORT
+    WorkType.HANDLE -> SkillType.HUSBANDRY
+    WorkType.COOK -> SkillType.GALLEY
+    WorkType.HUNT -> SkillType.MARKSMANSHIP
+    WorkType.CONSTRUCT -> SkillType.ARCHITECTURE
+    WorkType.GROW, WorkType.PLANT_CUT -> SkillType.HORTICULTURE
+    WorkType.MINE -> SkillType.QUARRYING
+    WorkType.SMITH, WorkType.TAILOR, WorkType.CRAFT -> SkillType.WORKMANSHIP
+    WorkType.ART -> SkillType.ARTISTRY
+    WorkType.RESEARCH -> SkillType.SCHOLARSHIP
     WorkType.FIREFIGHT, WorkType.PATIENT, WorkType.HAUL, WorkType.CLEAN -> null
 }
 
@@ -104,20 +154,26 @@ enum class PlantType(
     SAGUARO("Saguaro cactus", 10f, ItemType.WOOD, 8, 280, 0, false, wood = true, flammable = 0.1f),
     BERRY("Berry bush", 5f, ItemType.BERRIES, 8, 120, 0, false),
     BRAMBLE("Brambles", 0f, null, 0, 150, 0, false),
-    WILD_HEALROOT("Wild healroot", 6f, ItemType.HEALROOT, 3, 120, 0, false),
+    FERAL_MIREWORT("Feral mirewort", 6f, ItemType.MIREWORT, 3, 120, 0, false),
     RICE("Rice", 5.8f, ItemType.RICE, 12, 110, 170, true),
     POTATO("Potatoes", 5.8f, ItemType.POTATOES, 11, 110, 170, true),
     CORN("Corn", 11.5f, ItemType.CORN, 40, 110, 170, true),
     STRAWBERRY("Strawberries", 6.5f, ItemType.STRAWBERRIES, 10, 110, 170, true),
     COTTON("Cotton", 5.5f, ItemType.CLOTH, 14, 110, 170, true),
-    HEALROOT("Healroot", 8f, ItemType.HEALROOT, 5, 110, 170, true),
-    SMOKELEAF("Smokeleaf", 7f, ItemType.SMOKELEAF, 10, 110, 170, true),
-    PSYCHOID("Psychoid", 7f, ItemType.PSYCHOID, 8, 110, 170, true),
-    DEVILSTRAND_CROP("Devilstrand", 15f, ItemType.DEVILSTRAND, 8, 110, 170, true, minTemp = 10f, flammable = 0.1f, research = Research.DEVILSTRAND_RESEARCH),
-    HAYGRASS("Hay grass", 3.5f, ItemType.HAY, 20, 90, 120, true, minTemp = 3f);
+    MIREWORT("Mirewort", 8f, ItemType.MIREWORT, 5, 110, 170, true),
+    HUSHMOSS("Hushmoss", 7f, ItemType.HUSHMOSS, 10, 110, 170, true),
+    DREAMWEED("Dreamweed", 7f, ItemType.DREAMWEED, 8, 110, 170, true),
+    WISPSILK_CROP("Wispsilk", 15f, ItemType.WISPSILK, 8, 110, 170, true, minTemp = 10f, flammable = 0.1f, research = Research.WISPSILK_RESEARCH),
+    MEADOW_GRASS("Sward", 3.5f, ItemType.HAY, 20, 90, 120, true, minTemp = 3f),
+    /**
+     * The grass cover of [Terrain.GRASS] (docs/fidelity/grass.md). A wild plant, not a crop: harvested for hay from 65 percent growth
+     * (RimWorld/Plant.cs:115) and regrowing after a harvest. Grow days, yield and work are UNVERIFIED or C (the vanilla values are
+     * XML). Appended last, so the ordinals above, which saves store, do not move.
+     */
+    GRASS("Grass", 3.5f, ItemType.HAY, 4, 90, 0, false);
 
     val isTree get() = wood
-    val regrows get() = this == BERRY || this == WILD_HEALROOT
+    val regrows get() = this == BERRY || this == FERAL_MIREWORT || this == GRASS
 }
 
 enum class ItemCat(val label: String) {
@@ -133,14 +189,14 @@ enum class ItemType(
     val maxTendQuality: Float = 1f,
 ) {
     WOOD("Wood", ItemCat.RESOURCE, 75, 0.5f, flammable = 1f),
-    STONE_CHUNK("Stone chunk", ItemCat.RESOURCE, 1, 0.1f),
-    STONE("Stone blocks", ItemCat.RESOURCE, 75, 0.6f),
+    STONE_CHUNK("Rough rock", ItemCat.RESOURCE, 1, 0.1f),
+    STONE("Cut stone", ItemCat.RESOURCE, 75, 0.6f),
     STEEL("Steel", ItemCat.RESOURCE, 75, 1.9f),
-    PLASTEEL("Plasteel", ItemCat.RESOURCE, 75, 9f),
+    HARDALLOY("Hardalloy", ItemCat.RESOURCE, 75, 9f),
     SILVER("Silver", ItemCat.RESOURCE, 500, 1f),
     GOLD("Gold", ItemCat.RESOURCE, 500, 10f),
     COMPONENT("Components", ItemCat.RESOURCE, 50, 32f),
-    DEVILSTRAND("Devilstrand", ItemCat.RESOURCE, 75, 2.4f, flammable = 0.4f),
+    WISPSILK("Wispsilk", ItemCat.RESOURCE, 75, 2.4f, flammable = 0.4f),
     CLOTH("Cloth", ItemCat.RESOURCE, 75, 1.3f, flammable = 1f),
     LEATHER("Leather", ItemCat.RESOURCE, 75, 2.1f, flammable = 0.6f),
     WOOL("Wool", ItemCat.RESOURCE, 75, 1.4f, flammable = 1f),
@@ -149,92 +205,93 @@ enum class ItemType(
     POTATOES("Potatoes", ItemCat.FOOD_PLANT, 75, 1.1f, 0.05f, 40f),
     CORN("Corn", ItemCat.FOOD_PLANT, 75, 1.1f, 0.05f, 40f),
     STRAWBERRIES("Strawberries", ItemCat.FOOD_PLANT, 75, 1.2f, 0.05f, 10f),
-    MEAT("Meat", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 4f),
-    HUMAN_MEAT("Human meat", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 4f),
-    INSECT_MEAT("Insect meat", ItemCat.FOOD_MEAT, 75, 1.2f, 0.05f, 4f),
+    // Raw meat is destroyed when it reaches the rotting stage, 2 days in (RimWorld/ThingDefGenerator_Meat.cs:37).
+    MEAT("Meat", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 2f),
+    MANFLESH("Manflesh", ItemCat.FOOD_MEAT, 75, 1.8f, 0.05f, 4f),
+    CHITIN_CUTS("Chitin cuts", ItemCat.FOOD_MEAT, 75, 1.2f, 0.05f, 4f),
     EGGS("Eggs", ItemCat.FOOD_MEAT, 75, 2f, 0.05f, 8f),
     MILK("Milk", ItemCat.FOOD_MEAT, 75, 2f, 0.05f, 4f),
-    MEAL_SIMPLE("Simple meal", ItemCat.FOOD_MEAL, 10, 10f, 0.9f, 4f),
-    MEAL_FINE("Fine meal", ItemCat.FOOD_MEAL, 10, 15f, 0.9f, 4f),
-    MEAL_LAVISH("Lavish meal", ItemCat.FOOD_MEAL, 10, 28f, 0.9f, 4f),
-    MEAL_PACKAGED("Packaged survival meal", ItemCat.FOOD_MEAL, 10, 12f, 0.9f, 0f),
-    PEMMICAN("Pemmican", ItemCat.FOOD_MEAL, 50, 3f, 0.05f, 0f),
-    KIBBLE("Kibble", ItemCat.FOOD_ANIMAL, 75, 0.9f, 0.05f, 0f, humanFood = false),
-    HAY("Hay", ItemCat.FOOD_ANIMAL, 75, 0.4f, 0.05f, 40f, flammable = 1f, humanFood = false),
+    MEAL_HEARTH_STEW("Hearth stew", ItemCat.FOOD_MEAL, 10, 10f, 0.9f, 4f),
+    MEAL_ROASTED_PLATTER("Roasted platter", ItemCat.FOOD_MEAL, 10, 15f, 0.9f, 4f),
+    MEAL_BANQUET_SPREAD("Banquet spread", ItemCat.FOOD_MEAL, 10, 28f, 0.9f, 4f),
+    MEAL_RATION("Sealed ration", ItemCat.FOOD_MEAL, 10, 12f, 0.9f, 0f),
+    TRAIL_CAKE("Trail cake", ItemCat.FOOD_MEAL, 50, 3f, 0.05f, 0f),
+    FEED_PELLETS("Feed pellets", ItemCat.FOOD_ANIMAL, 75, 0.9f, 0.05f, 0f, humanFood = false),
+    HAY("Fodder", ItemCat.FOOD_ANIMAL, 75, 0.4f, 0.05f, 40f, flammable = 1f, humanFood = false),
 
-    HEALROOT("Healroot", ItemCat.MEDICINE, 75, 1f, flammable = 0.8f),
-    MEDS_HERBAL("Herbal medicine", ItemCat.MEDICINE, 25, 10f, potency = 0.6f, maxTendQuality = 0.7f),
-    MEDS_INDUSTRIAL("Medicine", ItemCat.MEDICINE, 25, 18f, potency = 1.0f),
+    MIREWORT("Mirewort", ItemCat.MEDICINE, 75, 1f, flammable = 0.8f),
+    MEDS_LEAF_POULTICE("Leaf poultice", ItemCat.MEDICINE, 25, 10f, potency = 0.6f, maxTendQuality = 0.7f),
+    MEDS_STERILE_DRESSING("Sterile dressing", ItemCat.MEDICINE, 25, 18f, potency = 1.0f),
 
     BEER("Beer", ItemCat.DRUG, 25, 12f),
-    SMOKELEAF("Smokeleaf leaves", ItemCat.DRUG, 75, 2f, flammable = 1f),
-    JOINT("Smokeleaf joint", ItemCat.DRUG, 25, 14f, flammable = 1f),
-    PSYCHOID("Psychoid leaves", ItemCat.DRUG, 75, 3f, flammable = 1f),
-    FLAKE("Flake", ItemCat.DRUG, 25, 14f),
-    YAYO("Yayo", ItemCat.DRUG, 25, 20f),
-    GO_JUICE("Go-juice", ItemCat.DRUG, 25, 32f),
-    WAKE_UP("Wake-up", ItemCat.DRUG, 25, 24f),
-    PSYCHITE_TEA("Psychite tea", ItemCat.DRUG, 25, 14f),
+    HUSHMOSS("Dried hushmoss", ItemCat.DRUG, 75, 2f, flammable = 1f),
+    JOINT("Rolled bundle", ItemCat.DRUG, 25, 14f, flammable = 1f),
+    DREAMWEED("Dreamweed sprigs", ItemCat.DRUG, 75, 3f, flammable = 1f),
+    PALE_DUST("Pale dust", ItemCat.DRUG, 25, 14f),
+    WHITE_RUSH("White rush", ItemCat.DRUG, 25, 20f),
+    SURGE_TONIC("Surge tonic", ItemCat.DRUG, 25, 32f),
+    DAWN_TABLET("Dawn tablet", ItemCat.DRUG, 25, 24f),
+    LUCID_DRAUGHT("Lucid draught", ItemCat.DRUG, 25, 14f),
 
     SCULPTURE_SMALL("Small sculpture", ItemCat.ART, 1, 80f),
     SCULPTURE_LARGE("Large sculpture", ItemCat.ART, 1, 220f),
 
     // Weapons
-    W_KNIFE("Knife", ItemCat.WEAPON, 1, 20f, weapon = Weapon.KNIFE),
+    W_POCKET_BLADE("Pocket blade", ItemCat.WEAPON, 1, 20f, weapon = Weapon.POCKET_BLADE),
     W_CLUB("Club", ItemCat.WEAPON, 1, 9f, weapon = Weapon.CLUB, flammable = 1f),
     W_SPEAR("Spear", ItemCat.WEAPON, 1, 26f, weapon = Weapon.SPEAR, flammable = 1f),
     W_MACE("Mace", ItemCat.WEAPON, 1, 40f, weapon = Weapon.MACE),
-    W_LONGSWORD("Longsword", ItemCat.WEAPON, 1, 90f, weapon = Weapon.LONGSWORD),
-    W_BOW("Short bow", ItemCat.WEAPON, 1, 22f, weapon = Weapon.BOW, flammable = 1f),
-    W_GREATBOW("Greatbow", ItemCat.WEAPON, 1, 40f, weapon = Weapon.GREATBOW, flammable = 1f),
-    W_REVOLVER("Revolver", ItemCat.WEAPON, 1, 90f, weapon = Weapon.REVOLVER),
-    W_AUTOPISTOL("Autopistol", ItemCat.WEAPON, 1, 95f, weapon = Weapon.AUTOPISTOL),
-    W_BOLT("Bolt-action rifle", ItemCat.WEAPON, 1, 125f, weapon = Weapon.BOLT_RIFLE),
-    W_SHOTGUN("Pump shotgun", ItemCat.WEAPON, 1, 140f, weapon = Weapon.SHOTGUN),
-    W_SMG("Machine pistol", ItemCat.WEAPON, 1, 130f, weapon = Weapon.SMG),
-    W_RIFLE("Assault rifle", ItemCat.WEAPON, 1, 190f, weapon = Weapon.RIFLE),
-    W_LMG("Light machine gun", ItemCat.WEAPON, 1, 260f, weapon = Weapon.LMG),
-    W_GLADIUS("Gladius", ItemCat.WEAPON, 1, 70f, weapon = Weapon.GLADIUS),
-    W_PLASTEEL_SWORD("Plasteel sword", ItemCat.WEAPON, 1, 300f, weapon = Weapon.PLASTEEL_SWORD),
-    W_RECURVE("Recurve bow", ItemCat.WEAPON, 1, 55f, weapon = Weapon.RECURVE_BOW, flammable = 1f),
-    W_LEVER("Lever-action rifle", ItemCat.WEAPON, 1, 150f, weapon = Weapon.LEVER_RIFLE),
-    W_CHAIN_SHOTGUN("Chain shotgun", ItemCat.WEAPON, 1, 210f, weapon = Weapon.CHAIN_SHOTGUN),
-    W_HEAVY_SMG("Heavy SMG", ItemCat.WEAPON, 1, 210f, weapon = Weapon.HEAVY_SMG),
-    W_MINIGUN("Minigun", ItemCat.WEAPON, 1, 550f, weapon = Weapon.MINIGUN),
-    W_CHARGE_RIFLE("Charge rifle", ItemCat.WEAPON, 1, 480f, weapon = Weapon.CHARGE_RIFLE),
-    W_INCENDIARY("Incendiary launcher", ItemCat.WEAPON, 1, 220f, weapon = Weapon.INCENDIARY_LAUNCHER),
-    W_FRAG("Frag grenades", ItemCat.WEAPON, 1, 120f, weapon = Weapon.FRAG_GRENADE),
-    W_DOOMSDAY("Doomsday rocket launcher", ItemCat.WEAPON, 1, 650f, weapon = Weapon.DOOMSDAY),
-    W_SNIPER("Sniper rifle", ItemCat.WEAPON, 1, 340f, weapon = Weapon.SNIPER),
+    W_BROAD_BLADE("Broad blade", ItemCat.WEAPON, 1, 90f, weapon = Weapon.BROAD_BLADE),
+    W_BOW("Reedstring", ItemCat.WEAPON, 1, 22f, weapon = Weapon.BOW, flammable = 1f),
+    W_LONGSTAVE("Longstave", ItemCat.WEAPON, 1, 40f, weapon = Weapon.LONGSTAVE, flammable = 1f),
+    W_CYLINDER_GUN("Cylinder gun", ItemCat.WEAPON, 1, 90f, weapon = Weapon.CYLINDER_GUN),
+    W_SNAP_PISTOL("Quickshot", ItemCat.WEAPON, 1, 95f, weapon = Weapon.SNAP_PISTOL),
+    W_BOLT("Latch carbine", ItemCat.WEAPON, 1, 125f, weapon = Weapon.BOLT_RIFLE),
+    W_SHOTGUN("Riot gun", ItemCat.WEAPON, 1, 140f, weapon = Weapon.SHOTGUN),
+    W_SMG("Rapid sidearm", ItemCat.WEAPON, 1, 130f, weapon = Weapon.SMG),
+    W_RIFLE("Stutter gun", ItemCat.WEAPON, 1, 190f, weapon = Weapon.RIFLE),
+    W_LMG("Bipod hammer", ItemCat.WEAPON, 1, 260f, weapon = Weapon.LMG),
+    W_STABSWORD("Stabsword", ItemCat.WEAPON, 1, 70f, weapon = Weapon.STABSWORD),
+    W_HARDALLOY_SWORD("Hardalloy cutter", ItemCat.WEAPON, 1, 300f, weapon = Weapon.HARDALLOY_SWORD),
+    W_RECURVE("Hornwound", ItemCat.WEAPON, 1, 55f, weapon = Weapon.HORNWOUND, flammable = 1f),
+    W_LEVER("Swing repeater", ItemCat.WEAPON, 1, 150f, weapon = Weapon.LEVER_RIFLE),
+    W_SCATTER_CANNON("Scatter cannon", ItemCat.WEAPON, 1, 210f, weapon = Weapon.SCATTER_CANNON),
+    W_MAG_CARBINE("Mag carbine", ItemCat.WEAPON, 1, 210f, weapon = Weapon.MAG_CARBINE),
+    W_SPINNER_RACK("Spinner rack", ItemCat.WEAPON, 1, 550f, weapon = Weapon.SPINNER_RACK),
+    W_PULSE_CARBINE("Pulse carbine", ItemCat.WEAPON, 1, 480f, weapon = Weapon.PULSE_CARBINE),
+    W_EMBER_THROWER("Ember thrower", ItemCat.WEAPON, 1, 220f, weapon = Weapon.EMBER_THROWER),
+    W_SHRAPNEL_CHARGE("Shrapnel charges", ItemCat.WEAPON, 1, 120f, weapon = Weapon.SHRAPNEL_CHARGE),
+    W_SKYFALL_BATTERY("Skyfall battery", ItemCat.WEAPON, 1, 650f, weapon = Weapon.SKYFALL_BATTERY),
+    W_SNIPER("Distance piece", ItemCat.WEAPON, 1, 340f, weapon = Weapon.SNIPER),
 
     // Apparel
-    A_TSHIRT("T-shirt", ItemCat.APPAREL, 1, 15f, apparel = Apparel.TSHIRT, flammable = 1f),
-    A_BUTTONDOWN("Button-down shirt", ItemCat.APPAREL, 1, 25f, apparel = Apparel.BUTTONDOWN, flammable = 1f),
-    A_PANTS("Pants", ItemCat.APPAREL, 1, 18f, apparel = Apparel.PANTS, flammable = 1f),
-    A_TRIBAL("Tribalwear", ItemCat.APPAREL, 1, 25f, apparel = Apparel.TRIBAL, flammable = 0.7f),
-    A_DUSTER("Duster", ItemCat.APPAREL, 1, 55f, apparel = Apparel.DUSTER, flammable = 0.8f),
-    A_PARKA("Parka", ItemCat.APPAREL, 1, 70f, apparel = Apparel.PARKA, flammable = 1f),
-    A_HAT("Cowboy hat", ItemCat.APPAREL, 1, 25f, apparel = Apparel.COWBOY_HAT, flammable = 0.8f),
-    A_BEANIE("Tuque", ItemCat.APPAREL, 1, 25f, apparel = Apparel.TUQUE, flammable = 1f),
-    A_FLAK_VEST("Flak vest", ItemCat.APPAREL, 1, 90f, apparel = Apparel.FLAK_VEST),
-    A_FLAK_PANTS("Flak pants", ItemCat.APPAREL, 1, 70f, apparel = Apparel.FLAK_PANTS),
-    A_FLAK_JACKET("Flak jacket", ItemCat.APPAREL, 1, 120f, apparel = Apparel.FLAK_JACKET),
-    A_HELMET("Simple helmet", ItemCat.APPAREL, 1, 55f, apparel = Apparel.HELMET),
-    A_ARMOR("Plate armor", ItemCat.APPAREL, 1, 250f, apparel = Apparel.PLATE_ARMOR),
-    A_JACKET("Jacket", ItemCat.APPAREL, 1, 60f, apparel = Apparel.JACKET, flammable = 1f),
-    A_MARINE("Marine armor", ItemCat.APPAREL, 1, 520f, apparel = Apparel.MARINE_ARMOR),
-    A_MARINE_HELM("Marine helmet", ItemCat.APPAREL, 1, 240f, apparel = Apparel.MARINE_HELM),
-    A_RECON_HELM("Recon helmet", ItemCat.APPAREL, 1, 200f, apparel = Apparel.RECON_HELM),
-    A_POWER_ARMOR("Powered armor", ItemCat.APPAREL, 1, 900f, apparel = Apparel.POWER_ARMOR),
-    A_POWER_HELM("Powered helmet", ItemCat.APPAREL, 1, 380f, apparel = Apparel.POWER_HELM),
-    A_HEADDRESS("Tribal headdress", ItemCat.APPAREL, 1, 45f, apparel = Apparel.HEADDRESS, flammable = 0.8f),
-    A_RECON("Recon armor", ItemCat.APPAREL, 1, 480f, apparel = Apparel.RECON_ARMOR),
+    A_TSHIRT("Cotton tee", ItemCat.APPAREL, 1, 15f, apparel = Apparel.TSHIRT, flammable = 1f),
+    A_COLLAR_TUNIC("Collar tunic", ItemCat.APPAREL, 1, 25f, apparel = Apparel.COLLAR_TUNIC, flammable = 1f),
+    A_PANTS("Hose", ItemCat.APPAREL, 1, 18f, apparel = Apparel.PANTS, flammable = 1f),
+    A_TRIBAL("Woven wrap", ItemCat.APPAREL, 1, 25f, apparel = Apparel.TRIBAL, flammable = 0.7f),
+    A_LONG_COAT("Long coat", ItemCat.APPAREL, 1, 55f, apparel = Apparel.LONG_COAT, flammable = 0.8f),
+    A_PADDED_COAT("Padded coat", ItemCat.APPAREL, 1, 70f, apparel = Apparel.PADDED_COAT, flammable = 1f),
+    A_HAT("Sunbrim", ItemCat.APPAREL, 1, 25f, apparel = Apparel.WIDE_BRIM_HAT, flammable = 0.8f),
+    A_BEANIE("Knit cap", ItemCat.APPAREL, 1, 25f, apparel = Apparel.KNIT_CAP, flammable = 1f),
+    A_RIBBED_VEST("Quilted tabard", ItemCat.APPAREL, 1, 90f, apparel = Apparel.RIBBED_VEST),
+    A_RIBBED_LEGGINGS("Ribbed leggings", ItemCat.APPAREL, 1, 70f, apparel = Apparel.RIBBED_LEGGINGS),
+    A_RIBBED_JACKET("Ribbed doublet", ItemCat.APPAREL, 1, 120f, apparel = Apparel.RIBBED_JACKET),
+    A_RIVETED_HOOD("Riveted hood", ItemCat.APPAREL, 1, 55f, apparel = Apparel.RIVETED_HOOD),
+    A_ARMOR("Brigandine", ItemCat.APPAREL, 1, 250f, apparel = Apparel.BRIGANDINE),
+    A_JACKET("Canvas smock", ItemCat.APPAREL, 1, 60f, apparel = Apparel.JACKET, flammable = 1f),
+    A_TRENCH_ARMOR("Trench mail", ItemCat.APPAREL, 1, 520f, apparel = Apparel.TRENCH_ARMOR),
+    A_TRENCH_VISOR("Trench visor", ItemCat.APPAREL, 1, 240f, apparel = Apparel.TRENCH_VISOR),
+    A_GHOSTWEAVE_HELM("Ghostweave cowl", ItemCat.APPAREL, 1, 200f, apparel = Apparel.GHOSTWEAVE_HELM),
+    A_EXOSUIT("Exosuit", ItemCat.APPAREL, 1, 900f, apparel = Apparel.EXOSUIT),
+    A_EXO_HELM("Exo casque", ItemCat.APPAREL, 1, 380f, apparel = Apparel.EXO_HELM),
+    A_PLUMED_CROWN("Plumed crown", ItemCat.APPAREL, 1, 45f, apparel = Apparel.PLUMED_CROWN, flammable = 0.8f),
+    A_GHOSTWEAVE_ARMOR("Ghostweave shell", ItemCat.APPAREL, 1, 480f, apparel = Apparel.GHOSTWEAVE_ARMOR),
 
     // Misc
     CORPSE_HUMAN("Corpse", ItemCat.MISC, 1, 0f, flammable = 0.3f),
-    SHELL("Mortar shell", ItemCat.MISC, 25, 15f),
+    SHELL("Lobbed bomb", ItemCat.MISC, 25, 15f),
     BERRIES("Berries", ItemCat.FOOD_PLANT, 75, 1.2f, 0.05f, 10f),
-    MEAL_NUTRIENT("Nutrient paste meal", ItemCat.FOOD_MEAL, 25, 3f, 0.9f, 0f),
+    MEAL_VAT_MASH("Vat mash", ItemCat.FOOD_MEAL, 25, 3f, 0.9f, 0f),
     ;
 
     val isFood get() = nutrition > 0f
@@ -251,53 +308,55 @@ enum class DamageKind(val label: String, val sharp: Boolean, val bleed: Float, v
     CUT("Cut", true, 1.0f, 0.9f, 0.20f), STAB("Stab", true, 0.8f, 1.0f, 0.15f), BULLET("Gunshot", true, 0.7f, 1.1f, 0.10f),
     BRUISE("Bruise", false, 0f, 0.7f, 0f), SCRATCH("Scratch", true, 0.3f, 0.3f, 0.10f), BITE("Bite", true, 0.8f, 1.0f, 0.25f),
     BURN("Burn", false, 0f, 1.2f, 0.18f), FROSTBITE("Frostbite", false, 0f, 0.6f, 0f), BLAST("Blast", false, 0.5f, 1.2f, 0.12f),
-    CRUSH("Crush", false, 0.2f, 1.1f, 0f), ACID("Toxic burn", false, 0f, 1f, 0.1f),
+    CRUSH("Crush", false, 0.2f, 1.1f, 0f), ACID("Acid scald", false, 0f, 1f, 0.1f),
 }
 
 enum class Weapon(
     val label: String, val ranged: Boolean, val damage: Float, val range: Float, val cooldown: Int, val accuracy: Float,
-    val kind: DamageKind, val burst: Int = 1, val armorPen: Float = 0f, val warmup: Int = 0, val aoe: Float = 0f,
+    val kind: DamageKind, val burst: Int = 1,
+    /** Hand-set armour penetration. Negative means not set: [penetrationOf] then uses the reference default (docs/fidelity/combat.md). */
+    val armorPen: Float = -1f, val warmup: Int = 0, val aoe: Float = 0f,
     /** Projectiles per burst that each roll to hit; [damage] is shared between them. */
     val pellets: Int = 1,
 ) {
     FISTS("Fists", false, 5f, 1.5f, 38, 0.82f, DamageKind.BRUISE),
-    KNIFE("Knife", false, 9f, 1.5f, 34, 0.86f, DamageKind.CUT),
+    POCKET_BLADE("Pocket blade", false, 9f, 1.5f, 34, 0.86f, DamageKind.CUT),
     CLUB("Club", false, 11f, 1.5f, 46, 0.8f, DamageKind.BRUISE),
     SPEAR("Spear", false, 13f, 1.9f, 48, 0.82f, DamageKind.STAB),
     MACE("Mace", false, 14f, 1.5f, 50, 0.8f, DamageKind.BRUISE, armorPen = 0.2f),
-    LONGSWORD("Longsword", false, 18f, 1.5f, 42, 0.85f, DamageKind.CUT, armorPen = 0.25f),
-    BOW("Short bow", true, 9f, 19f, 50, 0.72f, DamageKind.STAB, warmup = 10),
-    GREATBOW("Greatbow", true, 15f, 26f, 70, 0.72f, DamageKind.STAB, warmup = 14),
-    REVOLVER("Revolver", true, 12f, 20f, 55, 0.8f, DamageKind.BULLET, warmup = 8),
-    AUTOPISTOL("Autopistol", true, 12f, 20f, 55, 0.78f, DamageKind.BULLET, warmup = 7),
-    BOLT_RIFLE("Bolt-action rifle", true, 15f, 30f, 80, 0.78f, DamageKind.BULLET, warmup = 14),
-    SHOTGUN("Pump shotgun", true, 18f, 12f, 70, 0.85f, DamageKind.BULLET, warmup = 10, burst = 1, pellets = 8),
-    SMG("Machine pistol", true, 10f, 16f, 50, 0.72f, DamageKind.BULLET, burst = 3, warmup = 8),
-    RIFLE("Assault rifle", true, 11f, 28f, 55, 0.76f, DamageKind.BULLET, burst = 3, warmup = 10),
-    LMG("Light machine gun", true, 11f, 30f, 70, 0.74f, DamageKind.BULLET, burst = 5, warmup = 20),
-    SNIPER("Sniper rifle", true, 22f, 40f, 110, 0.8f, DamageKind.BULLET, warmup = 22, armorPen = 0.3f),
-    GLADIUS("Gladius", false, 15f, 1.5f, 38, 0.86f, DamageKind.CUT, armorPen = 0.1f),
-    PLASTEEL_SWORD("Plasteel sword", false, 24f, 1.5f, 36, 0.88f, DamageKind.CUT, armorPen = 0.4f),
-    RECURVE_BOW("Recurve bow", true, 11f, 24f, 55, 0.74f, DamageKind.STAB, warmup = 11),
-    LEVER_RIFLE("Lever-action rifle", true, 14f, 24f, 68, 0.78f, DamageKind.BULLET, warmup = 12),
-    CHAIN_SHOTGUN("Chain shotgun", true, 16f, 14f, 60, 0.85f, DamageKind.BULLET, burst = 2, warmup = 10, pellets = 8),
-    HEAVY_SMG("Heavy SMG", true, 11f, 18f, 52, 0.74f, DamageKind.BULLET, burst = 3, warmup = 9),
-    MINIGUN("Minigun", true, 10f, 26f, 64, 0.68f, DamageKind.BULLET, burst = 8, warmup = 26),
-    CHARGE_RIFLE("Charge rifle", true, 18f, 30f, 70, 0.8f, DamageKind.BULLET, burst = 3, armorPen = 0.3f, warmup = 14),
-    INCENDIARY_LAUNCHER("Incendiary launcher", true, 8f, 22f, 160, 0.6f, DamageKind.BURN, warmup = 22, aoe = 2.2f),
-    FRAG_GRENADE("Frag grenades", true, 36f, 14f, 220, 0.55f, DamageKind.BLAST, warmup = 14, aoe = 2.4f),
-    DOOMSDAY("Doomsday rocket launcher", true, 70f, 30f, 400, 0.55f, DamageKind.BLAST, warmup = 30, aoe = 3.5f),
-    TURRET_GUN("Turret", true, 11f, 28f, 50, 0.75f, DamageKind.BULLET, burst = 3),
-    MORTAR_SHELL("Mortar", true, 40f, 55f, 300, 0.5f, DamageKind.BLAST, aoe = 2.6f),
-    MOLOTOV("Molotov", true, 5f, 15f, 100, 0.8f, DamageKind.BURN, aoe = 1.8f),
-    BLADE("Mechanoid blades", false, 18f, 1.6f, 30, 0.85f, DamageKind.CUT, armorPen = 0.2f),
-    LANCE("Charge lance", true, 28f, 24f, 110, 0.82f, DamageKind.BULLET, warmup = 25, armorPen = 0.45f),
-    MECH_GUN("Mechanoid cannon", true, 12f, 22f, 90, 0.7f, DamageKind.BULLET, burst = 5, warmup = 20, armorPen = 0.1f),
+    BROAD_BLADE("Broad blade", false, 18f, 1.5f, 42, 0.85f, DamageKind.CUT, armorPen = 0.25f),
+    BOW("Reedstring", true, 9f, 19f, 50, 0.72f, DamageKind.STAB, warmup = 10),
+    LONGSTAVE("Longstave", true, 15f, 26f, 70, 0.72f, DamageKind.STAB, warmup = 14),
+    CYLINDER_GUN("Cylinder gun", true, 12f, 20f, 55, 0.8f, DamageKind.BULLET, warmup = 8),
+    SNAP_PISTOL("Quickshot", true, 12f, 20f, 55, 0.78f, DamageKind.BULLET, warmup = 7),
+    BOLT_RIFLE("Latch carbine", true, 15f, 30f, 80, 0.78f, DamageKind.BULLET, warmup = 14),
+    SHOTGUN("Riot gun", true, 18f, 12f, 70, 0.85f, DamageKind.BULLET, warmup = 10, burst = 1, pellets = 8),
+    SMG("Rapid sidearm", true, 10f, 16f, 50, 0.72f, DamageKind.BULLET, burst = 3, warmup = 8),
+    RIFLE("Stutter gun", true, 11f, 28f, 55, 0.76f, DamageKind.BULLET, burst = 3, warmup = 10),
+    LMG("Bipod hammer", true, 11f, 30f, 70, 0.74f, DamageKind.BULLET, burst = 5, warmup = 20),
+    SNIPER("Distance piece", true, 22f, 40f, 110, 0.8f, DamageKind.BULLET, warmup = 22, armorPen = 0.3f),
+    STABSWORD("Stabsword", false, 15f, 1.5f, 38, 0.86f, DamageKind.CUT, armorPen = 0.1f),
+    HARDALLOY_SWORD("Hardalloy cutter", false, 24f, 1.5f, 36, 0.88f, DamageKind.CUT, armorPen = 0.4f),
+    HORNWOUND("Hornwound", true, 11f, 24f, 55, 0.74f, DamageKind.STAB, warmup = 11),
+    LEVER_RIFLE("Swing repeater", true, 14f, 24f, 68, 0.78f, DamageKind.BULLET, warmup = 12),
+    SCATTER_CANNON("Scatter cannon", true, 16f, 14f, 60, 0.85f, DamageKind.BULLET, burst = 2, warmup = 10, pellets = 8),
+    MAG_CARBINE("Mag carbine", true, 11f, 18f, 52, 0.74f, DamageKind.BULLET, burst = 3, warmup = 9),
+    SPINNER_RACK("Spinner rack", true, 10f, 26f, 64, 0.68f, DamageKind.BULLET, burst = 8, warmup = 26),
+    PULSE_CARBINE("Pulse carbine", true, 18f, 30f, 70, 0.8f, DamageKind.BULLET, burst = 3, armorPen = 0.3f, warmup = 14),
+    EMBER_THROWER("Ember thrower", true, 8f, 22f, 160, 0.6f, DamageKind.BURN, warmup = 22, aoe = 2.2f),
+    SHRAPNEL_CHARGE("Shrapnel charges", true, 36f, 14f, 220, 0.55f, DamageKind.BLAST, warmup = 14, aoe = 2.4f),
+    SKYFALL_BATTERY("Skyfall battery", true, 70f, 30f, 400, 0.55f, DamageKind.BLAST, warmup = 30, aoe = 3.5f),
+    PIVOT_CANNON("Pivot cannon", true, 11f, 28f, 50, 0.75f, DamageKind.BULLET, burst = 3),
+    LOBBED_CHARGE("Lobbed charge", true, 40f, 55f, 300, 0.5f, DamageKind.BLAST, aoe = 2.6f),
+    FIRE_FLASK("Fire flask", true, 5f, 15f, 100, 0.8f, DamageKind.BURN, aoe = 1.8f),
+    BLADE("Razor limbs", false, 18f, 1.6f, 30, 0.85f, DamageKind.CUT, armorPen = 0.2f),
+    PULSE_PIKE("Pulse pike", true, 28f, 24f, 110, 0.82f, DamageKind.BULLET, warmup = 25, armorPen = 0.45f),
+    MECH_GUN("Bolt spitter", true, 12f, 22f, 90, 0.7f, DamageKind.BULLET, burst = 5, warmup = 20, armorPen = 0.1f),
     TEETH("Teeth", false, 8f, 1.5f, 36, 0.85f, DamageKind.BITE),
     CLAWS("Claws", false, 6f, 1.5f, 32, 0.85f, DamageKind.SCRATCH),
     HEAD_BUTT("Horns", false, 12f, 1.5f, 50, 0.8f, DamageKind.BRUISE),
     TRAMPLE("Trample", false, 20f, 1.5f, 60, 0.8f, DamageKind.CRUSH),
-    MINI_TURRET_GUN("Mini-turret", true, 8f, 22f, 40, 0.7f, DamageKind.BULLET, burst = 2);
+    SENTRY_POD_GUN("Sentry pod", true, 8f, 22f, 40, 0.7f, DamageKind.BULLET, burst = 2);
 
     val meleeSkill get() = !ranged
 
@@ -313,50 +372,50 @@ enum class Apparel(
     val label: String, val slot: ApparelSlot, val cover: Int, val insCold: Float, val insHeat: Float,
     val armorSharp: Float, val armorBlunt: Float, val hp: Float, val beauty: Float = 0f,
 ) {
-    TSHIRT("T-shirt", ApparelSlot.SHIRT, 2 or 4, 2f, 2f, 0.03f, 0.01f, 60f),
-    BUTTONDOWN("Button-down shirt", ApparelSlot.SHIRT, 2 or 4, 4f, 3f, 0.05f, 0.02f, 80f, 0.5f),
-    PANTS("Pants", ApparelSlot.PANTS, 8, 3f, 2f, 0.04f, 0.01f, 80f),
-    TRIBAL("Tribalwear", ApparelSlot.SHIRT, 2 or 8, 5f, 4f, 0.06f, 0.02f, 90f),
-    DUSTER("Duster", ApparelSlot.OUTER, 2 or 4 or 8, 14f, 5f, 0.15f, 0.04f, 150f, 0.5f),
-    PARKA("Parka", ApparelSlot.OUTER, 2 or 4 or 8, 40f, -8f, 0.14f, 0.05f, 160f),
-    COWBOY_HAT("Cowboy hat", ApparelSlot.HEAD, 1, 3f, 8f, 0.04f, 0.02f, 80f, 0.5f),
-    TUQUE("Tuque", ApparelSlot.HEAD, 1, 12f, -3f, 0.02f, 0.02f, 70f),
-    FLAK_VEST("Flak vest", ApparelSlot.OUTER, 2, 5f, -3f, 0.45f, 0.1f, 160f),
-    FLAK_PANTS("Flak pants", ApparelSlot.PANTS, 8, 3f, -1f, 0.4f, 0.09f, 160f),
-    FLAK_JACKET("Flak jacket", ApparelSlot.OUTER, 2 or 4, 8f, -4f, 0.52f, 0.14f, 180f),
-    HELMET("Simple helmet", ApparelSlot.HEAD, 1, 2f, -4f, 0.4f, 0.25f, 150f),
-    PLATE_ARMOR("Plate armor", ApparelSlot.OUTER, 2 or 4 or 8, 6f, -8f, 0.75f, 0.35f, 350f, -0.5f),
-    JACKET("Jacket", ApparelSlot.OUTER, 2 or 4, 20f, 3f, 0.08f, 0.03f, 130f, 0.3f),
-    MARINE_ARMOR("Marine armor", ApparelSlot.OUTER, 2 or 4 or 8, 14f, 6f, 0.7f, 0.4f, 380f),
-    MARINE_HELM("Marine helmet", ApparelSlot.HEAD, 1, 4f, 0f, 0.6f, 0.45f, 220f),
-    RECON_HELM("Recon helmet", ApparelSlot.HEAD, 1, 5f, 3f, 0.5f, 0.35f, 200f),
-    POWER_ARMOR("Powered armor", ApparelSlot.OUTER, 2 or 4 or 8, 30f, 18f, 0.8f, 0.55f, 460f, -0.5f),
-    POWER_HELM("Powered helmet", ApparelSlot.HEAD, 1, 8f, 6f, 0.72f, 0.55f, 260f),
-    HEADDRESS("Tribal headdress", ApparelSlot.HEAD, 1, 6f, 1f, 0.05f, 0.04f, 80f, 1.2f),
-    RECON_ARMOR("Recon armor", ApparelSlot.OUTER, 2 or 4 or 8, 22f, 12f, 0.58f, 0.35f, 320f),
+    TSHIRT("Cotton tee", ApparelSlot.SHIRT, 2 or 4, 2f, 2f, 0.03f, 0.01f, 60f),
+    COLLAR_TUNIC("Collar tunic", ApparelSlot.SHIRT, 2 or 4, 4f, 3f, 0.05f, 0.02f, 80f, 0.5f),
+    PANTS("Hose", ApparelSlot.PANTS, 8, 3f, 2f, 0.04f, 0.01f, 80f),
+    TRIBAL("Woven wrap", ApparelSlot.SHIRT, 2 or 8, 5f, 4f, 0.06f, 0.02f, 90f),
+    LONG_COAT("Long coat", ApparelSlot.OUTER, 2 or 4 or 8, 14f, 5f, 0.15f, 0.04f, 150f, 0.5f),
+    PADDED_COAT("Padded coat", ApparelSlot.OUTER, 2 or 4 or 8, 40f, -8f, 0.14f, 0.05f, 160f),
+    WIDE_BRIM_HAT("Sunbrim", ApparelSlot.HEAD, 1, 3f, 8f, 0.04f, 0.02f, 80f, 0.5f),
+    KNIT_CAP("Knit cap", ApparelSlot.HEAD, 1, 12f, -3f, 0.02f, 0.02f, 70f),
+    RIBBED_VEST("Quilted tabard", ApparelSlot.OUTER, 2, 5f, -3f, 0.45f, 0.1f, 160f),
+    RIBBED_LEGGINGS("Ribbed leggings", ApparelSlot.PANTS, 8, 3f, -1f, 0.4f, 0.09f, 160f),
+    RIBBED_JACKET("Ribbed doublet", ApparelSlot.OUTER, 2 or 4, 8f, -4f, 0.52f, 0.14f, 180f),
+    RIVETED_HOOD("Riveted hood", ApparelSlot.HEAD, 1, 2f, -4f, 0.4f, 0.25f, 150f),
+    BRIGANDINE("Brigandine", ApparelSlot.OUTER, 2 or 4 or 8, 6f, -8f, 0.75f, 0.35f, 350f, -0.5f),
+    JACKET("Canvas smock", ApparelSlot.OUTER, 2 or 4, 20f, 3f, 0.08f, 0.03f, 130f, 0.3f),
+    TRENCH_ARMOR("Trench mail", ApparelSlot.OUTER, 2 or 4 or 8, 14f, 6f, 0.7f, 0.4f, 380f),
+    TRENCH_VISOR("Trench visor", ApparelSlot.HEAD, 1, 4f, 0f, 0.6f, 0.45f, 220f),
+    GHOSTWEAVE_HELM("Ghostweave cowl", ApparelSlot.HEAD, 1, 5f, 3f, 0.5f, 0.35f, 200f),
+    EXOSUIT("Exosuit", ApparelSlot.OUTER, 2 or 4 or 8, 30f, 18f, 0.8f, 0.55f, 460f, -0.5f),
+    EXO_HELM("Exo casque", ApparelSlot.HEAD, 1, 8f, 6f, 0.72f, 0.55f, 260f),
+    PLUMED_CROWN("Plumed crown", ApparelSlot.HEAD, 1, 6f, 1f, 0.05f, 0.04f, 80f, 1.2f),
+    GHOSTWEAVE_ARMOR("Ghostweave shell", ApparelSlot.OUTER, 2 or 4 or 8, 22f, 12f, 0.58f, 0.35f, 320f),
 }
 
 enum class Trait(val label: String, val desc: String) {
-    HARD_WORKER("Industrious", "Works faster"), LAZY("Lazy", "Works slower"),
-    TOUGH("Tough", "Takes less damage"), WIMP("Wimp", "Feels pain more"),
-    OPTIMIST("Optimist", "+10% mood"), PESSIMIST("Pessimist", "-10% mood"),
-    NIMBLE("Nimble", "Moves faster"), SLOW_WALKER("Slowpoke", "Moves slower"),
-    NIGHT_OWL("Night owl", "Prefers working at night"), FAST_LEARNER("Fast learner", "Learns skills faster"),
-    BRAWLER("Brawler", "Melee only"), TRIGGER_HAPPY("Trigger-happy", "Shoots faster"),
-    KIND("Kind", "Gets along with everyone"), ABRASIVE("Abrasive", "Insults others"),
-    GOURMAND("Gourmand", "Needs more food, loves eating"), GREEN_THUMB("Green thumb", "Loves plants"),
-    NUDIST("Nudist", "Hates clothes"), PYROMANIAC("Pyromaniac", "Loves fire"),
-    CANNIBAL("Cannibal", "Enjoys human flesh"), SANGUINE("Sanguine", "Cheerful"),
-    DEPRESSIVE("Depressive", "Gloomy"), TORTURED_ARTIST("Tortured artist", "Better art, moody"),
-    BEAUTIFUL("Beautiful", "Pleasant to look at"), UGLY("Ugly", "Unpleasant to look at"),
-    PSYCHOPATH("Psychopath", "Unbothered by death"), BLOODLUST("Bloodlust", "Enjoys violence"),
-    TOO_SMART("Too smart", "Fast researcher"), SLOW_LEARNER("Slow learner", "Learns skills slowly"),
-    CARNIVORE("Carnivore", "Loves meat"), TRANSHUMANIST("Transhumanist", "Loves bionics"),
-    GAY("Gay", "Attracted to the same gender"), BISEXUAL("Bisexual", "Attracted to anyone"), ASEXUAL("Asexual", "No romantic interest"),
-    IRON_WILLED("Iron-willed", "Rarely has mental breaks"), VOLATILE("Volatile", "Breaks easily"),
-    SOCIABLE("Sociable", "Enjoys talking, better at it"), CAREFUL_SHOOTER("Careful shooter", "Accurate but slower"),
-    CREATIVE("Creative", "Makes finer things"), GREEDY("Greedy", "Wants wealth"), ASCETIC("Ascetic", "Content with little"),
-    JOGGER("Jogger", "Moves faster"), SUPER_IMMUNE("Super-immune", "Fights illness well"),
+    BRISK_HANDS("Brisk hands", "Finishes tasks sooner"), IDLE_STREAK("Idle streak", "Takes tasks slowly"),
+    THICK_HIDE("Thick hide", "Blunts incoming harm"), TENDER_FRAME("Tender frame", "Hurts more from injuries"),
+    SUNNY_OUTLOOK("Sunny outlook", "+10% mood"), GREY_OUTLOOK("Grey outlook", "-10% mood"),
+    LIGHT_STEPPED("Light stepped", "Covers ground quicker"), SLOW_WALKER("Plodder", "Covers ground slowly"),
+    NOCTURNAL("Nocturnal", "Works best after dark"), EAGER_PUPIL("Eager pupil", "Gains skill quickly"),
+    STREET_SCRAPPER("Street scrapper", "Fights only up close"), QUICK_TRIGGER("Quick trigger", "Fires in quick succession"),
+    WARM_HEART("Warm heart", "Gets on well with others"), SHARP_TONGUE("Sharp tongue", "Stirs up quarrels"),
+    HEARTY_APPETITE("Hearty appetite", "Eats more and enjoys meals"), GARDEN_SENSE("Garden sense", "Fond of plants"),
+    BARE_SKINNED("Bare-skinned", "Dislikes wearing clothes"), FLAME_DRAWN("Flame-drawn", "Enjoys open flames"),
+    FLESH_EATER("Flesh-eater", "Finds manflesh tasty"), BUOYANT("Buoyant", "Cheerful"),
+    HEAVY_HEARTED("Heavy-hearted", "Gloomy"), BROODING_MUSE("Brooding muse", "Better art, moody"),
+    STRIKING_LOOKS("Striking looks", "Admired for appearance"), PLAIN_LOOKS("Plain looks", "Less admired for appearance"),
+    UNMOVED("Unmoved", "Feels little at a death"), BATTLE_HUNGRY("Battle-hungry", "Relishes fights"),
+    KEEN_MIND("Keen mind", "Fast researcher"), SLOW_STUDY("Late bloomer", "Learns skills slowly"),
+    MEAT_FIRST("Meat-first", "Prefers meat dishes"), MACHINE_MINDED("Machine-minded", "Fond of implants"),
+    SAME_SEX_DRAWN("Same-sex drawn", "Romantic interest in the same sex"), BOTH_DRAWN("Both-drawn", "Romantic interest in either sex"), UNROMANTIC("Unromantic", "No romantic interest"),
+    STEEL_NERVES("Steel nerves", "Rarely has mental breaks"), SHORT_FUSE("Short fuse", "Prone to snapping"),
+    EASY_COMPANY("Easy company", "Likes conversation and is good at it"), STEADY_AIM("Steady aim", "Accurate but slower"),
+    CREATIVE("Inventive eye", "Crafts finer goods"), ACQUISITIVE("Acquisitive", "Craves riches"), PLAIN_LIVING("Plain living", "Content with little"),
+    LONG_STRIDER("Long strider", "Keeps a fast pace"), HARDY_BODY("Hardy body", "Fights illness well"),
 }
 
 enum class Research(
@@ -364,68 +423,68 @@ enum class Research(
     val tier: Int = 1, val bench: Int = 0,
 ) {
     // Neolithic / basics
-    COMPLEX_FURNITURE("Complex furniture", 400f, emptyList(), "Chairs, stools, dressers, plant pots"),
-    CARPETS("Carpets", 300f, listOf(COMPLEX_FURNITURE), "Carpet floors"),
-    STONECUTTING("Stonecutting", 300f, emptyList(), "Stonecutter table"),
-    SMITHING("Smithing", 400f, emptyList(), "Smithy: weapons, steel walls, armor"),
-    TAILORING("Tailoring", 300f, emptyList(), "Tailor bench"),
-    PEMMICAN("Pemmican", 300f, emptyList(), "Pemmican"),
-    BREWING("Brewing", 500f, emptyList(), "Beer"),
-    DRUGS("Drug production", 600f, listOf(BREWING), "Drug lab: joints, tea"),
-    HERBAL_MEDICINE("Herbal medicine", 500f, emptyList(), "Herbal medicine"),
-    BASIC_MELEE("Mace and spear", 300f, listOf(SMITHING), "Mace, spear, longsword"),
-    BOWS("Bows", 300f, listOf(SMITHING), "Short bow and greatbow"),
+    JOINERY_DETAIL("Joinery detail", 400f, emptyList(), "Chairs, stools, dressers, plant pots"),
+    RUG_WEAVING("Rug weaving", 300f, listOf(JOINERY_DETAIL), "Carpet floors"),
+    ROCK_SPLITTING("Rock splitting", 300f, emptyList(), "Rock dresser"),
+    FORGEWORK("Forgework", 400f, emptyList(), "Coal forge: weapons, steel walls, armor"),
+    STITCHWORK("Stitchwork", 300f, emptyList(), "Stitch frame"),
+    TRAIL_CAKE("Trail cake", 300f, emptyList(), "Trail cake"),
+    MASH_CRAFT("Mash craft", 500f, emptyList(), "Beer"),
+    TINCTURE_CHEMISTRY("Tincture chemistry", 600f, listOf(MASH_CRAFT), "Tincture rig: rolls, draughts"),
+    HERBAL_REMEDIES("Leaf lore", 500f, emptyList(), "Leaf poultice"),
+    BASIC_MELEE("Blunt and pole arms", 300f, listOf(FORGEWORK), "Mace, spear, broad blade"),
+    STAVE_AND_STRING("Stave and string", 300f, listOf(FORGEWORK), "Reedstring and longstave"),
     // Medieval / industrial
-    ELECTRICITY("Electricity", 1000f, listOf(SMITHING), "Conduits, generators, lamps, heaters, coolers", 2),
-    BATTERIES("Batteries", 600f, listOf(ELECTRICITY), "Batteries, switches", 2),
-    SOLAR_POWER("Solar power", 800f, listOf(ELECTRICITY), "Solar panels", 2),
-    WIND_POWER("Wind power", 700f, listOf(ELECTRICITY), "Wind turbines", 2),
-    MACHINING("Machining", 700f, listOf(SMITHING), "Machining table: components, firearms", 2),
-    FIREARMS("Firearms", 800f, listOf(MACHINING), "Revolver, autopistol, shotgun, rifles", 2),
-    GUN_TURRETS("Gun turrets", 800f, listOf(FIREARMS), "Auto-firing turrets", 2),
-    MORTARS("Mortars", 900f, listOf(GUN_TURRETS), "Mortars and shells", 2),
-    FLAK_ARMOR("Flak armor", 800f, listOf(MACHINING, TAILORING), "Flak vest, pants, jacket, helmet", 2),
-    PLATE_ARMOR("Plate armor", 1000f, listOf(FLAK_ARMOR), "Plate armor", 3),
-    HYDROPONICS("Hydroponics", 1100f, listOf(ELECTRICITY), "Hydroponics basins", 2),
-    ELECTRIC_COOKING("Electric stove", 600f, listOf(ELECTRICITY), "Electric stove", 2),
-    MEDICINE("Medicine production", 1000f, listOf(HERBAL_MEDICINE, MACHINING), "Industrial medicine", 2),
-    BIONICS_BASIC("Prosthetics", 700f, listOf(SMITHING), "Peg legs, wooden hands", 2),
-    SURGERY("Sterile surgery", 700f, listOf(HERBAL_MEDICINE), "Hospital beds", 2),
-    FABRICATION("Fabrication", 2000f, listOf(MACHINING, ELECTRICITY), "Fabrication bench: plasteel gear, advanced components", 3),
-    MULTIANALYZER("Multi-analyzer", 1600f, listOf(ELECTRICITY), "Hi-tech research bench", 3),
-    BIONICS("Bionics", 2200f, listOf(FABRICATION, BIONICS_BASIC), "Bionic limbs and organs", 3),
-    ADV_ARMOR("Recon armor", 2500f, listOf(FABRICATION, PLATE_ARMOR), "Recon armor", 3),
+    GALVANICS("Galvanics", 1000f, listOf(FORGEWORK), "Live wires, generators, lamps, heaters, coolers", 2),
+    CELL_STORAGE("Cell storage", 600f, listOf(GALVANICS), "Battery, switches", 2),
+    SUNLIGHT_HARVESTING("Sunlight harvesting", 800f, listOf(GALVANICS), "Sun arrays", 2),
+    BREEZE_HARVESTING("Breeze harvesting", 700f, listOf(GALVANICS), "Breeze mills", 2),
+    LATHE_WORK("Lathe work", 700f, listOf(FORGEWORK), "Shaping rig: components, gun parts", 2),
+    POWDER_ARMS("Powder arms", 800f, listOf(LATHE_WORK), "Cylinder gun, quickshot, riot gun, rifles", 2),
+    SWIVEL_NESTS("Swivel nests", 800f, listOf(POWDER_ARMS), "Auto-firing swivel nests", 2),
+    INDIRECT_FIRE("Indirect fire", 900f, listOf(SWIVEL_NESTS), "Tubes and lobbed bombs", 2),
+    RIBBED_ARMOR("Ribbed plating", 800f, listOf(LATHE_WORK, STITCHWORK), "Quilted tabard, ribbed leggings, ribbed doublet, riveted hood", 2),
+    BRIGANDINE_WORK("Brigandine work", 1000f, listOf(RIBBED_ARMOR), "Brigandine", 3),
+    SOILLESS_GROWING("Soilless growing", 1100f, listOf(GALVANICS), "Grow trays", 2),
+    ELECTRIC_COOKING("Powered griddle", 600f, listOf(GALVANICS), "Hotplate", 2),
+    PHARMACOLOGY("Pharmacology", 1000f, listOf(HERBAL_REMEDIES, LATHE_WORK), "Compound doses", 2),
+    LIMB_CRAFTING("Limb crafting", 700f, listOf(FORGEWORK), "Wooden shanks, gaff grips", 2),
+    SURGERY("Clean cutting", 700f, listOf(HERBAL_REMEDIES), "Infirmary cots", 2),
+    PART_ASSEMBLY("Part assembly", 2000f, listOf(LATHE_WORK, GALVANICS), "Gearworks: hardalloy gear, advanced components", 3),
+    ANALYSIS_ARRAY("Analysis array", 1600f, listOf(GALVANICS), "Precision lab", 3),
+    AUGMENTATION("Augmentation", 2200f, listOf(PART_ASSEMBLY, LIMB_CRAFTING), "Engineered limbs and organs", 3),
+    ADV_ARMOR("Ghostweave loom", 2500f, listOf(PART_ASSEMBLY, BRIGANDINE_WORK), "Ghostweave shell", 3),
     // More industry, weapons and comforts
-    DEVILSTRAND_RESEARCH("Devilstrand", 700f, listOf(TAILORING), "Devilstrand fabric crop", 2),
-    COMPLEX_CLOTHING("Complex clothing", 600f, listOf(TAILORING), "Jackets, tribal headdresses", 1),
-    RECURVE("Recurve bow", 500f, listOf(BOWS), "Recurve bow", 2),
-    PLASTEEL_MELEE("Plasteel blades", 1500f, listOf(FABRICATION, BASIC_MELEE), "Plasteel sword", 3),
-    ADV_FIREARMS("Advanced firearms", 1000f, listOf(FIREARMS), "Lever rifle, chain shotgun, heavy SMG", 2),
-    HEAVY_WEAPONS("Heavy weapons", 1800f, listOf(ADV_FIREARMS, FABRICATION), "Minigun", 3),
-    CHARGE_WEAPONS("Charge weapons", 2200f, listOf(FABRICATION, MULTIANALYZER), "Charge rifle", 3),
-    EXPLOSIVES("Explosives", 900f, listOf(FIREARMS), "Frag grenades, incendiary launcher", 2),
-    ROCKETS("Rockets", 1800f, listOf(EXPLOSIVES, FABRICATION), "Doomsday rocket launcher", 3),
-    MARINE_ARMOR("Marine armor", 2000f, listOf(FLAK_ARMOR, FABRICATION), "Marine armor and helmet", 3),
-    POWER_ARMOR("Powered armor", 3200f, listOf(ADV_ARMOR, MULTIANALYZER), "Powered armor and helmet", 3),
-    COMMS("Long-range communication", 800f, listOf(ELECTRICITY), "Comms console, trade beacon", 2),
-    AUTODOORS("Autodoors", 600f, listOf(ELECTRICITY), "Autodoor", 2),
-    VENTILATION("Ventilation", 500f, listOf(ELECTRICITY), "Vents", 2),
-    PASSIVE_COOLING("Passive cooling", 500f, listOf(SMITHING), "Passive cooler", 2),
-    SUN_LAMPS("Sun lamps", 1100f, listOf(SOLAR_POWER, HYDROPONICS), "Sun lamp", 3),
-    FLAKE_YAYO("Flake and yayo", 900f, listOf(DRUGS), "Flake, yayo, wake-up", 2),
-    GO_JUICE("Go-juice", 1100f, listOf(FLAKE_YAYO, MEDICINE), "Go-juice", 3),
-    LAVISH_COOKING("Lavish meals", 700f, listOf(PEMMICAN), "Lavish meals", 2),
+    WISPSILK_RESEARCH("Wispsilk", 700f, listOf(STITCHWORK), "Wispsilk fabric crop", 2),
+    LAYERED_APPAREL("Layered apparel", 600f, listOf(STITCHWORK), "Canvas smocks, plumed crowns", 1),
+    HORN_BACKING("Horn backing", 500f, listOf(STAVE_AND_STRING), "Hornwound", 2),
+    HARDALLOY_BLADES("Alloy edging", 1500f, listOf(PART_ASSEMBLY, BASIC_MELEE), "Hardalloy cutter", 3),
+    RIFLED_BARRELS("Rifled barrels", 1000f, listOf(POWDER_ARMS), "Swing repeater, scatter cannon, mag carbine", 2),
+    SIEGE_ASSEMBLY("Siege assembly", 1800f, listOf(RIFLED_BARRELS, PART_ASSEMBLY), "Spinner rack", 3),
+    PULSE_ARMS("Pulse arms", 2200f, listOf(PART_ASSEMBLY, ANALYSIS_ARRAY), "Pulse carbine", 3),
+    BLAST_CHEMISTRY("Blast chemistry", 900f, listOf(POWDER_ARMS), "Shrapnel charges, ember thrower", 2),
+    PROPELLANT_LIFT("Propellant lift", 1800f, listOf(BLAST_CHEMISTRY, PART_ASSEMBLY), "Skyfall battery", 3),
+    TRENCH_ARMOR("Trench weaving", 2000f, listOf(RIBBED_ARMOR, PART_ASSEMBLY), "Trench mail and visor", 3),
+    EXOSUIT("Exosuit", 3200f, listOf(ADV_ARMOR, ANALYSIS_ARRAY), "Exosuit and casque", 3),
+    COMMS("Radio relay", 800f, listOf(GALVANICS), "Signal desk, summons flare", 2),
+    SHUTTER_DOORS("Hatch mechanics", 600f, listOf(GALVANICS), "Slide hatch", 2),
+    VENTILATION("Air exchange", 500f, listOf(GALVANICS), "Vents", 2),
+    FROST_VENTING("Frost venting", 500f, listOf(FORGEWORK), "Frost vault", 2),
+    GLOW_PANELS("Glow panels", 1100f, listOf(SUNLIGHT_HARVESTING, SOILLESS_GROWING), "Glow panel", 3),
+    STIMULANT_BLENDS("Stimulant blends", 900f, listOf(TINCTURE_CHEMISTRY), "Pale dust, white rush, dawn tablet", 2),
+    SURGE_TONIC("Surge tonic", 1100f, listOf(STIMULANT_BLENDS, PHARMACOLOGY), "Surge tonic", 3),
+    BANQUET_COOKERY("Banquet cookery", 700f, listOf(TRAIL_CAKE), "Banquet cookery", 2),
     // Ship
-    CRYPTOSLEEP("Cryptosleep", 3000f, listOf(MULTIANALYZER), "Cryptosleep caskets", 3),
-    SHIP_ENGINE("Ship engine", 3500f, listOf(MULTIANALYZER, FABRICATION), "Ship engine", 3),
-    SHIP_REACTOR("Ship reactor", 4000f, listOf(SHIP_ENGINE), "Ship reactor", 3),
-    SHIP_COMPUTER("Ship computer core", 3500f, listOf(MULTIANALYZER), "Ship computer core", 3),
+    STASIS("Stasis", 3000f, listOf(ANALYSIS_ARRAY), "Cold pods", 3),
+    THRUST_DRIVE("Thrust drive", 3500f, listOf(ANALYSIS_ARRAY, PART_ASSEMBLY), "Thrust drive", 3),
+    CORE_FURNACE("Core furnace", 4000f, listOf(THRUST_DRIVE), "Core furnace", 3),
+    NAVIGATION_BRAIN("Navigation brain", 3500f, listOf(ANALYSIS_ARRAY), "Navigation brain", 3),
     // Production and utility
-    DEEP_DRILLING("Deep drilling", 1200f, listOf(MULTIANALYZER), "Deep drill", 3),
-    NUTRIENT_PASTE("Nutrient paste", 500f, listOf(HYDROPONICS), "Nutrient paste dispenser", 2),
-    SCULPTING("Sculpting", 300f, listOf(STONECUTTING), "Sculptor's table", 1),
-    CREMATION("Cremation", 400f, listOf(MEDICINE), "Crematorium", 2),
+    SUBSOIL_BORING("Subsoil boring", 1200f, listOf(ANALYSIS_ARRAY), "Subsoil auger", 3),
+    VAT_CULTURING("Vat culturing", 500f, listOf(SOILLESS_GROWING), "Mash tap", 2),
+    STONE_CARVING("Stone carving", 300f, listOf(ROCK_SPLITTING), "Chisel bench", 1),
+    PYRE_RITES("Pyre rites", 400f, listOf(PHARMACOLOGY), "Pyre house", 2),
     ;
 
-    val cost get() = baseCost * 16f
+    val cost get() = baseCost * RESEARCH_POINT_SCALE
 }

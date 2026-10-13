@@ -4,11 +4,16 @@ import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.round
 
 class Plant(val type: PlantType, val x: Int, val y: Int, var growth: Float) {
     var age = 0
     var blighted = false
-    val mature get() = (!type.crop && !type.isTree && !type.regrows && type != PlantType.BRAMBLE) || growth >= 1f
+    /**
+     * A crop or grass can be harvested once it passes [HARVEST_MIN_GROWTH] (RimWorld/Plant.cs:115). Other plants keep the full-growth
+     * rule.
+     */
+    val mature get() = if (type.crop || type == PlantType.GRASS) growth > HARVEST_MIN_GROWTH else (!type.isTree && !type.regrows && type != PlantType.BRAMBLE) || growth >= 1f
 }
 
 class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
@@ -21,6 +26,8 @@ class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
     var ownerId = -1
     var fuel = 0f
     var cooldown = 0
+    /** A swing door's open time left, in ticks: a pawn stepping in holds it open (docs/fidelity/heat-exchange.md). Saved from version 40. */
+    var doorHold = 0
     var quality = Quality.NORMAL
     var powered = false
     var forbidden = false
@@ -90,7 +97,9 @@ class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var
 
 class Fire(var intensity: Float) { var age = 0 }
 
-object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5 }
+object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5; const val ROOF = 6 }
+/** The indoor rule before version 38 (GameMap.kt, rooms): at most this many cells, or a natural-roof majority. Used only to migrate saves. */
+const val LEGACY_INDOOR_MAX_CELLS = 700
 object ZoneKind { const val NONE = 0; const val STOCKPILE = 1; const val GROWING = 2; const val DUMPING = 3 }
 
 class Zone(val id: Int, val kind: Int) {
@@ -132,6 +141,7 @@ class GameMap(val w: Int, val h: Int) {
     fun removeBuilding(b: Building) {
         for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy) && building[idx(xx, yy)] === b) building[idx(xx, yy)] = null
         roomDirty = true; bVersion++; walkVersion++
+        if (b.built && (b.def.isWall || b.def.isDoor)) holderRemoved(b.x, b.y)
     }
 
     /** Each building once, even if it covers several cells. */
@@ -152,7 +162,12 @@ class GameMap(val w: Int, val h: Int) {
     val desig = ByteArray(size)
     val filth = ByteArray(size)
     val fires = HashMap<Int, Fire>()
+    /** Natural (mountain) roof. Counts as roofed. */
     val natRoof = BooleanArray(size)
+    /** A built roof (docs/fidelity/roofs.md). Saved from version 38; older saves are migrated by [adoptLegacyRoofs]. */
+    val roof = BooleanArray(size)
+    /** Cells whose built roof fell this step and whose colonists must take the crush roll (drained by [Game.step]). */
+    val pendingRoofFalls = ArrayList<Int>()
     val conduit = BooleanArray(size)
     val areas = Array(3) { BooleanArray(size) }
     val areaNames = arrayOf("Home", "Area 2", "Area 3")
@@ -223,7 +238,7 @@ class GameMap(val w: Int, val h: Int) {
     fun walkable(i: Int): Boolean {
         if (!terrain[i].passable) return false
         val b = building[i]
-        if (b != null && b.built && b.def == BuildDef.AUTODOOR && !b.powered) return false
+        if (b != null && b.built && b.def == BuildDef.SHUTTER_DOOR && !b.powered) return false
         return !(b != null && b.built && b.def.blocksMove)
     }
 
@@ -299,22 +314,32 @@ class GameMap(val w: Int, val h: Int) {
     var roomImpress = FloatArray(0)
     var roomRole = IntArray(0) // 0 none, 1 bedroom, 2 barracks, 3 dining, 4 hospital, 5 prison, 6 rec, 7 workshop, 8 kitchen
     var roomWealth = FloatArray(0)
-    /** Heat paths of indoor rooms: room [linkA] exchanges with [linkB] (a room id, or [Thermal.OUTDOORS] / [Thermal.GROUND]) with conductance [linkC]. */
+    /**
+     * Heat paths of indoor rooms: room [linkA] exchanges with [linkB] (a room id, or [Thermal.OUTDOORS]) with weight [linkC]. A door
+     * link has [linkDoor] >= 0, an index into [doorCell], the cell of that door. Built by [buildHeatLinks].
+     */
     var linkA = IntArray(0)
     var linkB = IntArray(0)
     var linkC = FloatArray(0)
+    var linkDoor = IntArray(0)
+    var doorCell = IntArray(0)
+    /** The roof shares of each room, from the same scan as the indoor rule. */
+    var roomRoofs = RoofShares.NONE
 
     private fun separates(i: Int): Boolean {
         val b = building[i]
         return terrain[i] == Terrain.ROCK || (b != null && b.built && (b.def.isWall || b.def.isDoor))
     }
 
-    fun rebuildRooms(outdoorTemp: Float) {
-        val old = roomTemp
-        val oldId = roomId
+    /** One flood-filled region per room: its cell count, whether it touches the map edge, its open (unroofed) and natural-roof cells. */
+    private class RoomScan(val id: IntArray, val size: IntArray, val edge: BooleanArray, val open: IntArray, val natural: IntArray)
+
+    private fun scanRooms(): RoomScan {
         val id = IntArray(size) { -1 }
         val sizes = ArrayList<Int>()
-        val indoor = ArrayList<Boolean>()
+        val edges = ArrayList<Boolean>()
+        val opens = ArrayList<Int>()
+        val naturals = ArrayList<Int>()
         val stack = IntArray(size)
         for (start in 0 until size) {
             if (id[start] != -1 || separates(start) || terrain[start] == Terrain.WATER_DEEP) continue
@@ -325,10 +350,12 @@ class GameMap(val w: Int, val h: Int) {
             var count = 0
             var edge = false
             var natural = 0
+            var open = 0
             while (sp > 0) {
                 val c = stack[--sp]
                 count++
                 if (natRoof[c]) natural++
+                if (!natRoof[c] && !roof[c]) open++
                 val cx = xOf(c); val cy = yOf(c)
                 if (cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1) edge = true
                 for (d in 0 until 4) {
@@ -341,11 +368,45 @@ class GameMap(val w: Int, val h: Int) {
                 }
             }
             sizes.add(count)
-            indoor.add(!edge && (count <= 700 || natural * 2 > count))
+            edges.add(edge)
+            opens.add(open)
+            naturals.add(natural)
         }
+        return RoomScan(id, sizes.toIntArray(), edges.toBooleanArray(), opens.toIntArray(), naturals.toIntArray())
+    }
+
+    /**
+     * A room is indoor when it does not touch the map edge and fewer than a quarter of its cells are open (unroofed). Outdoor when
+     * `open * 4 >= cells`: the quarter rule at Verse/Room.cs:105, in whole numbers.
+     */
+    fun roomIsIndoor(cells: Int, open: Int, touchesEdge: Boolean): Boolean = !touchesEdge && open * 4 < cells
+
+    /**
+     * A save from before version 38 has no roof grid. Every cell of each room that was indoor under the old rule gets a built roof,
+     * so the new rule keeps that room indoor, and each cell reads as roofed as it did before (docs/fidelity/roofs.md). The old rule:
+     * not touching the map edge, and at most [LEGACY_INDOOR_MAX_CELLS] cells or a natural-roof majority.
+     */
+    fun adoptLegacyRoofs() {
+        val scan = scanRooms()
+        for (c in 0 until size) {
+            val r = scan.id[c]
+            if (r < 0) continue
+            val oldIndoor = !scan.edge[r] && (scan.size[r] <= LEGACY_INDOOR_MAX_CELLS || scan.natural[r] * 2 > scan.size[r])
+            if (oldIndoor) roof[c] = true
+        }
+        roomDirty = true
+    }
+
+    fun rebuildRooms(outdoorTemp: Float) {
+        val old = roomTemp
+        val oldId = roomId
+        val scan = scanRooms()
+        val id = scan.id
+        val sizes = scan.size
+        val indoor = BooleanArray(sizes.size) { r -> roomIsIndoor(sizes[r], scan.open[r], scan.edge[r]) }
         roomId = id
-        roomSize = sizes.toIntArray()
-        roomIndoor = indoor.toBooleanArray()
+        roomSize = sizes
+        roomIndoor = indoor
         val temps = FloatArray(sizes.size) { outdoorTemp }
         for (c in 0 until size) {
             val r = id[c]
@@ -359,13 +420,25 @@ class GameMap(val w: Int, val h: Int) {
         roomImpress = FloatArray(sizes.size)
         roomRole = IntArray(sizes.size)
         roomWealth = FloatArray(sizes.size)
+        roomRoofs = RoofShares(
+            open = FloatArray(sizes.size) { r -> scan.open[r].toFloat() / sizes[r] },
+            thin = FloatArray(sizes.size) { r -> (sizes[r] - scan.open[r] - scan.natural[r]).toFloat() / sizes[r] },
+            thick = FloatArray(sizes.size) { r -> scan.natural[r].toFloat() / sizes[r] },
+        )
         buildHeatLinks()
         roomDirty = false
     }
 
-    /** One link per wall, door or rock edge of an indoor room, to whatever lies straight through it. */
+    /**
+     * Heat paths, one per separator edge of an indoor room (docs/fidelity/heat-exchange.md). A door links the rooms on its two sides;
+     * a side with no room gives no exchange (Verse/GenTemperature.cs:417-420). A wall, rock or water edge follows the cell two steps
+     * across (Verse/RoomTempTracker.cs:116-175): a room there gives weight 1, and a cell with no room gives half weight toward the
+     * outdoors (Verse/RoomTempTracker.cs:248), unless it touches the room itself (:159-168).
+     */
     private fun buildHeatLinks() {
-        val a = ArrayList<Int>(); val b = ArrayList<Int>(); val c = ArrayList<Float>()
+        val a = ArrayList<Int>(); val b = ArrayList<Int>(); val c = ArrayList<Float>(); val door = ArrayList<Int>()
+        val doors = ArrayList<Int>()
+        val doorIdOf = IntArray(size) { -1 }
         for (cell in 0 until size) {
             val r = roomId[cell]
             if (r < 0 || !roomIndoor[r]) continue
@@ -374,24 +447,63 @@ class GameMap(val w: Int, val h: Int) {
                 val nx = cx + DX4[d]; val ny = cy + DY4[d]
                 if (!inB(nx, ny)) continue
                 val n = idx(nx, ny)
-                if (!separates(n)) continue
                 val bd = building[n]
-                val cond: Float
-                var other = Thermal.OUTDOORS
-                if (terrain[n] == Terrain.ROCK) { cond = Thermal.ROCK_CONDUCTANCE; other = Thermal.GROUND }
-                else {
-                    cond = if (bd!!.def.isDoor) Thermal.DOOR_CONDUCTANCE else Thermal.wallConductance(bd.material)
-                    val ox = nx + DX4[d]; val oy = ny + DY4[d]
-                    if (inB(ox, oy)) {
-                        val q = roomId[idx(ox, oy)]
-                        if (q == r) continue
-                        if (q >= 0) other = q
-                    }
+                val isDoor = bd != null && bd.built && bd.def.isDoor
+                if (!isDoor && !separates(n) && terrain[n] != Terrain.WATER_DEEP) continue
+                val fx = nx + DX4[d]; val fy = ny + DY4[d]
+                if (!inB(fx, fy)) continue
+                val q = roomId[idx(fx, fy)]
+                if (isDoor) {
+                    if (q < 0 || q == r) continue
+                    if (doorIdOf[n] < 0) { doorIdOf[n] = doors.size; doors.add(n) }
+                    a.add(r); b.add(q); c.add(1f); door.add(doorIdOf[n])
+                    continue
                 }
-                a.add(r); b.add(other); c.add(cond)
+                if (q == r) continue
+                if (q >= 0) { a.add(r); b.add(q); c.add(Thermal.wallConductance(bd?.material)); door.add(-1); continue }
+                if (touchesRoom(fx, fy, r)) continue
+                a.add(r); b.add(Thermal.OUTDOORS); c.add(Thermal.HALF_OUTDOOR_WEIGHT); door.add(-1)
             }
         }
-        linkA = a.toIntArray(); linkB = b.toIntArray(); linkC = c.toFloatArray()
+        linkA = a.toIntArray(); linkB = b.toIntArray(); linkC = c.toFloatArray(); linkDoor = door.toIntArray()
+        doorCell = doors.toIntArray()
+    }
+
+    /** Is one of the four cardinal neighbours of ([x], [y]) a cell of room [r]? */
+    private fun touchesRoom(x: Int, y: Int, r: Int): Boolean {
+        for (d in 0 until 4) {
+            val nx = x + DX4[d]; val ny = y + DY4[d]
+            if (inB(nx, ny) && roomId[idx(nx, ny)] == r) return true
+        }
+        return false
+    }
+
+    /** A non-animal pawn stepped onto cell [i]. A swing door stays open for at least [Thermal.DOOR_HOLD_OPEN] ticks (vanilla applies that minimum on approach, RimWorld/Building_Door.cs:411; Stillmere applies it on entry). */
+    fun doorEntered(i: Int) {
+        val b = building[i] ?: return
+        if (b.built && b.def.isDoor && b.def != BuildDef.SHUTTER_DOOR) b.doorHold = Thermal.holdAfterEntry(b.doorHold)
+    }
+
+    /**
+     * The first cell of each room (in cell order; -1 for a room with none), so the save can key each room's temperature to a cell that
+     * the rebuilt rooms will share.
+     */
+    fun firstCellOfRoom(): IntArray {
+        val first = IntArray(roomSize.size) { -1 }
+        // A map that has never been rebuilt has no rooms: its room ids are all zero, and there is no room 0 to index.
+        if (first.isEmpty()) return first
+        for (c in 0 until size) {
+            val r = roomId[c]
+            if (r >= 0 && r < first.size && first[r] < 0) first[r] = c
+        }
+        return first
+    }
+
+    /** Sets the temperature of the indoor room that holds [cell], after the rooms are rebuilt (a save restores its rooms this way). */
+    fun restoreRoomTemp(cell: Int, t: Float) {
+        if (cell < 0 || cell >= size) return
+        val r = roomId[cell]
+        if (r >= 0 && roomIndoor[r]) roomTemp[r] = t
     }
 
     fun roomIndoorAt(i: Int): Boolean {
@@ -400,12 +512,43 @@ class GameMap(val w: Int, val h: Int) {
         return r >= 0 && roomIndoor[r]
     }
 
-    fun roofed(i: Int): Boolean = natRoof[i] || roomIndoorAt(i)
+    /** Roofed means a built roof or a natural roof. A room is indoor only when most of it is roofed (see [roomIsIndoor]). */
+    fun roofed(i: Int): Boolean = natRoof[i] || roof[i]
+
+    /** Sets or clears a built roof, and marks the rooms for a rebuild. */
+    fun setRoof(i: Int, on: Boolean) {
+        if (roof[i] == on) return
+        roof[i] = on
+        roomDirty = true
+    }
 
     fun tempAt(i: Int, outdoor: Float): Float {
         if (roomDirty) return outdoor
         val r = roomId[i]
-        return if (r >= 0 && roomIndoor[r]) roomTemp[r] else outdoor
+        if (r >= 0) return if (roomIndoor[r]) roomTemp[r] else outdoor
+        val b = building[i]
+        return if (b != null && b.built && b.def.isDoor) doorTemp(i, outdoor) else outdoor
+    }
+
+    /**
+     * A door belongs to no room, so it reads the mean temperature of the distinct rooms on its sides, outdoor rooms counting as
+     * outdoors (Verse/GenTemperature.cs:408, 414). With no room beside it, the outdoor temperature.
+     */
+    private fun doorTemp(i: Int, outdoor: Float): Float {
+        val x = xOf(i); val y = yOf(i)
+        var sum = 0f
+        var count = 0
+        val seen = IntArray(4) { -2 }
+        for (d in 0 until 4) {
+            val nx = x + DX4[d]; val ny = y + DY4[d]
+            if (!inB(nx, ny)) continue
+            val q = roomId[idx(nx, ny)]
+            if (q < 0 || seen.contains(q)) continue
+            seen[count] = q
+            sum += if (roomIndoor[q]) roomTemp[q] else outdoor
+            count++
+        }
+        return if (count == 0) outdoor else sum / count
     }
 
     // ---------------------------------------------------------------- items
@@ -541,7 +684,8 @@ class GameMap(val w: Int, val h: Int) {
         for (soilOnly in listOf(true, false)) for (r in 0 until max(w, h)) for (y in cy - r..cy + r) for (x in cx - r..cx + r) {
             if (!inB(x, y)) continue
             val t = terrain[idx(x, y)]
-            if (soilOnly && !(t == Terrain.SOIL || t == Terrain.RICH_SOIL || (desertLike && t == Terrain.SAND))) continue
+            // Grass ground counts as soil here, so the start spot is the same cell as it was before grass existed.
+            if (soilOnly && !(t == Terrain.SOIL || t == Terrain.GRASS || t == Terrain.RICH_SOIL || (desertLike && t == Terrain.SAND))) continue
             if (open(x, y)) return x to y
         }
         return null
@@ -611,11 +755,69 @@ class GameMap(val w: Int, val h: Int) {
         /** Scale and threshold of the tundra gravel patches: about 30% of the soil. */
         const val GRAVEL_PATCH = 12f
         const val GRAVEL_SHARE = 0.58f
+        /**
+         * Grass ground: soil on a non-desert map where the grass patch noise is above [GRASS_PATCH_SHARE] (Stillmere's own rule, C;
+         * the reference has no grass terrain). The cover on grass ground: where the cover noise is above [GRASS_COVER_SHARE]. Both are
+         * their own noises, so they draw nothing from the RNG (docs/fidelity/grass.md).
+         */
+        const val GRASS_PATCH_SCALE = 14f
+        const val GRASS_PATCH_SHARE = 0.55f
+        const val GRASS_COVER_SCALE = 6f
+        const val GRASS_COVER_SHARE = 0.35f
 
         val DX4 = intArrayOf(1, -1, 0, 0)
         val DY4 = intArrayOf(0, 0, 1, -1)
         val DX8 = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
         val DY8 = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
+
+        /**
+         * Ore blotches per 10,000 cells by hilliness: flat 4, small hills 8, large hills 11, impassable 16 (RimWorld/GenStep_RocksFromGrid.cs
+         * lines 131, 134, 137, 143). The switch's default, 10 (line 127), is used for [null], a map with no world tile. Using that default
+         * for [null] is Stillmere's choice (C), not the reference's. [Hills.MOUNTAIN] is the impassable kind, as its label says (WorldMap.kt).
+         * See docs/fidelity/map.md for that mapping.
+         */
+        fun oreBlotchesPer10k(hills: Hills?): Float = when (hills) {
+            Hills.FLAT -> 4f
+            Hills.SMALL -> 8f
+            Hills.LARGE -> 11f
+            Hills.MOUNTAIN -> 16f
+            null -> 10f
+        }
+
+        /**
+         * Ore blotches on a [w] by [h] map. As in the reference (Verse/GenStep_Scatterer.cs lines 266-274), one blotch covers
+         * round(10,000 / density) cells, and the count is the area over that, rounded. The source rounds to the nearest integer, and the
+         * tie mode of that rounding is not in the tree, so the half-to-even rounding used here is UNVERIFIED (see docs/fidelity/map.md).
+         */
+        fun oreBlotchCount(w: Int, h: Int, hills: Hills?): Int {
+            val cellsPerBlotch = round(10000f / oreBlotchesPer10k(hills))
+            return round(w.toFloat() * h / cellsPerBlotch).toInt()
+        }
+
+        /**
+         * The old fixed vein counts: 8 steel, 3 silver, 2 gold, 2 hardalloy, 3 components (18 veins on every map before the map-size
+         * change). They are the shares the blotches are split into (see [oreVeinPlan]), and the plan of battle maps (see [generate]).
+         */
+        internal val FIXED_ORE_VEINS: List<Pair<Ore, Int>> = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.HARDALLOY to 2, Ore.COMPONENTS to 3)
+
+        /** Cells in one vein: steel 7, components 3, the others 4. */
+        internal fun oreLumpSize(ore: Ore): Int = if (ore == Ore.STEEL) 7 else if (ore == Ore.COMPONENTS) 3 else 4
+
+        /**
+         * The veins of each ore on a [w] by [h] map. The blotches are shared out by the [FIXED_ORE_VEINS] weights with cumulative
+         * rounding, so the veins always add up to [oreBlotchCount].
+         */
+        internal fun oreVeinPlan(w: Int, h: Int, hills: Hills?): List<Pair<Ore, Int>> {
+            val total = oreBlotchCount(w, h, hills)
+            val weight = FIXED_ORE_VEINS.sumOf { it.second }
+            var cumulative = 0
+            var given = 0
+            return FIXED_ORE_VEINS.map { (ore, share) ->
+                cumulative += share
+                val upTo = round(total * cumulative / weight.toFloat()).toInt()
+                (ore to upTo - given).also { given = upTo }
+            }
+        }
 
         /**
          * The colony's map. The planet picks the home tile: the nearest tile of [biome] to the middle, or of any land when [biome]
@@ -626,7 +828,15 @@ class GameMap(val w: Int, val h: Int) {
             return generate(w, h, seed, world.biome[world.homeTile], world.localTerrain())
         }
 
-        fun generate(w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null): GameMap {
+        /**
+         * A map of [w] by [h] cells. The ore veins follow [oreVeinPlan] for the hilliness of [local], unless [veins] gives the plan
+         * (battle maps pass [FIXED_ORE_VEINS], so a fight keeps the 18 veins it had before the map-size change).
+         * A colony map (one with a world tile, [local] not null) also gets its ruins, unless [ruins] is false (docs/fidelity/ruins.md).
+         */
+        fun generate(
+            w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null,
+            veins: List<Pair<Ore, Int>>? = null, ruins: Boolean = true,
+        ): GameMap {
             val m = GameMap(w, h)
             m.biome = biome
             val rng = Rng(seed)
@@ -636,6 +846,8 @@ class GameMap(val w: Int, val h: Int) {
             val tree = Noise(seed.toInt() xor 0xdef0)
             val rockN = Noise(seed.toInt() xor 0x2468)
             val gravelN = Noise(seed.toInt() xor 0x3579)
+            val grassN = Noise(seed.toInt() xor 0x4c1f)
+            val coverN = Noise(seed.toInt() xor 0x7e21)
             val cx = w / 2
             val cy = h / 2
             val desert = biome == Biome.DESERT || biome == Biome.ARID
@@ -692,6 +904,8 @@ class GameMap(val w: Int, val h: Int) {
                 if (tundra && t == Terrain.WATER_SHALLOW) t = Terrain.ICE
                 // Gravel in the tundra comes in patches from its own noise, not as scattered single tiles.
                 if (tundra && (t == Terrain.SOIL || t == Terrain.RICH_SOIL) && gravelN.fractal(x.toFloat(), y.toFloat(), GRAVEL_PATCH) > GRAVEL_SHARE) t = Terrain.GRAVEL
+                // Grass ground: soil in grass patches, outside the desert. Its own noise, so no RNG draw changes (docs/fidelity/grass.md).
+                if (t == Terrain.SOIL && !desert && grassN.fractal(x.toFloat(), y.toFloat(), GRASS_PATCH_SCALE) > GRASS_PATCH_SHARE) t = Terrain.GRASS
                 m.terrain[i] = t
                 if (t == Terrain.ROCK) {
                     m.natRoof[i] = true
@@ -723,13 +937,20 @@ class GameMap(val w: Int, val h: Int) {
                 cx to cy
             }
             m.spawnX = sx; m.spawnY = sy
+            // Caves on a hill tile: tunnels are cut from the rock as it stands now (docs/fidelity/caves.md). Carved cells become gravel
+            // floor and keep their natural roof, and the rock that stays is the cave's wall. This runs before the sides are connected,
+            // so a crossing can use a cave. Caves draw from their own generator, so a map without caves is unchanged.
+            if (local?.caves == true) {
+                val rockCells = BooleanArray(m.size) { m.terrain[it] == Terrain.ROCK }
+                val carved = Caves.carve(w, h, rockCells, seed)
+                for (i in carved.indices) if (carved[i]) m.terrain[i] = Terrain.GRAVEL
+            }
             m.connectSides(sx, sy)
-            // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. Lump sizes
-            // keep the ore per map where the old scattered veins left it.
-            val ores = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.PLASTEEL to 2, Ore.COMPONENTS to 3)
-            for ((ore, veins) in ores) {
-                val lump = if (ore == Ore.STEEL) 7 else if (ore == Ore.COMPONENTS) 3 else 4
-                repeat(veins) {
+            // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. The number of
+            // veins of each kind follows the map's area and hilliness (see [oreVeinPlan]), unless the caller gave the plan.
+            for ((ore, count) in veins ?: oreVeinPlan(w, h, local?.hills)) {
+                val lump = oreLumpSize(ore)
+                repeat(count) {
                     for (attempt in 0 until 80) {
                         val ox = rng.int(w); val oy = rng.int(h)
                         val start = m.idx(ox, oy)
@@ -750,6 +971,9 @@ class GameMap(val w: Int, val h: Int) {
                     }
                 }
             }
+            // Ruins on a colony map: walls and floors now, before the plants, which the ruins' footprints clear afterwards. They draw from
+            // their own generator, so the terrain, ore and plant rolls above and below are the same as on a map without ruins.
+            val ruinGen = if (ruins && local != null) Ruins.place(m, seed) else null
             // Plants.
             val trees = when (biome) {
                 Biome.TEMPERATE -> listOf(PlantType.OAK, PlantType.POPLAR, PlantType.OAK, PlantType.BIRCH, PlantType.MAPLE)
@@ -773,11 +997,20 @@ class GameMap(val w: Int, val h: Int) {
                 } else if (fertile && rng.chance(0.006f * biome.treeDensity)) {
                     m.plant[i] = Plant(PlantType.BERRY, x, y, 1f)
                 } else if (fertile && rng.chance(0.004f)) {
-                    m.plant[i] = Plant(PlantType.WILD_HEALROOT, x, y, 1f)
+                    m.plant[i] = Plant(PlantType.FERAL_MIREWORT, x, y, 1f)
                 } else if (rng.chance(0.004f)) {
                     m.plant[i] = Plant(PlantType.BRAMBLE, x, y, 1f)
                 }
             }
+            // Grass cover: a fully grown grass plant on each grass cell that has no other plant and passes the cover noise. It is
+            // placed after the plants above and draws nothing from the RNG, so those plants are the same as before grass existed.
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = m.idx(x, y)
+                if (m.terrain[i] != Terrain.GRASS || m.plant[i] != null) continue
+                if (coverN.fractal(x.toFloat(), y.toFloat(), GRASS_COVER_SCALE) > GRASS_COVER_SHARE) m.plant[i] = Plant(PlantType.GRASS, x, y, 1f)
+            }
+            // Ruin footprints lose their plants, then get their rubble and loot (docs/fidelity/ruins.md).
+            ruinGen?.finish()
             return m
         }
     }

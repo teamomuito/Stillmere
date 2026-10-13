@@ -1,0 +1,11 @@
+version=39
+tick=16875
+colonists=5
+buildings=133
+door.x=127
+door.y=127
+room.x=127
+room.y=125
+room.indoor=true
+room.size=9
+outdoor=8.111009

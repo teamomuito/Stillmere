@@ -1,5 +1,6 @@
 package io.github.teamomuito.colony.sim
 
+import java.util.EnumMap
 import kotlin.math.max
 import kotlin.math.min
 
@@ -18,6 +19,7 @@ enum class JobType(val label: String) {
     EXTINGUISH("Putting out fire"), DELIVER("Delivering"), BURY("Burying"), SMOKE("Taking a drug"),
     // Appended last: saves store job types by ordinal.
     TRAIN("Training animal"),
+    BUILD_ROOF("Building roof"),
 }
 
 /** Most tricks a tamed animal can learn. */
@@ -78,6 +80,10 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var warmup = 0
     /** Under fire until this tick: the pawn's own ranged shots are less accurate. */
     var suppressedUntil = 0L
+    /** Burn size of the fire on this pawn; 0 when not burning. Saved from version 36 (docs/fidelity/combat.md). */
+    var burnSize = 0f
+    /** Tick until which a melee hit keeps this pawn staggered and it takes no action. Saved from version 36. */
+    var staggerUntil = 0L
     /** Tricks a tamed animal has learned, 0 to [MAX_TRICKS]. Trained animals hit harder. */
     var trained = 0
     /** The target this pawn is currently aiming at; -1 for none. Not saved: it is re-chosen after a load. */
@@ -90,7 +96,7 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var retreating = false
     var homeTile = -1
     var escapeTick = 0L
-    var raidMode = 0 // 0 assault, 1 sapper, 2 siege, 3 pod
+    var raidMode = 0 // 0 rush, 1 tunnel, 2 shelling camp, 3 lander drop
     var campX = -1
     var campY = -1
     var escaping = false
@@ -103,15 +109,40 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     var lastSocial = 0L
     var lastJoyKind = ""
     var hunger = 1f
+    /** Outdoors and indoors needs, 1 is full. They move slowly, so they are saved (version 32). */
+    var outdoorsNeed = 1f
+    var indoorsNeed = 1f
+    /** Comfort of the seat under the pawn, recomputed each slow update (not saved). */
+    var comfortNeed = 0f
+    /** Ticks spent at zero rest. Past [NeedRules.COLLAPSE_AFTER_TICKS] the pawn may collapse into sleep (saved, version 32). */
+    var ticksAtZeroRest = 0
+    /** Ticks the mood has stayed below each break threshold (saved, version 32). */
+    var moodBelowExtremeTicks = 0
+    var moodBelowMajorTicks = 0
+    var moodBelowMinorTicks = 0
+    /** Awake ticks left before another mental break can happen (saved, version 32). */
+    var breakCooldown = 0
+    /** Drug tolerance per drug, 0 to 1. Kept in drug order so it saves the same way every time (saved, version 32). */
+    val drugTolerance = EnumMap<ItemType, Float>(ItemType::class.java)
 
     // Health
     val injuries = ArrayList<Injury>()
     val hediffs = ArrayList<Hediff>()
     var bloodLoss = 0f
     val parts: List<PartDef> get() = race.body
+    /**
+     * Set whenever an input of the capacities and pain changes: injuries, hediffs, blood loss, implants or pregnancy. The
+     * capacities and pain are a cache of those inputs. A read of [cap] or [pain] refreshes the cache while this is set, so a
+     * read never returns a value the inputs no longer give. Not saved: SaveGame recomputes the cache when it loads a pawn.
+     */
     var healthDirty = true
-    val cap = FloatArray(Cap.entries.size) { 1f }
-    var pain = 0f
+    internal val capCache = FloatArray(Cap.entries.size) { 1f }
+    internal var painCache = 0f
+    val cap: FloatArray get() { if (healthDirty) refreshHealthCache(this); return capCache }
+    /** Pain from the cache. Assigning a value sets the cache until the next refresh; tests use this to set a state directly. */
+    var pain: Float
+        get() { if (healthDirty) refreshHealthCache(this); return painCache }
+        set(value) { painCache = value }
     var careLevel = 2 // 0 none, 1 herbal, 2 any medicine
     var fullHealthCache = 1f
     val implants = HashMap<Int, Implant>()
@@ -121,6 +152,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     // Skills and traits
     val skill = IntArray(SkillType.entries.size)
     val xp = FloatArray(SkillType.entries.size)
+    /** XP learned today per skill, for the daily cap. Reset at the start of each day. Saved from version 33. */
+    val xpToday = FloatArray(SkillType.entries.size)
     val passion = IntArray(SkillType.entries.size)
     val priority = IntArray(WorkType.entries.size) { 3 }
     val traits = ArrayList<Trait>()
@@ -213,8 +246,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
     fun workSpeed(s: SkillType?): Float {
         var f = if (s == null) 1f else 0.4f + 0.075f * skill[s.ordinal]
         if (!isAnimal && age < 18) f *= if (age < 13) 0.6f else 0.85f
-        if (Trait.HARD_WORKER in traits) f *= 1.25f
-        if (Trait.LAZY in traits) f *= 0.75f
+        if (Trait.BRISK_HANDS in traits) f *= 1.25f
+        if (Trait.IDLE_STREAK in traits) f *= 0.75f
         if (rest < 0.2f) f *= 0.85f
         if (dark) f *= 0.85f
         f *= max(0.1f, cap[Cap.CONSCIOUSNESS.ordinal])
@@ -224,8 +257,8 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
 
     fun moveSpeedTicks(): Int {
         var t = race.moveTicks.toFloat()
-        if (Trait.NIMBLE in traits) t -= 2f
-        if (Trait.JOGGER in traits) t -= 3f
+        if (Trait.LIGHT_STEPPED in traits) t -= 2f
+        if (Trait.LONG_STRIDER in traits) t -= 3f
         if (Trait.SLOW_WALKER in traits) t += 2f
         t /= max(0.2f, cap[Cap.MOVING.ordinal])
         if (carryCount > 0) t += 1f
@@ -233,14 +266,43 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
         return max(tk(3), Math.round(t * TIME_SCALE))
     }
 
+    /** Only humanlike pawns have skills (RimWorld/PawnComponentsUtility.cs:77-81). Animals and mechanoids do not learn. */
+    val hasSkills get() = !isAnimal && !race.mech
+
+    fun skillDisabled(s: SkillType): Boolean = SkillRules.skillDisabled(s, incapable)
+
+    /**
+     * Learns XP for [s]. The rate is the passion factor, then the trait factors, then the daily cap: once the skill has
+     * gained more than the cap today, the rest of today's XP learns at the saturated factor (RimWorld/SkillRecord.cs:371-397).
+     */
     fun gainXp(s: SkillType, amount: Float) {
+        if (!hasSkills || amount <= 0f || skillDisabled(s)) return
         val i = s.ordinal
-        var mult = when (passion[i]) { 2 -> 2.0f; 1 -> 1.4f; else -> 1.0f }
-        if (Trait.FAST_LEARNER in traits) mult *= 1.4f
-        if (Trait.SLOW_LEARNER in traits) mult *= 0.6f
-        xp[i] += amount * mult
-        val need = 2500f + skill[i] * 400f
-        if (xp[i] >= need && skill[i] < 20) { xp[i] -= need; skill[i]++ }
+        var rate = SkillRules.passionFactor(passion[i])
+        if (Trait.EAGER_PUPIL in traits) rate *= 1.4f
+        if (Trait.SLOW_STUDY in traits) rate *= 0.6f
+        if (xpToday[i] > SkillRules.DAILY_FULL_RATE_XP) rate *= SkillRules.SATURATED_FACTOR
+        addXp(i, amount * rate)
+    }
+
+    /** Adds XP already scaled by the rate, and records it for today. Negative amounts are decay. */
+    private fun addXp(i: Int, gained: Float) {
+        xpToday[i] += gained
+        val (lvl, x) = SkillRules.applyXp(skill[i], xp[i], gained)
+        skill[i] = lvl
+        xp[i] = x
+    }
+
+    /**
+     * The decay interval for every skill: a skill at level 10 or above loses XP, more at higher levels, whether or
+     * not it was used (RimWorld/SkillRecord.cs:207-249). Skills that are disabled do not decay.
+     */
+    fun skillIntervalTick() {
+        if (!hasSkills) return
+        for (i in skill.indices) {
+            val d = SkillRules.decayPerInterval(skill[i])
+            if (d != 0f && !skillDisabled(SkillType.entries[i])) addXp(i, d)
+        }
     }
 
     fun addThought(label: String, mood: Float, now: Long, duration: Int) {
@@ -281,16 +343,25 @@ class Pawn(val id: Int, var name: String, val race: Race, var faction: Faction) 
 
     fun weaponDamageMult() = (if (weaponItem != null) weaponQuality.mult else 1f) * (if (isAnimal) 1f + 0.2f * trained else 1f)
 
+    /**
+     * A summary of armour for a body region, for the character panel only: the covering layers' ratings added up and capped at
+     * 0.9. The hit roll does not use it. Each layer rolls on its own in `dealDamage` (Verse/ArmorUtility.cs:13-56).
+     */
     fun armorFor(coverBit: Int, sharp: Boolean): Float {
-        var armor = if (race.mech) race.armor * (if (sharp) 1f else 0.6f) else 0f
+        var armor = naturalArmor(sharp)
         for (w in apparel) {
             val a = w.type.apparel ?: continue
             if (a.cover and coverBit == 0) continue
-            val v = if (sharp) a.armorSharp else a.armorBlunt
-            armor += v * w.quality.mult * (0.5f + 0.5f * (w.hp / a.hp).coerceIn(0f, 1f))
+            armor += w.armorRating(sharp)
         }
         return min(0.9f, armor)
     }
+
+    /**
+     * Natural armour, applied after the worn layers (Verse/ArmorUtility.cs:44-45). Only mechanoids have it here, and the
+     * blunt rating at 0.6 of the sharp is kept from Stillmere (UNVERIFIED). See docs/fidelity/combat.md.
+     */
+    fun naturalArmor(sharp: Boolean): Float = if (race.mech) race.armor * (if (sharp) 1f else 0.6f) else 0f
 
     fun insulationCold(): Float = apparel.sumOf { ((it.type.apparel?.insCold ?: 0f) * it.quality.mult).toDouble() }.toFloat()
     fun insulationHeat(): Float = apparel.sumOf { ((it.type.apparel?.insHeat ?: 0f)).toDouble() }.toFloat()
@@ -321,40 +392,40 @@ object Names {
 object Backstories {
     class Story(val title: String, val skills: Map<SkillType, Int>, val disabled: List<WorkType> = emptyList(), val traits: List<Trait> = emptyList())
     val childhood = listOf(
-        Story("Vatgrown soldier", mapOf(SkillType.SHOOTING to 5, SkillType.MELEE to 3)),
-        Story("Farm kid", mapOf(SkillType.PLANTS to 5, SkillType.ANIMALS to 3)),
-        Story("Urchin", mapOf(SkillType.SOCIAL to 3, SkillType.CRAFTING to 2)),
-        Story("Medical student", mapOf(SkillType.MEDICINE to 5, SkillType.INTELLECTUAL to 3)),
-        Story("Tribal child", mapOf(SkillType.ANIMALS to 4, SkillType.CRAFTING to 4, SkillType.MELEE to 2)),
-        Story("Orphan", mapOf(SkillType.SOCIAL to 2, SkillType.COOKING to 3, SkillType.SHOOTING to 2)),
-        Story("Wasteland scavenger", mapOf(SkillType.MINING to 3, SkillType.CONSTRUCTION to 3, SkillType.SHOOTING to 3)),
-        Story("Pit fighter", mapOf(SkillType.MELEE to 6, SkillType.MEDICINE to 2)),
-        Story("Cargo ship brat", mapOf(SkillType.CONSTRUCTION to 3, SkillType.INTELLECTUAL to 3, SkillType.SOCIAL to 3)),
-        Story("Herder's child", mapOf(SkillType.ANIMALS to 6, SkillType.PLANTS to 3)),
-        Story("Space-born tinker", mapOf(SkillType.CONSTRUCTION to 4, SkillType.INTELLECTUAL to 4)),
+        Story("Cradle-line recruit", mapOf(SkillType.MARKSMANSHIP to 5, SkillType.CLOSE_COMBAT to 3)),
+        Story("Furrow-born", mapOf(SkillType.HORTICULTURE to 5, SkillType.HUSBANDRY to 3)),
+        Story("Street kid", mapOf(SkillType.RAPPORT to 3, SkillType.WORKMANSHIP to 2)),
+        Story("Infirmary helper", mapOf(SkillType.HEALING to 5, SkillType.SCHOLARSHIP to 3)),
+        Story("Camp foundling", mapOf(SkillType.HUSBANDRY to 4, SkillType.WORKMANSHIP to 4, SkillType.CLOSE_COMBAT to 2)),
+        Story("Unclaimed child", mapOf(SkillType.RAPPORT to 2, SkillType.GALLEY to 3, SkillType.MARKSMANSHIP to 2)),
+        Story("Ruin picker", mapOf(SkillType.QUARRYING to 3, SkillType.ARCHITECTURE to 3, SkillType.MARKSMANSHIP to 3)),
+        Story("Ringside tyke", mapOf(SkillType.CLOSE_COMBAT to 6, SkillType.HEALING to 2)),
+        Story("Hold-born ward", mapOf(SkillType.ARCHITECTURE to 3, SkillType.SCHOLARSHIP to 3, SkillType.RAPPORT to 3)),
+        Story("Pasture-born", mapOf(SkillType.HUSBANDRY to 6, SkillType.HORTICULTURE to 3)),
+        Story("Hull scrapper", mapOf(SkillType.ARCHITECTURE to 4, SkillType.SCHOLARSHIP to 4)),
     )
     val adulthood = listOf(
-        Story("Colonial guard", mapOf(SkillType.SHOOTING to 8, SkillType.MELEE to 4), listOf(WorkType.ART)),
-        Story("Field medic", mapOf(SkillType.MEDICINE to 8, SkillType.SHOOTING to 2)),
-        Story("Farmhand", mapOf(SkillType.PLANTS to 8, SkillType.CONSTRUCTION to 3), listOf(WorkType.RESEARCH)),
-        Story("Cook", mapOf(SkillType.COOKING to 9, SkillType.SOCIAL to 2)),
-        Story("Miner", mapOf(SkillType.MINING to 9, SkillType.CONSTRUCTION to 4)),
-        Story("Artist", mapOf(SkillType.ARTISTIC to 10, SkillType.SOCIAL to 4), listOf(WorkType.MINE)),
-        Story("Engineer", mapOf(SkillType.INTELLECTUAL to 8, SkillType.CRAFTING to 6, SkillType.CONSTRUCTION to 6)),
-        Story("Hunter", mapOf(SkillType.SHOOTING to 7, SkillType.ANIMALS to 5, SkillType.COOKING to 3)),
-        Story("Scholar", mapOf(SkillType.INTELLECTUAL to 11, SkillType.SOCIAL to 3), listOf(WorkType.MINE)),
-        Story("Smith", mapOf(SkillType.CRAFTING to 9, SkillType.MELEE to 4)),
-        Story("Drifter", mapOf(SkillType.SHOOTING to 3, SkillType.SOCIAL to 3, SkillType.COOKING to 3)),
-        Story("Beast tamer", mapOf(SkillType.ANIMALS to 10, SkillType.MELEE to 3)),
-        Story("Pirate deckhand", mapOf(SkillType.SHOOTING to 6, SkillType.MELEE to 6, SkillType.SOCIAL to 2), listOf(WorkType.RESEARCH)),
-        Story("Trader", mapOf(SkillType.SOCIAL to 10, SkillType.INTELLECTUAL to 4), listOf(WorkType.MINE)),
-        Story("Surgeon", mapOf(SkillType.MEDICINE to 11, SkillType.INTELLECTUAL to 5)),
-        Story("Bartender", mapOf(SkillType.COOKING to 6, SkillType.SOCIAL to 8, SkillType.CRAFTING to 2)),
-        Story("Carpenter", mapOf(SkillType.CONSTRUCTION to 10, SkillType.CRAFTING to 6), listOf(WorkType.ART)),
-        Story("Mercenary", mapOf(SkillType.SHOOTING to 9, SkillType.MELEE to 7)),
-        Story("Prospector", mapOf(SkillType.MINING to 8, SkillType.SHOOTING to 3, SkillType.CONSTRUCTION to 3)),
-        Story("Gardener", mapOf(SkillType.PLANTS to 10, SkillType.ARTISTIC to 4)),
-        Story("Tailor", mapOf(SkillType.CRAFTING to 9, SkillType.ARTISTIC to 4)),
-        Story("Warden", mapOf(SkillType.SOCIAL to 8, SkillType.MELEE to 5)),
+        Story("Palisade watch", mapOf(SkillType.MARKSMANSHIP to 8, SkillType.CLOSE_COMBAT to 4), listOf(WorkType.ART)),
+        Story("Battlefield bandager", mapOf(SkillType.HEALING to 8, SkillType.MARKSMANSHIP to 2)),
+        Story("Farmhand", mapOf(SkillType.HORTICULTURE to 8, SkillType.ARCHITECTURE to 3), listOf(WorkType.RESEARCH)),
+        Story("Cook", mapOf(SkillType.GALLEY to 9, SkillType.RAPPORT to 2)),
+        Story("Miner", mapOf(SkillType.QUARRYING to 9, SkillType.ARCHITECTURE to 4)),
+        Story("Artist", mapOf(SkillType.ARTISTRY to 10, SkillType.RAPPORT to 4), listOf(WorkType.MINE)),
+        Story("Engineer", mapOf(SkillType.SCHOLARSHIP to 8, SkillType.WORKMANSHIP to 6, SkillType.ARCHITECTURE to 6)),
+        Story("Hunter", mapOf(SkillType.MARKSMANSHIP to 7, SkillType.HUSBANDRY to 5, SkillType.GALLEY to 3)),
+        Story("Scholar", mapOf(SkillType.SCHOLARSHIP to 11, SkillType.RAPPORT to 3), listOf(WorkType.MINE)),
+        Story("Smith", mapOf(SkillType.WORKMANSHIP to 9, SkillType.CLOSE_COMBAT to 4)),
+        Story("Roadwalker", mapOf(SkillType.MARKSMANSHIP to 3, SkillType.RAPPORT to 3, SkillType.GALLEY to 3)),
+        Story("Stockman", mapOf(SkillType.HUSBANDRY to 10, SkillType.CLOSE_COMBAT to 3)),
+        Story("Sloop hand", mapOf(SkillType.MARKSMANSHIP to 6, SkillType.CLOSE_COMBAT to 6, SkillType.RAPPORT to 2), listOf(WorkType.RESEARCH)),
+        Story("Trader", mapOf(SkillType.RAPPORT to 10, SkillType.SCHOLARSHIP to 4), listOf(WorkType.MINE)),
+        Story("Surgeon", mapOf(SkillType.HEALING to 11, SkillType.SCHOLARSHIP to 5)),
+        Story("Bartender", mapOf(SkillType.GALLEY to 6, SkillType.RAPPORT to 8, SkillType.WORKMANSHIP to 2)),
+        Story("Carpenter", mapOf(SkillType.ARCHITECTURE to 10, SkillType.WORKMANSHIP to 6), listOf(WorkType.ART)),
+        Story("Mercenary", mapOf(SkillType.MARKSMANSHIP to 9, SkillType.CLOSE_COMBAT to 7)),
+        Story("Prospector", mapOf(SkillType.QUARRYING to 8, SkillType.MARKSMANSHIP to 3, SkillType.ARCHITECTURE to 3)),
+        Story("Gardener", mapOf(SkillType.HORTICULTURE to 10, SkillType.ARTISTRY to 4)),
+        Story("Tailor", mapOf(SkillType.WORKMANSHIP to 9, SkillType.ARTISTRY to 4)),
+        Story("Warden", mapOf(SkillType.RAPPORT to 8, SkillType.CLOSE_COMBAT to 5)),
     )
 }

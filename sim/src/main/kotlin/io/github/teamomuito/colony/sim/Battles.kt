@@ -207,5 +207,5 @@ private fun Game.afterVictory(c: Caravan, plan: BattlePlan) {
 internal fun Game.recordBattleDeath(p: Pawn, cause: String) {
     if (p.faction != Faction.PLAYER || p.isAnimal || p.prisoner) return
     graveyard.add("${p.name} - $cause (day ${day + 1})")
-    for (o in colonists) if (Trait.PSYCHOPATH !in o.traits) o.addThought("Colonist died: ${p.name.substringBefore(' ')}", -0.1f, tick, 4 * TICKS_PER_DAY)
+    for (o in colonists) if (Trait.UNMOVED !in o.traits) o.addThought("Colonist died: ${p.name.substringBefore(' ')}", -0.1f, tick, 4 * TICKS_PER_DAY)
 }

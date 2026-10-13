@@ -49,7 +49,7 @@ class LegacySaveMigrationTest {
         assertEquals("pawn lastSocial", scaledTime(legacyLong("lastSocial")), c.lastSocial)
         assertEquals("pawn escapeTick", scaledTime(legacyLong("escapeTick")), c.escapeTick)
         assertEquals("pawn suppressedUntil", scaledTime(legacyLong("suppressedUntil")), c.suppressedUntil)
-        assertEquals("hediff age", scaledCount(expect.getValue("hediffAge").toInt()), c.hediff(HediffKind.FLU)!!.age)
+        assertEquals("hediff age", scaledCount(expect.getValue("hediffAge").toInt()), c.hediff(HediffKind.CHEST_COUGH)!!.age)
         assertEquals("injury age", scaledCount(expect.getValue("injuryAge").toInt()), c.injuries.first().age)
         assertEquals("move total", scaledCount(expect.getValue("moveTotal").toInt()), c.moveTotal)
         assertEquals("job timer", scaledCount(expect.getValue("jobTimer").toInt()), c.job!!.timer)

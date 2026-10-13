@@ -7,8 +7,56 @@ import java.io.DataOutputStream
 
 /** Binary save format. Jobs and reservations are not saved; pawns simply re-think after loading. */
 object SaveGame {
-    /** 15 added building materials. 14 is still read (its buildings simply have the default material). */
-    private const val VERSION = 25
+    /**
+     * 15 added building materials. 14 is still read (its buildings simply have the default material).
+     *
+     * 26 to 31 renamed some text that is saved: backstory titles inside [Pawn.backstory], thought labels, one incident name, the
+     * temporary event name, and (version 28) the pirate camp texts: site names in [World.sites] and the labels of pending fights in
+     * [BattlePlan.label]. Saves before each rename are translated when read (see [LegacyNames]). The death causes in
+     * [Game.graveyard], the log lines in [Game.log] and the caravan last-event notes in [Caravan.lastEvent] hold renamed wording
+     * too, and they are translated on read by [LegacyNames.graveyardEntry], [LegacyNames.logLine] and [LegacyNames.caravanNote].
+     * The layout did not change, so these translations do not bump the version (docs/fidelity/names.md, section 2).
+     *
+     * 32 adds, at the end of each pawn record: the outdoors and indoors needs, the zero-rest counter, the break timers and
+     * cooldown, and drug tolerance (see [writePawn] and docs/fidelity/needs-mood.md). Earlier saves read these as their defaults.
+     *
+     * 33 adds, at the end of each pawn record, the XP each skill learned today (12 floats, the daily learning cap; see [writePawn] and
+     * docs/fidelity/skills-traits.md). Earlier saves read these as zero, which is the value at the start of a day.
+     *
+     * 34 adds, right after the incident history, the five most recent random incidents by name, most recent first
+     * ([Game.lastRandomIncidents]; see docs/fidelity/threats.md). Earlier saves read an empty list.
+     *
+     * 35 keeps the layout but changes what a saved rot means: the share of its spoil time that has passed. Raw meat now spoils in
+     * 2 days (was 4) and corpses in 2.5 (was 2.2), so the rot of items read from older saves (map items and job stacks, see
+     * [migrateRot]) and the rot of food an eat job holds (see [heldRotFromOld]) is rescaled to keep the same time spent
+     * (docs/fidelity/economy.md).
+     *
+     * 36 adds, at the end of each pawn record, the burn size of a fire on the pawn and the tick until which a melee hit keeps it
+     * staggered (see [writePawn] and docs/fidelity/combat.md). Earlier saves read both as zero: not burning, not staggered.
+     *
+     * 37 changes no field and no layout. It marks the saves written after new colonies moved to a 250 by 250 map (docs/fidelity/map.md).
+     * The width and height have been written since version 14 and are read as before, so every save keeps the size it stores.
+     *
+     * 38 adds one flag per map cell, the built roof (docs/fidelity/roofs.md), after the snow of each cell. A save before 38 has no
+     * flags: on reading, every cell of each room that was indoor under the old rule gets a roof, so no room changes status and
+     * each cell is roofed as before ([GameMap.adoptLegacyRoofs]).
+     *
+     * 39 changes no field and no layout. It marks the saves that may hold grass: the grass terrain ([Terrain.GRASS]) and the grass
+     * cover ([PlantType.GRASS]) are new values of the terrain byte and of the plant type, appended to their enums (docs/fidelity/grass.md).
+     * Saves before 39 never hold them, so nothing is read differently. An older build refuses a version-39 save with its usual
+     * "Unsupported save version" error, instead of failing on a value it does not have.
+     *
+     * 40 adds two things, both read only from version 40 (docs/fidelity/heat-exchange.md). One integer per building, the swing door's
+     * open time left ([Building.doorHold]), written after the occupant. And, at the end of the stream, the temperature of each indoor
+     * room, keyed by the room's first cell, so a load keeps the heat the rooms had. A save before 40 has neither, so its doors start
+     * shut and its indoor rooms start at the outdoor temperature, as they did before.
+     */
+    /** The version [write] writes by default. Tests compare against it, so they do not repeat the number. */
+    internal const val VERSION = 40
+
+    /** Spoil times before version 35, which saved rot is rescaled from. */
+    private const val OLD_MEAT_SPOIL_DAYS = 4f
+    private const val OLD_CORPSE_ROT_DAYS = 2.2f
 
     /** Saves older than this count ticks in the old base of 1,000 ticks per hour. Their times are converted when read. */
     private const val TIME_BASE_VERSION = 25
@@ -57,7 +105,8 @@ object SaveGame {
     }
 
     private fun DataInputStream.readPlan(version: Int): BattlePlan {
-        val p = BattlePlan(readInt(), readUTF(), readInt(), readFloat(), readBoolean(), BattleAftermath.entries[readInt()], readInt(), readInt(), readBoolean(), tickAt(version))
+        // The label is live text (the foe's name in the fight prompt), so a pirate label is translated below version 28 (names.md section 2).
+        val p = BattlePlan(readInt(), readUTF().let { if (version < 28) LegacyNames.battleLabel(it, version) else it }, readInt(), readFloat(), readBoolean(), BattleAftermath.entries[readInt()], readInt(), readInt(), readBoolean(), tickAt(version))
         p.retreating = readBoolean()
         val oc = readInt(); p.outcome = if (oc >= 0) BattleOutcome.entries[oc] else null
         p.lostOnRetreat = readInt()
@@ -74,15 +123,36 @@ object SaveGame {
         opt(s.corpseOf); writeInt(s.corpseRace?.ordinal ?: -1); writeBoolean(s.corpseColonist); writeInt(s.corpseAge)
     }
 
-    private fun DataInputStream.readJobStack(): ItemStack {
+    private fun DataInputStream.readJobStack(version: Int): ItemStack {
         val id = readInt(); val t = ItemType.entries[readInt()]
         val x = readShort().toInt(); val y = readShort().toInt(); val n = readInt()
         val s = ItemStack(id, t, n, x, y)
         s.quality = Quality.entries[readByte().toInt()]; s.rot = readFloat(); s.hp = readFloat(); s.forbidden = readBoolean()
         s.corpseOf = opt(); val cr = readInt(); s.corpseRace = if (cr >= 0) Race.entries[cr] else null
         s.corpseColonist = readBoolean(); s.corpseAge = readInt()
+        s.migrateRot(version)
         return s
     }
+
+    /**
+     * Rot is saved as the share of the spoil time that has passed. Before version 35 raw meat spoiled in 4 days and corpses in
+     * 2.2, so the rot is rescaled to the same time spent under the current spoil times (docs/fidelity/economy.md).
+     */
+    private fun ItemStack.migrateRot(version: Int) {
+        if (version >= 35) return
+        rot = when {
+            corpseOf != null -> rot * (OLD_CORPSE_ROT_DAYS / CORPSE_ROT_DAYS)
+            type == ItemType.MEAT -> rot * (OLD_MEAT_SPOIL_DAYS / ItemType.MEAT.spoilDays)
+            else -> rot
+        }
+    }
+
+    /**
+     * The rot of the food an eat job holds ([Job.heldRot]) is a share of the same spoil time, so raw meat gets the same rescale.
+     * No other food changed its spoil time. [food] is the eat job's food type, which is read before this value.
+     */
+    private fun heldRotFromOld(rot: Float, food: ItemType?, version: Int): Float =
+        if (version >= 35 || food != ItemType.MEAT) rot else rot * (OLD_MEAT_SPOIL_DAYS / ItemType.MEAT.spoilDays)
 
     /** A job exactly as it was: what it is doing, its targets, progress, what it holds, and the stack it carries. */
     private fun DataOutputStream.writeJob(j: Job) {
@@ -104,8 +174,8 @@ object SaveGame {
         val item = readInt(); j.item = if (item >= 0) ItemType.entries[item] else null
         j.aux = readInt(); j.ingIdx = readInt(); j.collected = readInt()
         repeat(readInt()) { val t = ItemType.entries[readInt()]; val n = readInt(); j.held.add(Triple(t, n, Quality.entries[readInt()])) }
-        j.heldRot = readFloat()
-        if (readBoolean()) j.stack = readJobStack()
+        j.heldRot = heldRotFromOld(readFloat(), j.item, version)
+        if (readBoolean()) j.stack = readJobStack(version)
         return j
     }
     private fun DataInputStream.opt(): String? = if (readBoolean()) readUTF() else null
@@ -139,6 +209,10 @@ object SaveGame {
             o.writeInt(g.incidentLast.size)
             for ((k, v) in g.incidentLast) { o.writeUTF(k.name); o.writeLong(v) }
         }
+        if (version >= 34) {
+            o.writeInt(g.lastRandomIncidents.size)
+            for (k in g.lastRandomIncidents) o.writeUTF(k.name)
+        }
 
         val m = g.map
         o.writeInt(m.w); o.writeInt(m.h); o.writeInt(m.biome.ordinal)
@@ -147,6 +221,7 @@ object SaveGame {
             o.writeByte(m.floor[i]?.ordinal ?: -1); o.writeByte(m.floorQuality[i].ordinal)
             o.writeInt(m.zoneId[i]); o.writeByte(m.desig[i].toInt()); o.writeByte(m.filth[i].toInt())
             o.writeBoolean(m.natRoof[i]); o.writeBoolean(m.conduit[i]); o.writeByte((m.snow[i] * 100).toInt())
+            if (version >= 38) o.writeBoolean(m.roof[i])
         }
         for (a in 0 until 3) { o.writeUTF(m.areaNames[a]); for (c in 0 until m.size) o.writeBoolean(m.areas[a][c]) }
         o.writeInt(m.peekNextZone())
@@ -165,6 +240,7 @@ object SaveGame {
             o.writeFloat(b.progress); o.writeFloat(b.hp); o.writeInt(b.ownerId); o.writeFloat(b.fuel)
             o.writeByte(b.quality.ordinal); o.writeBoolean(b.forbidden); o.writeFloat(b.charge); o.writeInt(b.shells)
             o.writeBoolean(b.prisonerBed); o.writeInt(b.occupant)
+            if (version >= 40) o.writeInt(b.doorHold)
             o.writeInt(b.bills.size)
             for (bill in b.bills) {
                 o.writeInt(bill.recipe.ordinal); o.writeInt(bill.mode.ordinal); o.writeInt(bill.target); o.writeInt(bill.done)
@@ -261,6 +337,12 @@ object SaveGame {
             o.writeLong(g.playMs)
             o.writeInt(g.unreachable.size); for ((k, v) in g.unreachable) { o.writeLong(k); o.writeLong(v) }
         }
+        if (version >= 40) {
+            val first = m.firstCellOfRoom()
+            val indoor = m.roomIndoor.indices.filter { m.roomIndoor[it] && first[it] >= 0 }
+            o.writeInt(indoor.size)
+            for (r in indoor) { o.writeInt(first[r]); o.writeFloat(m.roomTemp[r]) }
+        }
         o.flush()
         return bytes.toByteArray()
     }
@@ -328,6 +410,14 @@ object SaveGame {
             o.writeBoolean(j != null)
             if (j != null) o.writeJob(j)
         }
+        if (version >= 32) {
+            o.writeFloat(p.outdoorsNeed); o.writeFloat(p.indoorsNeed); o.writeInt(p.ticksAtZeroRest)
+            o.writeInt(p.moodBelowExtremeTicks); o.writeInt(p.moodBelowMajorTicks); o.writeInt(p.moodBelowMinorTicks); o.writeInt(p.breakCooldown)
+            o.writeInt(p.drugTolerance.size)
+            for ((drug, tolerance) in p.drugTolerance) { o.writeInt(drug.ordinal); o.writeFloat(tolerance) }
+        }
+        if (version >= 33) for (x in p.xpToday) o.writeFloat(x)
+        if (version >= 36) { o.writeFloat(p.burnSize); o.writeLong(p.staggerUntil) }
     }
 
     fun read(data: ByteArray): Game {
@@ -344,7 +434,9 @@ object SaveGame {
         val flare = i.tickAt(version); val toxic = i.tickAt(version); val eclipse = i.tickAt(version)
         val hx = i.readInt(); val hy = i.readInt(); val wind = i.readFloat()
         val killed = i.readInt(); val earned = i.readInt(); val hints = i.readInt()
-        val grave = List(i.readInt()) { i.readUTF() }
+        // Graveyard entries are translated on read: the cause in each entry gets the current wording when the save is older than the
+        // rename of that cause (LegacyNames.graveyardEntry, docs/fidelity/names.md section 2). The layout is the same, so no bump.
+        val grave = List(i.readInt()) { LegacyNames.graveyardEntry(i.readUTF(), version) }
         val cur = i.readInt()
         val done = List(i.readInt()) { Research.entries[i.readInt()] }
         val prog = List(i.readInt()) { Research.entries[i.readInt()] to i.readFloat() }
@@ -358,7 +450,11 @@ object SaveGame {
         val incidents: MutableMap<Incident, Long> = java.util.EnumMap(Incident::class.java)
         if (version >= 20) {
             raidEnded = i.tickAt(version)
-            repeat(i.readInt()) { val name = i.readUTF(); val at = i.tickAt(version); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
+            repeat(i.readInt()) { val name = i.readUTF().let { if (version < 28) LegacyNames.incidentName(it, version) else it }; val at = i.tickAt(version); Incident.entries.firstOrNull { it.name == name }?.let { incidents[it] = at } }
+        }
+        var recentRandom: List<Incident> = emptyList()
+        if (version >= 34) {
+            recentRandom = List(i.readInt()) { i.readUTF() }.mapNotNull { name -> Incident.entries.firstOrNull { it.name == name } }
         }
 
         val w = i.readInt(); val h = i.readInt()
@@ -373,6 +469,7 @@ object SaveGame {
             map.floorQuality[c] = Quality.entries[i.readByte().toInt()]
             map.zoneId[c] = i.readInt(); map.desig[c] = i.readByte(); map.filth[c] = i.readByte()
             map.natRoof[c] = i.readBoolean(); map.conduit[c] = i.readBoolean(); map.snow[c] = i.readByte() / 100f
+            if (version >= 38) map.roof[c] = i.readBoolean()
         }
         for (a in 0 until 3) { map.areaNames[a] = i.readUTF(); for (c in 0 until map.size) map.areas[a][c] = i.readBoolean() }
         map.setNextZone(i.readInt())
@@ -394,6 +491,7 @@ object SaveGame {
             b.progress = i.readFloat(); b.hp = i.readFloat(); b.ownerId = i.readInt(); b.fuel = i.readFloat()
             b.quality = Quality.entries[i.readByte().toInt()]; b.forbidden = i.readBoolean(); b.charge = i.readFloat(); b.shells = i.readInt()
             b.prisonerBed = i.readBoolean(); b.occupant = i.readInt()
+            if (version >= 40) b.doorHold = i.readInt()
             repeat(i.readInt()) {
                 val bill = Bill(Recipe.entries[i.readInt()])
                 bill.mode = BillMode.entries[i.readInt()]; bill.target = i.readInt(); bill.done = i.readInt()
@@ -416,6 +514,7 @@ object SaveGame {
             s.quality = Quality.entries[i.readByte().toInt()]; s.rot = i.readFloat(); s.hp = i.readFloat(); s.forbidden = i.readBoolean()
             s.corpseOf = i.opt(); val cr = i.readInt(); s.corpseRace = if (cr >= 0) Race.entries[cr] else null
             s.corpseColonist = i.readBoolean(); s.corpseAge = i.readInt()
+            s.migrateRot(version)
             map.items[map.idx(x, y)] = s
         }
         repeat(i.readInt()) { val c = i.readInt(); map.fires[c] = Fire(i.readFloat()) }
@@ -429,7 +528,7 @@ object SaveGame {
         g.nextRaid = nr; g.nextWanderer = nw; g.nextPod = np; g.nextTempEvent = nt; g.nextMisc = nm; g.nextTrader = ntr
         g.raidActive = raidActive; g.raidStartCount = raidStart; g.raidEnds = raidEnds; g.raidStartedAt = rsa
         g.weather = weather; g.weatherUntil = weatherUntil
-        g.tempOffset = tempOffset; g.tempEventUntil = tempUntil; g.tempEventName = tempName
+        g.tempOffset = tempOffset; g.tempEventUntil = tempUntil; g.tempEventName = LegacyNames.tempEventName(tempName, version)
         g.solarFlareUntil = flare; g.toxicFalloutUntil = toxic; g.eclipseUntil = eclipse
         g.homeX = hx; g.homeY = hy; g.windFactor = wind
         g.statsKilled = killed; g.silverEarned = earned; g.hintBits = hints
@@ -440,6 +539,7 @@ object SaveGame {
         g.traders.addAll(traderList)
         g.raidLastEnded = raidEnded
         g.incidentLast.putAll(incidents)
+        g.lastRandomIncidents.addAll(recentRandom.take(RECENT_INCIDENT_WEIGHTS.size))
 
         repeat(i.readInt()) { g.pawns.add(readPawn(i, tick, version)) }
         run {
@@ -455,7 +555,8 @@ object SaveGame {
                 if (st != null) { st.silver = silver; st.stockTick = stockTick; st.destroyedUntil = destroyed; st.stock.addAll(stock); st.request = req }
             }
             g.world.nextSiteId = i.readInt()
-            repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.tickAt(version), i.readFloat(), i.readUTF())) }
+            // A site name is live text. A pirate camp was renamed in version 28, so a save below 28 is translated (names.md section 2).
+            repeat(i.readInt()) { g.world.sites.add(Site(i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.readInt(), i.tickAt(version), i.readFloat(), i.readUTF().let { if (version < 28) LegacyNames.siteName(it, version) else it })) }
             if (version >= 21) {
                 g.world.nextQuestId = i.readInt()
                 repeat(i.readInt()) {
@@ -469,7 +570,8 @@ object SaveGame {
             repeat(i.readInt()) {
                 val c = Caravan(i.readInt(), i.readUTF(), i.readInt())
                 c.destination = i.readInt(); c.progress = i.readFloat().fromOldBase(version); c.resting = i.readBoolean(); c.goingHome = i.readBoolean()
-                c.lastEvent = i.readUTF(); c.forageNote = i.readBoolean()
+                // The last-event note names a battle label, which may be a renamed pirate name (LegacyNames.caravanNote).
+                c.lastEvent = LegacyNames.caravanNote(i.readUTF(), version); c.forageNote = i.readBoolean()
                 repeat(i.readInt()) { c.route.add(i.readInt()) }
                 c.inventory.addAll(i.readStock(version))
                 if (version >= 16) c.inBattle = i.readBoolean()
@@ -477,8 +579,9 @@ object SaveGame {
                 g.caravans.add(c)
             }
         }
+        // Log lines are translated on read, wording only: names and the rest of each line stay as saved (LegacyNames.logLine).
         g.log.clear()
-        repeat(i.readInt()) { g.log.add(LogEntry(i.tickAt(version), i.readUTF(), i.readInt())) }
+        repeat(i.readInt()) { g.log.add(LogEntry(i.tickAt(version), LegacyNames.logLine(i.readUTF(), version), i.readInt())) }
         if (version >= 16) {
             if (i.readBoolean()) g.pendingBattle = i.readPlan(version)
             if (i.readBoolean()) {
@@ -512,7 +615,12 @@ object SaveGame {
             g.playMs = i.readLong()
             repeat(i.readInt()) { g.unreachable[i.readLong()] = i.tickAt(version) }
         }
+        // Version 40: the indoor room temperatures, applied once the rooms are rebuilt (docs/fidelity/heat-exchange.md).
+        val roomTemps = if (version >= 40) List(i.readInt()) { Pair(i.readInt(), i.readFloat()) } else emptyList()
+        // Before version 38 there is no roof grid: it is rebuilt from the old indoor rule, before the rooms are, so no room changes status.
+        if (version < 38) map.adoptLegacyRoofs()
         map.rebuildRooms(g.outdoorTemp())
+        for ((cell, t) in roomTemps) map.restoreRoomTemp(cell, t)
         for (p in g.pawns) g.recomputeHealth(p)
         for (c in g.caravans) for (p in c.members) g.recomputeHealth(p)
         g.restoreJobState()
@@ -533,7 +641,7 @@ object SaveGame {
         for (s in p.passion.indices) p.passion[s] = i.readInt()
         for (s in p.priority.indices) p.priority[s] = i.readInt()
         repeat(i.readInt()) { p.traits.add(Trait.entries[i.readInt()]) }
-        p.backstory = i.readUTF(); p.incapable = i.readInt()
+        p.backstory = i.readUTF().let { if (version < 31) LegacyNames.backstory(it, version) else it }; p.incapable = i.readInt()
         val wi = i.readInt(); p.weaponItem = if (wi >= 0) ItemType.entries[wi] else null; p.weaponQuality = Quality.entries[i.readInt()]
         repeat(i.readInt()) { p.apparel.add(Worn(ItemType.entries[i.readInt()], Quality.entries[i.readInt()], i.readFloat())) }
         repeat(i.readInt()) {
@@ -547,7 +655,7 @@ object SaveGame {
             h.tended = i.readBoolean(); h.tendQuality = i.readFloat(); h.age = i.readInt().fromOldBase(version); h.part = i.readInt(); h.duration = i.readInt().fromOldBase(version)
             p.hediffs.add(h)
         }
-        repeat(i.readInt()) { p.thoughts.add(Thought(i.readUTF(), i.readFloat(), i.tickAt(version) + now)) }
+        repeat(i.readInt()) { p.thoughts.add(Thought(i.readUTF().let { if (version < 30) LegacyNames.thoughtLabel(it, version) else it }, i.readFloat(), i.tickAt(version) + now)) }
         repeat(i.readInt()) { p.opinion[i.readInt()] = i.readInt() }
         p.spouse = i.readInt(); p.lover = i.readInt()
         for (s in p.schedule.indices) p.schedule[s] = i.readInt()
@@ -583,6 +691,13 @@ object SaveGame {
             repeat(i.readInt()) { p.reserved.add(i.readInt()) }
             if (i.readBoolean()) p.job = i.readJob(version)
         }
+        if (version >= 32) {
+            p.outdoorsNeed = i.readFloat(); p.indoorsNeed = i.readFloat(); p.ticksAtZeroRest = i.readInt()
+            p.moodBelowExtremeTicks = i.readInt(); p.moodBelowMajorTicks = i.readInt(); p.moodBelowMinorTicks = i.readInt(); p.breakCooldown = i.readInt()
+            repeat(i.readInt()) { val drug = ItemType.entries[i.readInt()]; p.drugTolerance[drug] = i.readFloat() }
+        }
+        if (version >= 33) for (k in p.xpToday.indices) p.xpToday[k] = i.readFloat()
+        if (version >= 36) { p.burnSize = i.readFloat(); p.staggerUntil = i.readLong() }
         return p
     }
 }

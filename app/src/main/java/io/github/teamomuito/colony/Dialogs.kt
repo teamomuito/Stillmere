@@ -171,15 +171,15 @@ class Dialogs(val a: MainActivity) {
     // ================================================================== new colony wizard
     fun newColony(firstRun: Boolean) {
         var seed = System.currentTimeMillis()
-        var scenario = Scenario.CRASHLANDED
+        var scenario = Scenario.SALVAGE_CREW
         var biome = Biome.TEMPERATE
         var story = Storyteller.MARLOWE
-        var diff = Difficulty.RANDY
+        var diff = Difficulty.NORMAL
         var size = Game.MAP_SIZE
         var g = Game(seed, GameMap.generateFor(size, size, seed, biome))
         val crew = ArrayList<Pawn>()
-        fun crewSize() = when (scenario) { Scenario.CRASHLANDED -> 3; Scenario.LOST_TRIBE -> 5; Scenario.RICH_EXPLORER -> 1; Scenario.SOLO -> 1 }
-        fun roll(): Pawn = g.newHuman(0, 0, Faction.PLAYER, scenario == Scenario.LOST_TRIBE)
+        fun crewSize() = when (scenario) { Scenario.SALVAGE_CREW -> 3; Scenario.QUIET_ENCLAVE -> 5; Scenario.SURPLUS_START -> 1; Scenario.SOLO -> 1 }
+        fun roll(): Pawn = g.newHuman(0, 0, Faction.PLAYER, scenario == Scenario.QUIET_ENCLAVE)
         fun resetCrew() { g.pawns.clear(); crew.clear(); repeat(crewSize()) { crew.add(roll()) } }
         resetCrew()
 
@@ -215,7 +215,7 @@ class Dialogs(val a: MainActivity) {
             }
             fun renderSize() {
                 sizeBox.removeAllViews()
-                for ((label, n) in listOf("Small 75" to 75, "Medium 100" to 100, "Large 150" to 150, "Huge 200" to 200)) sizeBox.addView(ui.button(label, 11f, selected = size == n) {
+                for ((label, n) in listOf("Standard ${Game.MAP_SIZE}" to Game.MAP_SIZE)) sizeBox.addView(ui.button(label, 11f, selected = size == n) {
                     size = n; g = Game(seed, GameMap.generateFor(size, size, seed, biome)); resetCrew(); renderSize(); renderCrew()
                 }, ui.lin(-2, -2, 0f, 0, 3, 4, 0))
             }
@@ -394,9 +394,9 @@ class Dialogs(val a: MainActivity) {
 
     fun surgery(p: Pawn) {
         dialog("Surgery: ${p.name}", { body, d ->
-            body.addView(ui.label("The patient walks to a bed; a doctor (skill 3+) operates. Hospital beds improve success.", 11.5f, ui.dim))
+            body.addView(ui.label("The patient walks to a bed; a doctor (skill 3+) operates. Infirmary cots improve success.", 11.5f, ui.dim))
             val ops = game.availableSurgeries(p)
-            if (ops.isEmpty()) body.addView(ui.label("No operations available. Research Prosthetics or Bionics for implants.", 12f, ui.warn))
+            if (ops.isEmpty()) body.addView(ui.label("No operations available. Research Limb crafting or Augmentation for implants.", 12f, ui.warn))
             for (o in ops) {
                 val cost = if (o.implant != null) o.implant!!.cost.joinToString(", ") { "${it.second} ${it.first.label.lowercase()}" } else "no materials"
                 body.addView(ui.button("${o.label(p)}\n$cost", 11.5f) { game.queueSurgery(p, o); d.dismiss(); a.panels.showPawn(p) }, ui.lin(-1, -2, 0f, 0, 3, 0, 0))

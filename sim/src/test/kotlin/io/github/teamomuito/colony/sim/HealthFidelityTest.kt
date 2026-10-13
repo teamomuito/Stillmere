@@ -10,7 +10,7 @@ private const val EPS = 0.005f
 
 private fun healthGame(seed: Long): Game {
     val g = Game(seed)
-    g.startNewColony(Scenario.LOST_TRIBE)
+    g.startNewColony(Scenario.QUIET_ENCLAVE)
     g.mentalBreaksEnabled = false
     g.pawns.removeAll { it.isAnimal && it.faction == Faction.WILD }
     g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE; g.nextWanderer = Long.MAX_VALUE; g.nextTrader = Long.MAX_VALUE
@@ -58,7 +58,7 @@ class BodyModelTest {
         val human = g.colonists.first()
         val torso = human.race.body.indexOfFirst { it.tag == PartTag.TORSO }
         assertEquals(40f, human.partMax(torso), 0f)
-        assertEquals(40f * 2.8f, HealthRules.partMax(40f, Race.MUFFALO.hpScale), 1e-4f)
+        assertEquals(40f * 2.8f, HealthRules.partMax(40f, Race.SHAGOX.hpScale), 1e-4f)
     }
 
     @Test fun hitsLandOnOuterPartsInProportionToCoverage() {
@@ -112,8 +112,8 @@ class CapacityFormulaTest {
         assertEquals(1f, HealthRules.consciousness(1f, 0f, 0f, 1f, 1f, 1f), 0f)
         assertEquals("brain scales it directly", 0.5f, HealthRules.consciousness(0.5f, 0f, 0f, 1f, 1f, 1f), EPS)
         assertEquals("pain takes 55% of itself", 1f - 0.4f * 0.55f, HealthRules.consciousness(1f, 0.4f, 0f, 1f, 1f, 1f), EPS)
-        assertEquals("blood loss bites after 30%", 1f - 0.2f * 1.4f, HealthRules.consciousness(1f, 0f, 0.5f, 1f, 1f, 1f), EPS)
-        assertEquals("no effect from blood loss below 30%", 1f, HealthRules.consciousness(1f, 0f, 0.3f, 1f, 1f, 1f), 0f)
+        assertEquals("bleed-out bites after 30%", 1f - 0.2f * 1.4f, HealthRules.consciousness(1f, 0f, 0.5f, 1f, 1f, 1f), EPS)
+        assertEquals("no effect from bleed-out below 30%", 1f, HealthRules.consciousness(1f, 0f, 0.3f, 1f, 1f, 1f), 0f)
         assertEquals("pumping has weight 0.2", 0.9f, HealthRules.consciousness(1f, 0f, 0f, 1f, 0.5f, 1f), EPS)
         assertEquals("breathing has weight 0.2", 0.9f, HealthRules.consciousness(1f, 0f, 0f, 0.5f, 1f, 1f), EPS)
         assertEquals("filtration has weight 0.1", 0.9f, HealthRules.consciousness(1f, 0f, 0f, 1f, 1f, 0f), EPS)
@@ -320,7 +320,7 @@ class InjuryConditionTest {
         p.bloodLoss = 1f
         g.checkDeath(p, null)
         assertTrue(p.dead)
-        assertTrue(g.graveyard.last(), g.graveyard.last().contains("blood loss"))
+        assertTrue(g.graveyard.last(), g.graveyard.last().contains("bleed-out"))
     }
 
     @Test fun infectionKillsAt100Percent() {
@@ -370,7 +370,7 @@ class InfectionRuleTest {
         val p = g.colonists.first()
         g.hediffsClear(p)
         p.injuries.add(Injury(0, DamageKind.CUT, 6f, infection = 0.6f))
-        g.tendPawn(null, p, ItemType.MEDS_INDUSTRIAL)
+        g.tendPawn(null, p, ItemType.MEDS_STERILE_DRESSING)
         val inj = p.injuries.first()
         assertTrue(inj.infection < 0.6f)
         assertEquals(0.6f - HealthRules.TEND_INFECTION_CURE * inj.tendQuality, inj.infection, 1e-5f)
@@ -413,8 +413,8 @@ class HealingRuleTest {
         val g = healthGame(5501)
         val a = g.colonists[0]; val b = g.colonists[1]
         for (p in listOf(a, b)) { p.injuries.clear(); p.injuries.add(Injury(0, DamageKind.BRUISE, 8f)); p.food = 0.8f; g.recomputeHealth(p) }
-        // Same wound, but b sleeps in a hospital bed.
-        val bed = Building(BuildDef.HOSPITAL_BED, g.homeX + 3, g.homeY + 3, true)
+        // Same wound, but b sleeps in an infirmary cot.
+        val bed = Building(BuildDef.INFIRMARY_COT, g.homeX + 3, g.homeY + 3, true)
         g.map.setBuilding(bed)
         b.bedId = g.map.idx(bed.x, bed.y)
         b.job = Job(JobType.SLEEP, b.x, b.y)
@@ -485,19 +485,19 @@ class TendingRuleTest {
     }
 
     @Test fun medicineItemsCarryTheirPotencyAndCap() {
-        assertEquals(1.0f, ItemType.MEDS_INDUSTRIAL.potency, 0f)
-        assertEquals(1.0f, ItemType.MEDS_INDUSTRIAL.maxTendQuality, 0f)
-        assertEquals(0.6f, ItemType.MEDS_HERBAL.potency, 0f)
-        assertEquals(0.7f, ItemType.MEDS_HERBAL.maxTendQuality, 0f)
+        assertEquals(1.0f, ItemType.MEDS_STERILE_DRESSING.potency, 0f)
+        assertEquals(1.0f, ItemType.MEDS_STERILE_DRESSING.maxTendQuality, 0f)
+        assertEquals(0.6f, ItemType.MEDS_LEAF_POULTICE.potency, 0f)
+        assertEquals(0.7f, ItemType.MEDS_LEAF_POULTICE.maxTendQuality, 0f)
     }
 
     @Test fun herbalIsWorseThanIndustrialAndBothBeatBareHands() {
         val g = healthGame(5601)
         val doc = g.colonists[1]
-        doc.skill[SkillType.MEDICINE.ordinal] = 8
+        doc.skill[SkillType.HEALING.ordinal] = 8
         g.recomputeHealth(doc)
         fun avg(med: ItemType?) = (0 until 200).map { g.tendQuality(doc, med, false) }.average()
-        val none = avg(null); val herbal = avg(ItemType.MEDS_HERBAL); val industrial = avg(ItemType.MEDS_INDUSTRIAL)
+        val none = avg(null); val herbal = avg(ItemType.MEDS_LEAF_POULTICE); val industrial = avg(ItemType.MEDS_STERILE_DRESSING)
         assertTrue("none $none < herbal $herbal", none < herbal)
         assertTrue("herbal $herbal < industrial $industrial", herbal < industrial)
     }
@@ -506,7 +506,7 @@ class TendingRuleTest {
         fun run(): List<Float> {
             val g = healthGame(5602)
             val doc = g.colonists[1]
-            return (0 until 20).map { g.tendQuality(doc, ItemType.MEDS_INDUSTRIAL, it % 2 == 0) }
+            return (0 until 20).map { g.tendQuality(doc, ItemType.MEDS_STERILE_DRESSING, it % 2 == 0) }
         }
         assertEquals(run(), run())
     }
@@ -515,10 +515,10 @@ class TendingRuleTest {
         val results = listOf(2, 14).map { skill ->
             val g = healthGame(5603)
             val doc = g.colonists[1]; val patient = g.colonists[0]
-            doc.skill[SkillType.MEDICINE.ordinal] = skill
+            doc.skill[SkillType.HEALING.ordinal] = skill
             g.recomputeHealth(doc)
             g.woundPart(patient, 0, DamageKind.CUT, 8f)
-            g.tendPawn(doc, patient, ItemType.MEDS_INDUSTRIAL)
+            g.tendPawn(doc, patient, ItemType.MEDS_STERILE_DRESSING)
             patient.injuries.first { !it.scar }.tendQuality
         }
         assertTrue("${results[0]} < ${results[1]}", results[0] < results[1])
@@ -527,14 +527,14 @@ class TendingRuleTest {
     @Test fun selfTendingUsesTheSelfPenalty() {
         val own = healthGame(5604)
         val p = own.colonists[0]
-        p.skill[SkillType.MEDICINE.ordinal] = 4
+        p.skill[SkillType.HEALING.ordinal] = 4
         own.recomputeHealth(p)
-        val self = own.tendQuality(p, ItemType.MEDS_INDUSTRIAL, false, self = true)
+        val self = own.tendQuality(p, ItemType.MEDS_STERILE_DRESSING, false, self = true)
         val other = healthGame(5604)
         val q2 = other.colonists[0]
-        q2.skill[SkillType.MEDICINE.ordinal] = 4
+        q2.skill[SkillType.HEALING.ordinal] = 4
         other.recomputeHealth(q2)
-        val away = other.tendQuality(q2, ItemType.MEDS_INDUSTRIAL, false, self = false)
+        val away = other.tendQuality(q2, ItemType.MEDS_STERILE_DRESSING, false, self = false)
         assertEquals(0.7f, self / away, EPS)
     }
 
@@ -543,12 +543,12 @@ class TendingRuleTest {
         val p = g.colonists[0]
         g.woundPart(p, 0, DamageKind.CUT, 6f)
         g.woundPart(p, p.race.body.indexOfFirst { it.tag == PartTag.LEG }, DamageKind.CUT, 6f)
-        g.addHediff(p, HediffKind.FLU, 0.3f)
+        g.addHediff(p, HediffKind.CHEST_COUGH, 0.3f)
         assertTrue(p.untended)
-        g.tendPawn(g.colonists[1], p, ItemType.MEDS_HERBAL)
+        g.tendPawn(g.colonists[1], p, ItemType.MEDS_LEAF_POULTICE)
         assertFalse(p.untended)
         assertTrue(p.injuries.filter { !it.scar }.all { it.tended && it.tendQuality > 0f })
-        assertTrue(p.hediff(HediffKind.FLU)!!.tended)
+        assertTrue(p.hediff(HediffKind.CHEST_COUGH)!!.tended)
     }
 
     @Test fun aHigherQualityTendReplacesALowerOneButNotViceVersa() {
@@ -557,12 +557,12 @@ class TendingRuleTest {
         g.woundPart(p, 0, DamageKind.CUT, 6f)
         val inj = p.injuries.first()
         inj.tended = true; inj.tendQuality = 0.99f
-        g.tendPawn(null, p, ItemType.MEDS_HERBAL)
+        g.tendPawn(null, p, ItemType.MEDS_LEAF_POULTICE)
         assertEquals(0.99f, inj.tendQuality, 0f)
     }
 }
 
-// ====================================================================== surgery, prosthetics, scars, lost limbs
+// ====================================================================== surgery, implants, scars, lost limbs
 
 class SurgeryRuleTest {
     @Test fun amputatingALimbRemovesItAndLeavesATendedStump() {
@@ -578,26 +578,26 @@ class SurgeryRuleTest {
         assertTrue("one arm fewer weakens manipulation", p.capacity(Cap.MANIPULATION) < 1f)
     }
 
-    @Test fun aPegLegRestoresPartOfWhatAmputationTook() {
+    @Test fun aReplacementLegRestoresPartOfWhatAmputationTook() {
         val g = healthGame(5702)
         val p = g.colonists.first()
         val leg = p.parts(PartTag.LEG).first()
         g.applySurgery(p, SurgeryOrder(SurgeryKind.AMPUTATE, leg, null))
         g.recomputeHealth(p)
         val without = p.capacity(Cap.MOVING)
-        g.applySurgery(p, SurgeryOrder(SurgeryKind.INSTALL, leg, Implant.PEG_LEG))
+        g.applySurgery(p, SurgeryOrder(SurgeryKind.INSTALL, leg, Implant.WOODEN_SHANK))
         g.recomputeHealth(p)
         assertFalse(p.partMissing(leg))
-        assertEquals(Implant.PEG_LEG.eff, p.partEff(leg), 0f)
+        assertEquals(Implant.WOODEN_SHANK.eff, p.partEff(leg), 0f)
         assertTrue(p.capacity(Cap.MOVING) > without)
-        assertTrue("a peg leg is worse than the leg it replaced", p.capacity(Cap.MOVING) < 1f)
+        assertTrue("a wooden shank is worse than the leg it replaced", p.capacity(Cap.MOVING) < 1f)
     }
 
-    @Test fun bionicPartsBeatNaturalOnes() {
+    @Test fun augmentedPartsBeatNaturalOnes() {
         val g = healthGame(5703)
         val p = g.colonists.first()
         val eye = p.parts(PartTag.EYE).first()
-        g.applySurgery(p, SurgeryOrder(SurgeryKind.INSTALL, eye, Implant.BIONIC_EYE))
+        g.applySurgery(p, SurgeryOrder(SurgeryKind.INSTALL, eye, Implant.OPTIC_LENS))
         g.recomputeHealth(p)
         assertTrue(p.partEff(eye) > 1f)
         assertTrue(p.capacity(Cap.SIGHT) > 1f - 1e-4f)
@@ -611,9 +611,9 @@ class SurgeryRuleTest {
         assertTrue("no implants without research", offers.none { it.kind == SurgeryKind.INSTALL })
         val leg = p.parts(PartTag.LEG).first()
         g.applySurgery(p, SurgeryOrder(SurgeryKind.AMPUTATE, leg, null))
-        assertTrue("peg leg is gated behind prosthetics research", g.availableSurgeries(p).none { it.implant == Implant.PEG_LEG })
-        g.researchDone.add(Research.BIONICS_BASIC)
-        assertTrue(g.availableSurgeries(p).any { it.kind == SurgeryKind.INSTALL && it.implant == Implant.PEG_LEG && it.part == leg })
+        assertTrue("wooden shank is gated behind limb crafting research", g.availableSurgeries(p).none { it.implant == Implant.WOODEN_SHANK })
+        g.researchDone.add(Research.LIMB_CRAFTING)
+        assertTrue(g.availableSurgeries(p).any { it.kind == SurgeryKind.INSTALL && it.implant == Implant.WOODEN_SHANK && it.part == leg })
     }
 
     @Test fun noOperationIsOfferedForAnimalsOrMachines() {
@@ -637,7 +637,7 @@ class InjuryToRecoveryTest {
         val g = healthGame(seed)
         val p = g.colonists[0]
         val doc = g.colonists[1]
-        doc.skill[SkillType.MEDICINE.ordinal] = 8
+        doc.skill[SkillType.HEALING.ordinal] = 8
         g.recomputeHealth(doc)
         p.food = 0.9f
         // Two crushed legs and a cut to the torso: the patient cannot walk and is bleeding.
@@ -649,7 +649,7 @@ class InjuryToRecoveryTest {
         val downed = p.downed
         assertTrue("moving is ${p.capacity(Cap.MOVING)}", p.capacity(Cap.MOVING) <= HealthRules.MOVING_MIN)
         val bleedingBefore = p.bleeding
-        g.tendPawn(doc, p, ItemType.MEDS_INDUSTRIAL)
+        g.tendPawn(doc, p, ItemType.MEDS_STERILE_DRESSING)
         val q = p.injuries.first { !it.scar && it.kind == DamageKind.CUT }.tendQuality
         assertTrue("tending slows the bleeding", p.bleeding < bleedingBefore)
         var standUp = -1

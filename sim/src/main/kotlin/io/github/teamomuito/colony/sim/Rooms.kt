@@ -61,7 +61,7 @@ fun GameMap.computeRoomStats() {
                 bd.def == BuildDef.TABLE -> tables[r]++
                 bd.def == BuildDef.CHAIR || bd.def == BuildDef.STOOL -> chairs[r]++
                 bd.def.joy > 0f -> joy[r]++
-                bd.def == BuildDef.STOVE_FUEL || bd.def == BuildDef.STOVE_ELEC -> kitchen[r]++
+                bd.def == BuildDef.EMBER_OVEN || bd.def == BuildDef.HOTPLATE -> kitchen[r]++
                 bd.def.workbench -> bench[r]++
             }
         }

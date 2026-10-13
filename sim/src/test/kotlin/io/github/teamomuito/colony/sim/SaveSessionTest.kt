@@ -24,7 +24,7 @@ private class Fixture {
     val session = SaveSession(store, settings)
     fun game(seed: Long, ticks: Int = 0): Game {
         val g = Game(seed)
-        g.startNewColony(Scenario.LOST_TRIBE)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
         repeat(ticks) { g.step() }
         return g
     }

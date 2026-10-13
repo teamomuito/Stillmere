@@ -28,7 +28,7 @@ internal fun Game.restoreJobState() {
         }
     }
 
-    // A hospital bed is held by the patient whose job holds it. A bed whose patient has no job any more is free.
+    // An infirmary cot is held by the patient whose job holds it. A cot whose patient has no job any more is free.
     for (b in map.buildings()) if (b.def.medical && b.occupant >= 0 && byId[b.occupant]?.job == null) b.occupant = -1
 
     for (p in pawns) {

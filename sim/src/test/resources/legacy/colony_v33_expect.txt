@@ -1,0 +1,17 @@
+colonists=5
+tick=135000
+name.0=Milo Jovanovic
+name.1=Elin Lindqvist
+name.2=Willa Kowal
+name.3=Cleo Duarte
+name.4=Iris Eklund
+incident.METEORITE=135000
+incident.AURORA=135000
+raidLastEnded=-1
+nextRaid=718437
+nextWanderer=239440
+nextPod=351482
+nextTempEvent=565135
+nextMisc=364000
+nextTrader=557662
+raidCounter=0
