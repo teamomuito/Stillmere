@@ -299,7 +299,7 @@ class RoofsTest {
         val m = g.map
         m.setRoof(m.idx(100, 100), true); m.setRoof(m.idx(101, 100), true)
         val back = SaveGame.read(SaveGame.write(g))
-        assertEquals(38, SaveGame.VERSION)
+        assertEquals(39, SaveGame.VERSION)
         assertTrue(back.map.roof[back.map.idx(100, 100)] && back.map.roof[back.map.idx(101, 100)])
         assertEquals("the same count of roofs", m.roof.count { it }, back.map.roof.count { it })
     }

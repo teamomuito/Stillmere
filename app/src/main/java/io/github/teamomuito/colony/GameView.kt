@@ -203,6 +203,7 @@ class GameView(context: Context) : View(context) {
         Terrain.SAND -> 0xFFC4B482.toInt()
         Terrain.MARSH -> 0xFF4C6948.toInt()
         Terrain.MUD -> 0xFF4A3D2E.toInt()
+        Terrain.GRASS -> 0xFF5E7A3C.toInt()
         Terrain.ICE -> 0xFFCFE8F2.toInt()
         Terrain.WATER_SHALLOW -> 0xFF4F82AD.toInt()
         Terrain.WATER_DEEP -> 0xFF2C4D78.toInt()

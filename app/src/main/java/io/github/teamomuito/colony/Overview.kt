@@ -28,6 +28,7 @@ class OverviewView(context: Context, private val game: Game, private val onPick:
                 Terrain.SOIL -> 0xFF6B5A3C.toInt(); Terrain.RICH_SOIL -> 0xFF54452B.toInt(); Terrain.GRAVEL -> 0xFF807D76.toInt()
                 Terrain.SAND -> 0xFFC4B482.toInt(); Terrain.MARSH -> 0xFF4C6948.toInt(); Terrain.MUD -> 0xFF4A3D2E.toInt()
                 Terrain.ICE -> 0xFFCFE8F2.toInt(); Terrain.WATER_SHALLOW -> 0xFF4F82AD.toInt(); Terrain.WATER_DEEP -> 0xFF2C4D78.toInt()
+                Terrain.GRASS -> 0xFF5E7A3C.toInt()
                 Terrain.ROCK -> 0xFF4A4B50.toInt()
             }
             if (m.plant[i]?.type?.isTree == true) c = 0xFF2E5E2F.toInt()

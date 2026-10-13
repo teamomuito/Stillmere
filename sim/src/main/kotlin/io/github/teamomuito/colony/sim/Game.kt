@@ -468,7 +468,9 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             return map.floor[i] != def && (under == null || !under.def.isWall && !under.def.isDoor)
         }
         if (map.building[i] != null) return false
-        if (def == BuildDef.GROW_TRAY && map.plant[i] != null) return false
+        // A grass cover is cleared by the placement (placeBlueprint), as it is for any building; other plants still block a tray.
+        val under = map.plant[i]
+        if (def == BuildDef.GROW_TRAY && under != null && under.type != PlantType.GRASS) return false
         if (def.isShip && def == BuildDef.NAVIGATION_BRAIN && map.buildings().any { it != null && it.def == BuildDef.NAVIGATION_BRAIN }) return false
         if (def.workbench && def != BuildDef.CAMPFIRE && def != BuildDef.WORKSHOP_MAT && map.plant[i]?.type?.isTree == true) return false
         return true

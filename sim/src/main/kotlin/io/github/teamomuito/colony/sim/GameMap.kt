@@ -9,8 +9,11 @@ import kotlin.math.round
 class Plant(val type: PlantType, val x: Int, val y: Int, var growth: Float) {
     var age = 0
     var blighted = false
-    /** A crop can be harvested once it passes [HARVEST_MIN_GROWTH] (RimWorld/Plant.cs:115). Other plants keep the full-growth rule. */
-    val mature get() = if (type.crop) growth > HARVEST_MIN_GROWTH else (!type.isTree && !type.regrows && type != PlantType.BRAMBLE) || growth >= 1f
+    /**
+     * A crop or grass can be harvested once it passes [HARVEST_MIN_GROWTH] (RimWorld/Plant.cs:115). Other plants keep the full-growth
+     * rule.
+     */
+    val mature get() = if (type.crop || type == PlantType.GRASS) growth > HARVEST_MIN_GROWTH else (!type.isTree && !type.regrows && type != PlantType.BRAMBLE) || growth >= 1f
 }
 
 class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
@@ -598,7 +601,8 @@ class GameMap(val w: Int, val h: Int) {
         for (soilOnly in listOf(true, false)) for (r in 0 until max(w, h)) for (y in cy - r..cy + r) for (x in cx - r..cx + r) {
             if (!inB(x, y)) continue
             val t = terrain[idx(x, y)]
-            if (soilOnly && !(t == Terrain.SOIL || t == Terrain.RICH_SOIL || (desertLike && t == Terrain.SAND))) continue
+            // Grass ground counts as soil here, so the start spot is the same cell as it was before grass existed.
+            if (soilOnly && !(t == Terrain.SOIL || t == Terrain.GRASS || t == Terrain.RICH_SOIL || (desertLike && t == Terrain.SAND))) continue
             if (open(x, y)) return x to y
         }
         return null
@@ -668,6 +672,15 @@ class GameMap(val w: Int, val h: Int) {
         /** Scale and threshold of the tundra gravel patches: about 30% of the soil. */
         const val GRAVEL_PATCH = 12f
         const val GRAVEL_SHARE = 0.58f
+        /**
+         * Grass ground: soil on a non-desert map where the grass patch noise is above [GRASS_PATCH_SHARE] (Stillmere's own rule, C;
+         * the reference has no grass terrain). The cover on grass ground: where the cover noise is above [GRASS_COVER_SHARE]. Both are
+         * their own noises, so they draw nothing from the RNG (docs/fidelity/grass.md).
+         */
+        const val GRASS_PATCH_SCALE = 14f
+        const val GRASS_PATCH_SHARE = 0.55f
+        const val GRASS_COVER_SCALE = 6f
+        const val GRASS_COVER_SHARE = 0.35f
 
         val DX4 = intArrayOf(1, -1, 0, 0)
         val DY4 = intArrayOf(0, 0, 1, -1)
@@ -749,6 +762,8 @@ class GameMap(val w: Int, val h: Int) {
             val tree = Noise(seed.toInt() xor 0xdef0)
             val rockN = Noise(seed.toInt() xor 0x2468)
             val gravelN = Noise(seed.toInt() xor 0x3579)
+            val grassN = Noise(seed.toInt() xor 0x4c1f)
+            val coverN = Noise(seed.toInt() xor 0x7e21)
             val cx = w / 2
             val cy = h / 2
             val desert = biome == Biome.DESERT || biome == Biome.ARID
@@ -805,6 +820,8 @@ class GameMap(val w: Int, val h: Int) {
                 if (tundra && t == Terrain.WATER_SHALLOW) t = Terrain.ICE
                 // Gravel in the tundra comes in patches from its own noise, not as scattered single tiles.
                 if (tundra && (t == Terrain.SOIL || t == Terrain.RICH_SOIL) && gravelN.fractal(x.toFloat(), y.toFloat(), GRAVEL_PATCH) > GRAVEL_SHARE) t = Terrain.GRAVEL
+                // Grass ground: soil in grass patches, outside the desert. Its own noise, so no RNG draw changes (docs/fidelity/grass.md).
+                if (t == Terrain.SOIL && !desert && grassN.fractal(x.toFloat(), y.toFloat(), GRASS_PATCH_SCALE) > GRASS_PATCH_SHARE) t = Terrain.GRASS
                 m.terrain[i] = t
                 if (t == Terrain.ROCK) {
                     m.natRoof[i] = true
@@ -889,6 +906,13 @@ class GameMap(val w: Int, val h: Int) {
                 } else if (rng.chance(0.004f)) {
                     m.plant[i] = Plant(PlantType.BRAMBLE, x, y, 1f)
                 }
+            }
+            // Grass cover: a fully grown grass plant on each grass cell that has no other plant and passes the cover noise. It is
+            // placed after the plants above and draws nothing from the RNG, so those plants are the same as before grass existed.
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = m.idx(x, y)
+                if (m.terrain[i] != Terrain.GRASS || m.plant[i] != null) continue
+                if (coverN.fractal(x.toFloat(), y.toFloat(), GRASS_COVER_SCALE) > GRASS_COVER_SHARE) m.plant[i] = Plant(PlantType.GRASS, x, y, 1f)
             }
             return m
         }

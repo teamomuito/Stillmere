@@ -561,7 +561,8 @@ internal fun Game.findGrow(p: Pawn): Job? {
     }
     val s = nearestCell(p, K_PLANT) {
         val z = map.zoneAt(it)
-        if (z == null || z.kind != ZoneKind.GROWING || !z.sow || map.plant[it] != null) return@nearestCell false
+        val under = map.plant[it]
+        if (z == null || z.kind != ZoneKind.GROWING || !z.sow || (under != null && under.type != PlantType.GRASS)) return@nearestCell false
         val bd = map.building[it]
         if (bd != null && bd.def != BuildDef.GROW_TRAY) return@nearestCell false
         val fert = if (bd?.def == BuildDef.GROW_TRAY && bd.powered) GROW_TRAY_GROWTH_FACTOR else map.terrain[it].fertility

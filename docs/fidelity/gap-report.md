@@ -139,7 +139,7 @@ borders water, mountains by an elevation threshold tuned by the world tile's hil
 berry bushes, feral mirewort, brambles, wildlife herds, a flat start area.
 
 **Missing:**
-* **Grass** (animals graze on any fertile, unroofed cell), flowers, bushes, most wild plants.
+* **Grass ground and grass cover** are in (round 18, `grass.md`): grass ground is a terrain with fertility 1.0 (UNVERIFIED), and the cover grows, is harvested for hay from 65 percent growth, and regrows. Still missing: animals grazing it (3.10), grass spread, flowers, bushes, most wild plants.
 * **Caves** (mountains are solid rock; `JobDrivers.kt:444` states cave-ins are not modelled), **ancient ruins**, steam geysers, map-edge features.
 * **Roofs.** Only a natural roof flag exists. There is no roof designation, no building of roofs, and no roof collapse.
 * **Ore as vanilla places it:** the subsoil auger reads the ore under its own cell, but ore only exists inside rock, which cannot be built on. See 3.9 (defect).
@@ -374,7 +374,9 @@ Building costs and power ratings are XML in vanilla and stay UNVERIFIED (see `ec
 | Butcher meat yield | Round-random of `meat x (0.55 + 0.3 x min(cook speed, 1.5))`, no rot term (round 16; D `Verse/Pawn.cs:2962`); the cook-speed term is C | round-random of meat amount times efficiency | efficiency mapping C | medium |
 | Cooking output count | Fixed output per recipe (`Recipes.kt`) | ceil(count x efficiency) | no source mapping for efficiency; left fixed | medium |
 
-**Missing:** grass and wild-plant ecology, plant fertility mapping beyond terrain, animal feed items beyond fodder and feed
+**Grass (round 18, `grass.md`):** grass ground (a terrain, fertility 1.0 UNVERIFIED) with a grass cover that grows by the shared plant rules, is harvested for hay from 65 percent growth, and regrows after a harvest. Vanilla's grass values are XML and are UNVERIFIED; the grass cover's yield is a Stillmere choice.
+
+**Missing:** wild-plant ecology (grass spread, plants from seed, death from lack of light, plant lifespan), plant fertility mapping beyond terrain, animal feed items beyond fodder and feed
 pellets, insect jelly, chocolate, and the like. Also not in this round: death from lack of light (needs a persisted counter on
 each plant, so a save bump), plant lifespan (needs plant hit points), the food-choice cut-off at 88% rot and the rotting boundary
 for non-meat foods (XML), and the dessicated corpse stage. The mash works (a separate bench for beer) is **not in the base game as far as I
@@ -632,7 +634,7 @@ Per `CLAUDE.md`: flagged, not deleted.
 ## 7. Top 10 gaps
 
 1. ~~**Time base (24,000 vs 60,000 ticks per day)**~~ **Done** (`7e402c9`): 60,000 ticks per day. (3.1)
-2. **Map: new colonies are 250 x 250 (round 6); no grass, caves or ruins.** Roofs and roof collapse are in (3.3, `roofs.md`); the app has no roof command yet. (3.2, 3.3)
+2. **Map: new colonies are 250 x 250 (round 6); grass ground and covers are in (round 18, `grass.md`); no caves or ruins.** Roofs and roof collapse are in (3.3, `roofs.md`); the app has no roof command yet. (3.2, 3.3, 3.9)
 3. **Needs and mood model:** the drains, hunger categories, break timing, drug tolerance and the four added needs now follow the decompiled reference (round 13, `needs-mood.md`). The thought catalogue, mood smoothing and the chemical interest need are still missing. (3.5)
 4. **Combat model** (3.11): band accuracy, the shooter factor, the cover pass, the layered armour roll, melee dodge and stagger, and burning are done from the reference (combat round, `combat.md`). Still open: the weapon stat values, the intercept and stray-miss model, minimum range, stun, EMP, shields, and the fire growth rows of 3.8.
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)
@@ -833,3 +835,16 @@ Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, 
 * **App, not built:** `app/src/main/java/io/github/teamomuito/colony/Dialogs.kt` (the new-colony size row) now offers the single 250 option. `:app` was not built, as the run's rules say.
 * **Not committed:** the changes are on the working tree of `ccr-41984ede-stlmp4`. `docs/fidelity/map.md` and `sim/src/test/resources/legacy/colony_v36.sav` are untracked.
 * **Open:** the owner confirms `Hills.MOUNTAIN` as impassable (16) or mountainous (15) for ore, and decides the rock threshold for it (0.5 here, 0.636 in the reference); decides whether any other size is offered (the reference lists 200 to 325); traces the origin of the 250 fixtures; confirms that the version 37 bump is wanted; decides whether battle ore should follow the map-size rule; decides whether the explicit 100 by 100 generation tests should move to 250; and confirms the ore density on 250 by 250 maps (25 to 100 blotches) as the intended balance. The other 3.2 rows are not adopted, for the reasons in map.md, and each needs its own change. The river and lake models are the largest of them.
+
+## 18. Grass terrain (3.2, 3.9), round 18
+
+Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, the rows not adopted and the open items are in [grass.md](grass.md). Nothing is committed.
+
+* **Added:** `Terrain.GRASS` (grass ground, fertility 1.0, passable, cost 1) and `PlantType.GRASS` (the grass cover: 3.5 grow days, 4 hay at full growth, 90 harvest work, regrows). Both are appended at the end of their enums. Grass ground is soil on maps outside the desert and arid biomes, where a patch noise is above 0.55; a grass cover sits on each grass cell where a cover noise is above 0.35. The noises are their own, so the generator draws nothing new from the RNG, and the trees, berries, mirewort and brambles are placed on the same cells as before.
+* **Growth and harvest use the shared plant rules (D):** growth per day at one over the grow days (`RimWorld/Plant.cs:346`), the fertility factor (`PlantUtility.cs:358`), the temperature and light ramps (`PlantUtility.cs:361-381`), the default 6 to 42 C band (`PlantProperties.cs:89, 91`). A grass cover is harvestable above 65 percent growth (`Plant.cs:115`), yields `count x (0.5 + 0.5 x share)` (`Plant.cs:934-947`), and after a harvest regrows from 0.05 (Stillmere's value; the reference mechanism is `Plant.cs:661`, and its value is XML).
+* **Not adopted:** the reference's fertility noise, elevation and terrain set (XML), the wild-plant density rules, spawn growth, lifespan and death from light (each with a reason in grass.md).
+* **Save format: `VERSION` 38 to 39, as a marker.** No field changed. The version-38 fixture `legacy/colony_v38.sav` was written by the code before the change; `GrassTest` checks that it loads with no grass and is rewritten as 39. A save with grass round-trips cell for cell. Old builds refuse a version-39 save with the usual "Unsupported save version" error. The owner may reverse the bump.
+* **Tests:** `GrassTest` (16, new); `ColonyMapSizeTest` (the literal 38 became 39; `colony_v38.sav` added to the table) and `RoofsTest` (the same literal). 766 tests in total (750 before, one of them failing on the fixture table, now fixed). The full run takes about 12 minutes, so it was run in three parts, each passing.
+* **Behaviour changes to check:** a grass cover burns (default flammability 0.5, UNVERIFIED), counts as a plant for garden-sense mood and room beauty, does not block a growing zone (the crop is sown over it), and does not block a grow tray's placement (other plants still do). These are C or UNVERIFIED and are open for the owner.
+* **App, not built:** `GameView.kt`, `Sprites.kt` and `Overview.kt` gained `GRASS` branches in their `Terrain` `when` expressions, which have no `else` and would not compile otherwise. The `:app` module was not built, as the run's rules say.
+* **Open:** the owner confirms the version 39 marker, the grass numbers that are not in the source (fertility, grow days, yield, work, and the patch and cover shares), whether grass should yield hay at all, and whether the garden-sense and room-beauty effects should count grass.

@@ -496,7 +496,9 @@ private fun Game.driveCut(p: Pawn, j: Job) {
 private fun Game.driveSow(p: Pawn, j: Job) {
     val i = map.idx(j.tx, j.ty)
     val z = map.zoneAt(i)
-    if (map.plant[i] != null || z == null || z.kind != ZoneKind.GROWING) { endJob(p); return }
+    // A grass cover does not stop sowing; the crop replaces it when the sowing is done (docs/fidelity/grass.md, decision 8).
+    val under = map.plant[i]
+    if ((under != null && under.type != PlantType.GRASS) || z == null || z.kind != ZoneKind.GROWING) { endJob(p); return }
     if (j.stage == 0) {
         val r = goTo(p, j.tx, j.ty)
         if (r == -1) abort(p, true) else if (r == 0) j.stage = 1

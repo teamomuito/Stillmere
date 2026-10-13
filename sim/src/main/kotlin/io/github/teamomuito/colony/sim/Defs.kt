@@ -76,6 +76,11 @@ enum class Terrain(val label: String, val passable: Boolean, val fertility: Floa
     ROCK("Rock", false, 0f, 0),
     ICE("Ice", true, 0f, 2),
     MUD("Mud", true, 0.5f, 3),
+    /**
+     * Grass ground: fertile soil under a grass cover (docs/fidelity/grass.md). Its fertility is UNVERIFIED (the vanilla value is XML),
+     * set to soil's 1.0. Appended last, so the ordinals above, which saves store, do not move.
+     */
+    GRASS("Grass", true, 1f, 1),
 }
 
 enum class RockType(val label: String, val beauty: Float) {
@@ -159,10 +164,16 @@ enum class PlantType(
     HUSHMOSS("Hushmoss", 7f, ItemType.HUSHMOSS, 10, 110, 170, true),
     DREAMWEED("Dreamweed", 7f, ItemType.DREAMWEED, 8, 110, 170, true),
     WISPSILK_CROP("Wispsilk", 15f, ItemType.WISPSILK, 8, 110, 170, true, minTemp = 10f, flammable = 0.1f, research = Research.WISPSILK_RESEARCH),
-    MEADOW_GRASS("Sward", 3.5f, ItemType.HAY, 20, 90, 120, true, minTemp = 3f);
+    MEADOW_GRASS("Sward", 3.5f, ItemType.HAY, 20, 90, 120, true, minTemp = 3f),
+    /**
+     * The grass cover of [Terrain.GRASS] (docs/fidelity/grass.md). A wild plant, not a crop: harvested for hay from 65 percent growth
+     * (RimWorld/Plant.cs:115) and regrowing after a harvest. Grow days, yield and work are UNVERIFIED or C (the vanilla values are
+     * XML). Appended last, so the ordinals above, which saves store, do not move.
+     */
+    GRASS("Grass", 3.5f, ItemType.HAY, 4, 90, 0, false);
 
     val isTree get() = wood
-    val regrows get() = this == BERRY || this == FERAL_MIREWORT
+    val regrows get() = this == BERRY || this == FERAL_MIREWORT || this == GRASS
 }
 
 enum class ItemCat(val label: String) {

@@ -83,6 +83,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         Terrain.SAND -> 0xFFCDBA86.toInt()
         Terrain.MARSH -> 0xFF4D6A44.toInt()
         Terrain.MUD -> 0xFF5A4A36.toInt()
+        Terrain.GRASS -> 0xFF60803F.toInt()
         Terrain.ICE -> 0xFFD2E8F2.toInt()
         Terrain.WATER_SHALLOW -> 0xFF5E92B8.toInt()
         Terrain.WATER_DEEP -> 0xFF325A86.toInt()
@@ -100,7 +101,7 @@ class Sprites(private val fill: Paint, private val stroke: Paint) {
         box(c, sx, sy, sx + s + 1, sy + s + 1, base)
         val lw = max(1f, s * 0.04f)
         when (t) {
-            Terrain.SOIL, Terrain.RICH_SOIL -> {
+            Terrain.SOIL, Terrain.RICH_SOIL, Terrain.GRASS -> {
                 // Soft mottling plus tufts of grass.
                 disc(c, sx + s * (0.2f + 0.6f * h(x, y, 2)), sy + s * (0.2f + 0.6f * h(x, y, 3)), s * 0.28f, withAlpha(shade(base, 0.9f), 70))
                 val tuft = shade(base, 1.28f)

@@ -40,9 +40,14 @@ object SaveGame {
      * 38 adds one flag per map cell, the built roof (docs/fidelity/roofs.md), after the snow of each cell. A save before 38 has no
      * flags: on reading, every cell of each room that was indoor under the old rule gets a roof, so no room changes status and
      * each cell is roofed as before ([GameMap.adoptLegacyRoofs]).
+     *
+     * 39 changes no field and no layout. It marks the saves that may hold grass: the grass terrain ([Terrain.GRASS]) and the grass
+     * cover ([PlantType.GRASS]) are new values of the terrain byte and of the plant type, appended to their enums (docs/fidelity/grass.md).
+     * Saves before 39 never hold them, so nothing is read differently. An older build refuses a version-39 save with its usual
+     * "Unsupported save version" error, instead of failing on a value it does not have.
      */
     /** The version [write] writes by default. Tests compare against it, so they do not repeat the number. */
-    internal const val VERSION = 38
+    internal const val VERSION = 39
 
     /** Spoil times before version 35, which saved rot is rescaled from. */
     private const val OLD_MEAT_SPOIL_DAYS = 4f
