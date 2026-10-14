@@ -1,9 +1,0 @@
-version=25
-colonyName=New Arrivals
-colonists=6
-backstory.0=Vatgrown soldier, colonial guard
-backstory.1=Urchin, cook
-backstory.2=Tribal child, scholar
-backstory.3=Pit fighter, surgeon
-backstory.4=Space-born tinker, trader
-backstory.5=Cargo ship brat, miner

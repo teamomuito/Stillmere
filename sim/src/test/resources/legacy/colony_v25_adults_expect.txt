@@ -1,3 +1,0 @@
-colonists=5
-backstory.0=Space-born tinker, pirate deckhand
-backstory.1=Tribal child, beast tamer

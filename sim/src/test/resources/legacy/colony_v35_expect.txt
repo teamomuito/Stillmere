@@ -1,7 +1,0 @@
-tick=17500
-colonists=5
-pawn0.name=Odette Grayson
-pawn0.apparel=2
-coat.hp=123.5
-coat.quality=GOOD
-pawn0.injuries=0
