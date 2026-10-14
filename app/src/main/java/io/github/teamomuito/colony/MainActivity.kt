@@ -744,6 +744,7 @@ class MainActivity : Activity() {
             Desig.DECON -> sb.append("\nMarked: deconstruct")
             Desig.REPAIR -> sb.append("\nMarked: repair")
             Desig.ROOF -> sb.append("\nMarked: roof")
+            Desig.UNROOF -> sb.append("\nMarked: remove roof")
         }
         val t = m.tempAt(i, g.outdoorTemp())
         sb.append("\n${if (m.roomIndoorAt(i)) "Indoors" else "Outdoors"}, ${t.toInt()}°C")
@@ -807,6 +808,7 @@ class MainActivity : Activity() {
                         Tool.Deconstruct -> g.designate(x, y, Desig.DECON)
                         Tool.Repair -> g.designate(x, y, Desig.REPAIR)
                         Tool.Roof -> g.designate(x, y, Desig.ROOF)
+                        Tool.Unroof -> g.designate(x, y, Desig.UNROOF)
                         Tool.CancelOrders -> {
                             g.clearDesignation(x, y)
                             if (g.map.building[g.map.idx(x, y)]?.built == false) g.designate(x, y, Desig.DECON) else true

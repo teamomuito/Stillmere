@@ -37,6 +37,7 @@ sealed class Tool(val label: String, val paints: Boolean) {
     object Deconstruct : Tool("Deconstruct", true)
     object Repair : Tool("Repair", true)
     object Roof : Tool("Build roof", true)
+    object Unroof : Tool("Remove roof", true)
     object CancelOrders : Tool("Cancel orders", true)
     object Hunt : Tool("Hunt animals", true)
     object Tame : Tool("Tame animals", true)
@@ -375,6 +376,12 @@ class GameView(context: Context) : View(context) {
                     stroke.color = 0xFF90B8E0.toInt(); stroke.strokeWidth = 3f
                     c.drawLine(sx + s * 0.15f, sy + s * 0.5f, sx + s * 0.5f, sy + s * 0.2f, stroke)
                     c.drawLine(sx + s * 0.5f, sy + s * 0.2f, sx + s * 0.85f, sy + s * 0.5f, stroke)
+                }
+                Desig.UNROOF -> {
+                    fill.color = 0x44E0A060; c.drawRect(sx, sy, sx + s, sy + s, fill)
+                    stroke.color = 0xFFE0A060.toInt(); stroke.strokeWidth = 3f
+                    c.drawLine(sx + s * 0.15f, sy + s * 0.2f, sx + s * 0.85f, sy + s * 0.8f, stroke)
+                    c.drawLine(sx + s * 0.85f, sy + s * 0.2f, sx + s * 0.15f, sy + s * 0.8f, stroke)
                 }
             }
         }

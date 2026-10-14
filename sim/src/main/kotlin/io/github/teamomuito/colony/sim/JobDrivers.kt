@@ -743,6 +743,7 @@ private fun Game.driveRepair(p: Pawn, j: Job) {
 
 private fun Game.driveBuildRoof(p: Pawn, j: Job) {
     val i = map.idx(j.tx, j.ty)
+    if (map.desig[i].toInt() == Desig.UNROOF) { driveRemoveRoof(p, j, i); return }
     if (map.desig[i].toInt() != Desig.ROOF) { endJob(p); return }
     if (map.roofed(i)) { map.desig[i] = 0; endJob(p); return }
     if (!map.canBuildRoofAt(i)) { endJob(p); return }
@@ -758,6 +759,26 @@ private fun Game.driveBuildRoof(p: Pawn, j: Job) {
     p.gainXp(SkillType.ARCHITECTURE, 0.07f / TIME_SCALE)
     if (j.work < ROOF_WORK) return
     map.finishRoofBlock(j.tx, j.ty)
+    endJob(p)
+}
+
+/**
+ * Takes down a built roof marked Desig.UNROOF. Stillmere's own rule (C): the work total and rate are the same as for building a roof
+ * (Roofs.kt, ROOF_WORK and ROOF_WORK_RATE), and a taken-down roof only exposes the cell. Nothing else falls, since a roof never
+ * supports another. Natural roof is not touched.
+ */
+private fun Game.driveRemoveRoof(p: Pawn, j: Job, i: Int) {
+    if (!map.roof[i]) { map.desig[i] = 0; endJob(p); return }
+    if (j.stage == 0) {
+        val r = goTo(p, j.tx, j.ty, adjacent = true)
+        if (r == -1) abort(p, true) else if (r == 0) j.stage = 1
+        return
+    }
+    j.work += p.workSpeed(SkillType.ARCHITECTURE) * ROOF_WORK_RATE
+    p.gainXp(SkillType.ARCHITECTURE, 0.07f / TIME_SCALE)
+    if (j.work < ROOF_WORK) return
+    map.setRoof(i, false)
+    map.desig[i] = 0
     endJob(p)
 }
 

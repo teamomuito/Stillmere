@@ -51,7 +51,7 @@ status text), `Panels.kt` (the Orders entry). Not committed.
    700 cells, or a natural-roof majority).
 3. **Build roof**: a designation (`Desig.ROOF`) and a construction job (`JobType.BUILD_ROOF`). A roof needs a roof holder within
    6.9 cells, linked to it through roofed cells. The app's **Build roof** tool (Orders menu) sets the designation on each tapped or
-   dragged cell, through `Game.designate(x, y, Desig.ROOF)` (see "The app"). Removing a roof is not available.
+   dragged cell, through `Game.designate(x, y, Desig.ROOF)` (see "The app"). A built roof can be taken down with the Remove roof tool (`Desig.UNROOF`, C: same work as building one).
 4. **Roof collapse**: removing a roof holder (a built wall or door, or mined rock) drops the built roofs that are no longer held.
    Crush damage to each pawn under a collapsing roof, drawn from the sim RNG. The collapse itself draws nothing.
 5. **Roofless rooms** follow from 2 and 4: a room whose open cells reach a quarter of its cells, rounded up, uses the outdoor temperature
@@ -84,7 +84,7 @@ status text), `Panels.kt` (the Orders entry). Not committed.
 | Crush damage on collapse | per pawn on a fallen cell, of any faction: an integer from 15 to 30, inclusive, drawn once per pawn per fall | `Verse/RoofCollapserImmediate.cs:10` (the range 15 to 30). The branch that uses it is the one for a roof with no impassable leaving thing (`:81` is the test; the `else` at `:127`). Also `:133` (the things hit: items, plants, buildings, pawns), `:136` (the range draw, one per thing), `Verse/IntRange.cs:34` (the draw is inclusive), `:147` (the damage is then rounded by `GenMath.RoundRandom`, `Verse/GenMath.cs:62-65`, which draws once more; a whole number comes back unchanged). Checked in the clone | D for the range 15 to 30 (`:10`), adopted for pawns. C for the rest: the per-pawn scope, one roll per pawn per fall, and the inclusive draw through Stillmere's RNG (`Noise.kt:70`, `Rng.range`, `a + int(b - a + 1)`; vanilla's inclusive draw at `IntRange.cs:34` is cited for comparison only). Vanilla draws twice per thing (the range, then the rounding); Stillmere draws once per pawn, and the second draw changes no value, only the RNG stream. Stillmere items and plants take no damage (next row). Damage is the crush wound on the head part, or on the torso when there is no head (see `Health.kt`, `woundPart`). Mapping vanilla's top body region (`Verse/RoofCollapserImmediate.cs:148`) to the head part is **C** |
 | Crush damage to items, plants and buildings | same roll | `Verse/RoofCollapserImmediate.cs:133-149`. Not in the reference table | not adopted | Stillmere items and plants have no hit points, and a collapse does not destroy buildings in this round (a building that reaches zero would cascade into another collapse) |
 | Impassable leaving thing branch | the branch for a roof whose leaving thing is impassable (the test is on the leaving thing's passability, not on the roof's thick flag) | `Verse/RoofCollapserImmediate.cs:81` (the test). Not in the reference table | not adopted | no Stillmere roof has a leaving thing, and natural roof does not collapse here. Which vanilla roofs carry an impassable leaving thing is definition data, **UNVERIFIED** |
-| Remove-roof designation | removes roofs; collapses in removal mode | Vanilla's removal mode: `Verse/RoofCollapseCellsFinder.cs:29-31`. The area and job: `RimWorld/JobDriver_RemoveRoof.cs`, `RimWorld/Area_NoRoof.cs`. Not in the reference table | not adopted (open) | the area and its job are not in this round |
+| Remove-roof designation | removes roofs; collapses in removal mode | Vanilla's removal mode: `Verse/RoofCollapseCellsFinder.cs:29-31`. The area and job: `RimWorld/JobDriver_RemoveRoof.cs`, `RimWorld/Area_NoRoof.cs`. Not in the reference table | simple designation adopted (C): `Desig.UNROOF` marks a built roof, a colonist takes it down with the build-roof work total and rate, and only that cell changes. The removal area, its job and removal-mode collapse are not adopted | the Remove roof tool is in the Orders menu (`Panels.kt`); natural roof cannot be taken down |
 | Mined rock as a holder | mining a rock cell (and a subsoil auger drilling one out) removes a holder, so the same collapse check runs | `Verse/Building.cs:212-214` (a building whose def holds a roof notifies the finder when it despawns) and `Verse/RoofCollapseCellsFinder.cs:11-17` (the notify function). Not in the reference table. Whether rock carries the holder flag is **UNVERIFIED** | C | adopted, as a Stillmere call site (`JobDrivers.kt` mining and auger) |
 | Plant that blocks a roof | vanilla: a plant with the interferes-with-roof flag must be cut first, and the 3 by 3 block skips such cells. Stillmere: trees only | `Verse/RoofUtility.cs:9-20` (the blocking test), `:58-73` (the cut job); `RimWorld/JobDriver_BuildRoof.cs:27` (the block skips it); `RimWorld/WorkGiver_BuildRoof.cs:49-53`. Not in the reference table. Which plants carry the flag is definition data | C (trees only); **?** (the plant list) | **partly**: a cell with a tree is skipped until the tree is gone. The pawn does not cut the tree first (open). Other plants are not modelled |
 | Filth left by a collapse | per roof def | `Verse/RoofCollapserImmediate.cs:174-177`; `Verse/RoofDef.cs:11` (the field). Not in the reference table | not adopted | no filth leaving for the built roof (definition data, **UNVERIFIED**) |
@@ -235,7 +235,7 @@ Written from version 38 on, as one more flag after the snow of each cell. Versio
 * **Drawing.** A built roof (`roof` set, `natRoof` clear) gets a faint slate tint over its floor, in the detail and the flat view. Natural
   roof keeps its shading, unchanged. Both are visual only: they change no sim value, no save and no lighting.
 * **Not changed.** The roof rules, the sim's rule for a `Desig.ROOF` mark (`Game.kt:425`), the roof jobs, and the save format. Removing a
-  roof (the remove-roof designation) is still not available in the app or the sim.
+  roof is now available through the Remove roof tool (`Desig.UNROOF`). Vanilla's removal area and removal-mode collapse are not adopted.
 * **Not built here.** The app cannot be compiled in this environment (no Android SDK). The edits follow the patterns in the same files.
   The `when` expressions over `Tool` all have an `else`, so the new object needs no other branch. CI must confirm the build.
 
@@ -258,13 +258,13 @@ Existing tests changed, and the reason (no expected number changed, except the v
 
 ## Open items
 
-* Remove-roof designation (and roof removal in removal mode, with thin and thick kinds).
+* Vanilla's removal area and removal-mode collapse, and thin and thick roof kinds. A simple remove-roof designation exists (C).
 * Trees that block a roof are not cut first.
 * Plants other than trees that block a roof in vanilla are not modelled: Stillmere's plant types carry only a tree flag, and the
   vanilla flag's plant list is definition data (`UNVERIFIED`).
 * Collapse does not destroy buildings or plants under it, and does not cascade.
 * The app has a Build roof tool (Orders menu, tap or drag) that marks cells with `Desig.ROOF`, and it draws built roofs and the marks
-  (see "The app"). Removing a roof is not available in the app or the sim (the remove-roof designation, above). The app is not built
+  (see "The app"). Taking down a roof is available as a simple designation (`Desig.UNROOF`, C). The app is not built
   here: CI must confirm the build.
 * The holder list (walls, doors, rock) is Stillmere's choice (C). The support radius is vanilla (D). The 3 by 3 block is roofed to a
   fixed point (C), not vanilla's single pass, which is not adopted (see "Corrections in this round").

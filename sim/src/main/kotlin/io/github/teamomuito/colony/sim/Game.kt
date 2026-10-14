@@ -427,6 +427,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             Desig.HARVEST -> if (map.plant[i] != null && map.plant[i]!!.mature && !map.plant[i]!!.type.isTree) map.desig[i] = kind.toByte() else return false
             Desig.REPAIR -> if (map.building[i]?.built == true) map.desig[i] = kind.toByte() else return false
             Desig.ROOF -> if (map.terrain[i].passable && !map.roofed(i)) map.desig[i] = kind.toByte() else return false
+            // Only a built roof can be taken down. Natural roof (rock cover) cannot.
+            Desig.UNROOF -> if (map.roof[i]) map.desig[i] = kind.toByte() else return false
             Desig.DECON -> {
                 val b = map.building[i]
                 if (b != null) {

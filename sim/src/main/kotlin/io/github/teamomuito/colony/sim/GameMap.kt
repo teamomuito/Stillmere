@@ -97,7 +97,7 @@ class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var
 
 class Fire(var intensity: Float) { var age = 0 }
 
-object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5; const val ROOF = 6 }
+object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5; const val ROOF = 6; const val UNROOF = 7 }
 /** The indoor rule before version 38 (GameMap.kt, rooms): at most this many cells, or a natural-roof majority. Used only to migrate saves. */
 const val LEGACY_INDOOR_MAX_CELLS = 700
 object ZoneKind { const val NONE = 0; const val STOCKPILE = 1; const val GROWING = 2; const val DUMPING = 3 }
