@@ -1,0 +1,16 @@
+version=28
+colonyName=New Arrivals
+colonists=5
+tick=15000
+incident.ANIMAL_JOINS=14600
+incident.SKYHORN_VISIT=14700
+backstory.0=Furrow-born, miner
+thoughts.0=Ate raw food|Drunk
+backstory.1=Cradle-line recruit, scholar
+thoughts.1=Ate without a table|Withdrawal|Lucid high
+backstory.2=Pasture-born, field medic
+thoughts.2=Kind words|Hushed calm
+backstory.3=Infirmary helper, tailor
+thoughts.3=Beautiful aurora|Ugly surroundings|Ate chitin cuts
+backstory.4=Camp foundling, carpenter
+thoughts.4=Tortured soul|Ate manflesh (loved it)|Sunny outlook

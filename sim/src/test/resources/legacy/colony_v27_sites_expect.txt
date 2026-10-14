@@ -1,0 +1,4 @@
+sites=1
+site.0=Rough-Knife gang camp
+battle=the Rough-Knife gang camp
+lastEvent=Retreated from the Rough-Knife gang camp.

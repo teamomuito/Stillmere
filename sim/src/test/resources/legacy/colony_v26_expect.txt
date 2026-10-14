@@ -1,0 +1,16 @@
+version=26
+colonyName=New Arrivals
+colonists=5
+tick=15000
+incident.SKYHORN_VISIT=14700
+incident.ANIMAL_JOINS=14400
+backstory.0=Cradle-line recruit, Colonial guard
+thoughts.0=Lucid high
+backstory.1=Farm kid, Colonial guard
+thoughts.1=Ate a fine meal|Mellow
+backstory.2=Street kid, cook
+thoughts.2=Pale dust high|Ate insect meat
+backstory.3=Herder's child, scholar
+thoughts.3=Psychic drone|White rush high|Drug use
+backstory.4=Furrow-born, hunter
+thoughts.4=

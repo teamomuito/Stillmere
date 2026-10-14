@@ -1,0 +1,12 @@
+colonists=5
+graveyard.0=Ada Vance - hypothermia (day 4)
+graveyard.1=Bo Fenn - heatstroke (day 9)
+graveyard.2=Cy Marsh - blood loss (day 12)
+graveyard.3=Dee Holt - flu (day 14)
+graveyard.4=Ed Rook - plague (day 15)
+graveyard.5=Fa Lind - malaria (day 16)
+graveyard.6=Gu Dorn - sleeping sickness (day 17)
+graveyard.7=Hi Kell - malnutrition (day 18)
+graveyard.8=Io Vann - toxic buildup (day 19)
+graveyard.9=Jo Ash - starvation (day 20)
+graveyard.10=Kit Orr - lost in captivity (day 21)

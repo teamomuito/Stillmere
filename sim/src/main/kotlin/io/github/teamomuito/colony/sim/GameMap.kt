@@ -1,0 +1,1019 @@
+package io.github.teamomuito.colony.sim
+
+import java.util.PriorityQueue
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.round
+
+class Plant(val type: PlantType, val x: Int, val y: Int, var growth: Float) {
+    var age = 0
+    var blighted = false
+    /**
+     * A crop or grass can be harvested once it passes [HARVEST_MIN_GROWTH] (RimWorld/Plant.cs:115). Other plants keep the full-growth
+     * rule.
+     */
+    val mature get() = if (type.crop || type == PlantType.GRASS) growth > HARVEST_MIN_GROWTH else (!type.isTree && !type.regrows && type != PlantType.BRAMBLE) || growth >= 1f
+}
+
+class Building(val def: BuildDef, val x: Int, val y: Int, var built: Boolean) {
+    /** The material this structure is made of (only for [BuildDef.stuff] structures); null means the default. */
+    var material: ItemType? = null
+    /** Materials delivered so far, indexed like [cost]. */
+    val delivered = IntArray(def.cost.size)
+    var progress = 0f
+    var hp = def.hp
+    var ownerId = -1
+    var fuel = 0f
+    var cooldown = 0
+    /** A swing door's open time left, in ticks: a pawn stepping in holds it open (docs/fidelity/heat-exchange.md). Saved from version 40. */
+    var doorHold = 0
+    var quality = Quality.NORMAL
+    var powered = false
+    var forbidden = false
+    var bills = ArrayList<Bill>()
+    var temperature = 0f
+    var shells = 0
+    var charge = 0f
+    var inUse = 0
+    var prisonerBed = false
+    var occupant = -1
+    var variant = 0
+    var rot = false
+    val fw get() = if (rot) def.h else def.w
+    val fh get() = if (rot) def.w else def.h
+    fun covers(px: Int, py: Int) = px >= x && px < x + fw && py >= y && py < y + fh
+    val lit get() = built && fuel > 0f && def.fuelCap > 0f
+    /** Items this building needs, with the chosen material swapped in for the structure's main cost entry. */
+    val cost: List<Pair<ItemType, Int>>
+        get() {
+            val m = material ?: return def.cost
+            return def.cost.mapIndexed { i, c -> if (i == 0 && def.stuff != null) m to c.second else c }
+        }
+
+    private val defaultStuff get() = Materials.of(def.stuff?.first())
+    private val chosenStuff get() = Materials.of(material ?: def.stuff?.first())
+
+    /** Hit points of this structure in its material. */
+    val maxHp: Float get() {
+        val base = defaultStuff ?: return def.hp
+        val now = chosenStuff ?: return def.hp
+        return def.hp * now.hpMult / base.hpMult
+    }
+
+    val flam: Float get() = chosenStuff?.flam ?: def.flam
+
+    val beauty: Float get() {
+        val base = defaultStuff ?: return def.beauty
+        val now = chosenStuff ?: return def.beauty
+        return def.beauty + now.beauty - base.beauty
+    }
+
+    /** "Wall (steel)" for a structure built from a material; the plain name otherwise. */
+    val displayName: String get() = if (def.stuff != null) "${def.label} (${(chosenStuff?.item?.label ?: def.label).lowercase()})" else def.label
+
+    /** A material that needs research must be researched before it can be used for this structure. */
+    fun researchMet(done: Set<Research>): Boolean =
+        (def.research == null || def.research in done) && (chosenStuff?.research?.let { it in done } ?: true)
+
+    fun materialsComplete(): Boolean {
+        val c = cost
+        for (i in c.indices) if (delivered[i] < c[i].second) return false
+        return true
+    }
+    fun missing(i: Int) = max(0, cost[i].second - delivered[i])
+}
+
+class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var y: Int) {
+    var quality = Quality.NORMAL
+    var rot = 0f
+    var hp = 1f
+    var forbidden = false
+    var corpseOf: String? = null
+    var corpseRace: Race? = null
+    var corpseColonist = false
+    var corpseAge = 0
+}
+
+class Fire(var intensity: Float) { var age = 0 }
+
+object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5; const val ROOF = 6; const val UNROOF = 7 }
+/** The indoor rule before version 38 (GameMap.kt, rooms): at most this many cells, or a natural-roof majority. Used only to migrate saves. */
+const val LEGACY_INDOOR_MAX_CELLS = 700
+object ZoneKind { const val NONE = 0; const val STOCKPILE = 1; const val GROWING = 2; const val DUMPING = 3 }
+
+class Zone(val id: Int, val kind: Int) {
+    var name = ""
+    var priority = 2 // 0 low, 1 normal, 2 preferred, 3 important, 4 critical
+    var crop = PlantType.RICE
+    var sow = true
+    var allowed = BooleanArray(ItemType.entries.size) { true }
+    var minQuality = Quality.AWFUL
+    var cells = 0
+    fun accepts(t: ItemType, q: Quality): Boolean = allowed[t.ordinal] && q.ordinal >= minQuality.ordinal
+}
+
+class GameMap(val w: Int, val h: Int) {
+    val size = w * h
+    val terrain = Array(size) { Terrain.SOIL }
+    val ore = Array(size) { Ore.NONE }
+    val rockType = Array(size) { RockType.GRANITE }
+    val floor = arrayOfNulls<BuildDef>(size)
+    val floorQuality = Array(size) { Quality.NORMAL }
+    val building = arrayOfNulls<Building>(size)
+    private var bVersion = 0
+    /**
+     * Changes whenever something that decides walkability changes: buildings placed or removed, construction finishing,
+     * terrain mined or changed, and doors powering on or off. Reachability caches are rebuilt when it changes.
+     */
+    var walkVersion = 0
+        private set
+    fun markWalkChanged() { walkVersion++ }
+    private var bCache: List<Building> = emptyList()
+    private var bCacheVersion = -1
+
+    /** Put a building on every cell of its footprint. */
+    fun setBuilding(b: Building) {
+        for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy)) building[idx(xx, yy)] = b
+        roomDirty = true; bVersion++; walkVersion++
+    }
+
+    fun removeBuilding(b: Building) {
+        for (yy in b.y until b.y + b.fh) for (xx in b.x until b.x + b.fw) if (inB(xx, yy) && building[idx(xx, yy)] === b) building[idx(xx, yy)] = null
+        roomDirty = true; bVersion++; walkVersion++
+        if (b.built && (b.def.isWall || b.def.isDoor)) holderRemoved(b.x, b.y)
+    }
+
+    /** Each building once, even if it covers several cells. */
+    fun buildings(): List<Building> {
+        if (bCacheVersion == bVersion) return bCache
+        val out = ArrayList<Building>()
+        for (y in 0 until h) for (x in 0 until w) {
+            val b = building[y * w + x]
+            if (b != null && b.x == x && b.y == y) out.add(b)
+        }
+        bCache = out; bCacheVersion = bVersion
+        return out
+    }
+    val plant = arrayOfNulls<Plant>(size)
+    val items = HashMap<Int, ItemStack>()
+    val zoneId = IntArray(size)
+    val zones = HashMap<Int, Zone>()
+    val desig = ByteArray(size)
+    val filth = ByteArray(size)
+    val fires = HashMap<Int, Fire>()
+    /** Natural (mountain) roof. Counts as roofed. */
+    val natRoof = BooleanArray(size)
+    /** A built roof (docs/fidelity/roofs.md). Saved from version 38; older saves are migrated by [adoptLegacyRoofs]. */
+    val roof = BooleanArray(size)
+    /** Cells whose built roof fell this step and whose colonists must take the crush roll (drained by [Game.step]). */
+    val pendingRoofFalls = ArrayList<Int>()
+    val conduit = BooleanArray(size)
+    val areas = Array(3) { BooleanArray(size) }
+    val areaNames = arrayOf("Home", "Area 2", "Area 3")
+    fun conduitAt(i: Int) = conduit[i]
+    val light = FloatArray(size)
+    val snow = FloatArray(size)
+    var biome = Biome.TEMPERATE
+    /** The colony's start cell, chosen when the map is generated; -1 on a map built by hand. Not saved: the save keeps the colony's home. */
+    var spawnX = -1
+    var spawnY = -1
+
+    fun idx(x: Int, y: Int) = y * w + x
+    fun inB(x: Int, y: Int) = x in 0 until w && y in 0 until h
+    fun xOf(i: Int) = i % w
+    fun yOf(i: Int) = i / w
+
+    fun zoneAt(i: Int): Zone? = if (zoneId[i] == 0) null else zones[zoneId[i]]
+    fun zoneKind(i: Int): Int = zoneAt(i)?.kind ?: 0
+
+    private var nextZone = 1
+    /** Bumped whenever zone membership changes, so cached lists of zone cells can be checked for staleness. */
+    var zoneVersion = 0
+    private var storageCache: IntArray? = null
+    private var storageCacheVersion = -1
+
+    /**
+     * The cells that belong to a stockpile or dumping zone, in ascending index order. Rebuilt only when zone membership
+     * changes: the destination search for every haul used to scan the whole map to find these.
+     */
+    fun storageCells(): IntArray {
+        val cached = storageCache
+        if (cached != null && storageCacheVersion == zoneVersion) return cached
+        var n = 0
+        for (i in 0 until size) if (isStorage(i)) n++
+        val out = IntArray(n)
+        var k = 0
+        for (i in 0 until size) if (isStorage(i)) out[k++] = i
+        storageCache = out; storageCacheVersion = zoneVersion
+        return out
+    }
+
+    private fun isStorage(i: Int): Boolean {
+        if (zoneId[i] == 0) return false
+        val z = zones[zoneId[i]] ?: return false
+        return z.kind == ZoneKind.STOCKPILE || z.kind == ZoneKind.DUMPING
+    }
+
+    fun newZone(kind: Int): Zone {
+        zoneVersion++
+        val z = Zone(nextZone++, kind)
+        z.name = when (kind) { ZoneKind.STOCKPILE -> "Stockpile ${z.id}"; ZoneKind.GROWING -> "Growing zone ${z.id}"; else -> "Dumping ${z.id}" }
+        zones[z.id] = z
+        return z
+    }
+    fun setNextZone(n: Int) { nextZone = n }
+    fun peekNextZone() = nextZone
+
+    fun isWall(i: Int): Boolean {
+        val b = building[i]
+        return terrain[i] == Terrain.ROCK || (b != null && b.built && b.def.isWall)
+    }
+
+    fun blocksSight(i: Int): Boolean {
+        val b = building[i]
+        return terrain[i] == Terrain.ROCK || (b != null && b.built && b.def.blocksSight)
+    }
+
+    fun walkable(i: Int): Boolean {
+        if (!terrain[i].passable) return false
+        val b = building[i]
+        if (b != null && b.built && b.def == BuildDef.SHUTTER_DOOR && !b.powered) return false
+        return !(b != null && b.built && b.def.blocksMove)
+    }
+
+    fun stepCost(i: Int): Int {
+        var c = terrain[i].cost * 10
+        val p = plant[i]
+        if (p != null && (p.type.isTree || p.type == PlantType.BRAMBLE)) c += 50
+        if (floor[i] != null) c -= 3
+        if (snow[i] > 0.5f) c += 3
+        val b = building[i]
+        if (b != null && b.built && b.def.cover > 0f) c += 12
+        if (b != null && b.built && b.def.trap) c += 0
+        if (fires.containsKey(i)) c += 200
+        return max(c, 6)
+    }
+
+    fun lineOfSight(x0: Int, y0: Int, x1: Int, y1: Int): Boolean {
+        var x = x0
+        var y = y0
+        val dx = abs(x1 - x0)
+        val dy = abs(y1 - y0)
+        val sx = if (x0 < x1) 1 else -1
+        val sy = if (y0 < y1) 1 else -1
+        var err = dx - dy
+        while (!(x == x1 && y == y1)) {
+            val e2 = 2 * err
+            if (e2 > -dy) { err -= dy; x += sx }
+            if (e2 < dx) { err += dx; y += sy }
+            if (!(x == x1 && y == y1) && blocksSight(idx(x, y))) return false
+        }
+        return true
+    }
+
+    /** True when a line of fire between two cells is blocked by cover that stands right in front of the target. */
+    /** The cells strictly between two cells, in the order a shot passes them. Same line as [lineOfSight]. */
+    fun cellsBetween(x0: Int, y0: Int, x1: Int, y1: Int): IntArray {
+        val out = ArrayList<Int>()
+        var x = x0
+        var y = y0
+        val dx = abs(x1 - x0)
+        val dy = abs(y1 - y0)
+        val sx = if (x0 < x1) 1 else -1
+        val sy = if (y0 < y1) 1 else -1
+        var err = dx - dy
+        while (!(x == x1 && y == y1)) {
+            val e2 = 2 * err
+            if (e2 > -dy) { err -= dy; x += sx }
+            if (e2 < dx) { err += dx; y += sy }
+            if (!(x == x1 && y == y1)) out.add(idx(x, y))
+        }
+        return out.toIntArray()
+    }
+
+    fun coverAt(x0: Int, y0: Int, x1: Int, y1: Int): Float {
+        // Cover on the cell adjacent to the target along the shot.
+        val dx = Integer.signum(x0 - x1)
+        val dy = Integer.signum(y0 - y1)
+        val cx = x1 + dx
+        val cy = y1 + dy
+        if (!inB(cx, cy)) return 0f
+        val b = building[idx(cx, cy)] ?: return 0f
+        return if (b.built) b.def.cover else 0f
+    }
+
+    // ---------------------------------------------------------------- rooms
+    var roomDirty = true
+    var roomId = IntArray(size)
+    var roomSize = IntArray(0)
+    var roomIndoor = BooleanArray(0)
+    var roomTemp = FloatArray(0)
+    var roomBeauty = FloatArray(0)
+    var roomClean = FloatArray(0)
+    var roomImpress = FloatArray(0)
+    var roomRole = IntArray(0) // 0 none, 1 bedroom, 2 barracks, 3 dining, 4 hospital, 5 prison, 6 rec, 7 workshop, 8 kitchen
+    var roomWealth = FloatArray(0)
+    /**
+     * Heat paths of indoor rooms: room [linkA] exchanges with [linkB] (a room id, or [Thermal.OUTDOORS]) with weight [linkC]. A door
+     * link has [linkDoor] >= 0, an index into [doorCell], the cell of that door. Built by [buildHeatLinks].
+     */
+    var linkA = IntArray(0)
+    var linkB = IntArray(0)
+    var linkC = FloatArray(0)
+    var linkDoor = IntArray(0)
+    var doorCell = IntArray(0)
+    /** The roof shares of each room, from the same scan as the indoor rule. */
+    var roomRoofs = RoofShares.NONE
+
+    private fun separates(i: Int): Boolean {
+        val b = building[i]
+        return terrain[i] == Terrain.ROCK || (b != null && b.built && (b.def.isWall || b.def.isDoor))
+    }
+
+    /** One flood-filled region per room: its cell count, whether it touches the map edge, its open (unroofed) and natural-roof cells. */
+    private class RoomScan(val id: IntArray, val size: IntArray, val edge: BooleanArray, val open: IntArray, val natural: IntArray)
+
+    private fun scanRooms(): RoomScan {
+        val id = IntArray(size) { -1 }
+        val sizes = ArrayList<Int>()
+        val edges = ArrayList<Boolean>()
+        val opens = ArrayList<Int>()
+        val naturals = ArrayList<Int>()
+        val stack = IntArray(size)
+        for (start in 0 until size) {
+            if (id[start] != -1 || separates(start) || terrain[start] == Terrain.WATER_DEEP) continue
+            val rid = sizes.size
+            var sp = 0
+            stack[sp++] = start
+            id[start] = rid
+            var count = 0
+            var edge = false
+            var natural = 0
+            var open = 0
+            while (sp > 0) {
+                val c = stack[--sp]
+                count++
+                if (natRoof[c]) natural++
+                if (!natRoof[c] && !roof[c]) open++
+                val cx = xOf(c); val cy = yOf(c)
+                if (cx == 0 || cy == 0 || cx == w - 1 || cy == h - 1) edge = true
+                for (d in 0 until 4) {
+                    val nx = cx + DX4[d]; val ny = cy + DY4[d]
+                    if (!inB(nx, ny)) continue
+                    val n = idx(nx, ny)
+                    if (id[n] != -1 || separates(n) || terrain[n] == Terrain.WATER_DEEP) continue
+                    id[n] = rid
+                    stack[sp++] = n
+                }
+            }
+            sizes.add(count)
+            edges.add(edge)
+            opens.add(open)
+            naturals.add(natural)
+        }
+        return RoomScan(id, sizes.toIntArray(), edges.toBooleanArray(), opens.toIntArray(), naturals.toIntArray())
+    }
+
+    /**
+     * A room is indoor when it does not touch the map edge and fewer than a quarter of its cells are open (unroofed). Outdoor when
+     * `open * 4 >= cells`: the quarter rule at Verse/Room.cs:105, in whole numbers.
+     */
+    fun roomIsIndoor(cells: Int, open: Int, touchesEdge: Boolean): Boolean = !touchesEdge && open * 4 < cells
+
+    /**
+     * A save from before version 38 has no roof grid. Every cell of each room that was indoor under the old rule gets a built roof,
+     * so the new rule keeps that room indoor, and each cell reads as roofed as it did before (docs/fidelity/roofs.md). The old rule:
+     * not touching the map edge, and at most [LEGACY_INDOOR_MAX_CELLS] cells or a natural-roof majority.
+     */
+    fun adoptLegacyRoofs() {
+        val scan = scanRooms()
+        for (c in 0 until size) {
+            val r = scan.id[c]
+            if (r < 0) continue
+            val oldIndoor = !scan.edge[r] && (scan.size[r] <= LEGACY_INDOOR_MAX_CELLS || scan.natural[r] * 2 > scan.size[r])
+            if (oldIndoor) roof[c] = true
+        }
+        roomDirty = true
+    }
+
+    fun rebuildRooms(outdoorTemp: Float) {
+        val old = roomTemp
+        val oldId = roomId
+        val scan = scanRooms()
+        val id = scan.id
+        val sizes = scan.size
+        val indoor = BooleanArray(sizes.size) { r -> roomIsIndoor(sizes[r], scan.open[r], scan.edge[r]) }
+        roomId = id
+        roomSize = sizes
+        roomIndoor = indoor
+        val temps = FloatArray(sizes.size) { outdoorTemp }
+        for (c in 0 until size) {
+            val r = id[c]
+            if (r < 0 || !roomIndoor[r]) continue
+            val o = oldId.getOrNull(c) ?: -1
+            if (o >= 0 && o < old.size) temps[r] = old[o]
+        }
+        roomTemp = temps
+        roomBeauty = FloatArray(sizes.size)
+        roomClean = FloatArray(sizes.size)
+        roomImpress = FloatArray(sizes.size)
+        roomRole = IntArray(sizes.size)
+        roomWealth = FloatArray(sizes.size)
+        roomRoofs = RoofShares(
+            open = FloatArray(sizes.size) { r -> scan.open[r].toFloat() / sizes[r] },
+            thin = FloatArray(sizes.size) { r -> (sizes[r] - scan.open[r] - scan.natural[r]).toFloat() / sizes[r] },
+            thick = FloatArray(sizes.size) { r -> scan.natural[r].toFloat() / sizes[r] },
+        )
+        buildHeatLinks()
+        roomDirty = false
+    }
+
+    /**
+     * Heat paths, one per separator edge of an indoor room (docs/fidelity/heat-exchange.md). A door links the rooms on its two sides;
+     * a side with no room gives no exchange (Verse/GenTemperature.cs:417-420). A wall, rock or water edge follows the cell two steps
+     * across (Verse/RoomTempTracker.cs:116-175): a room there gives weight 1, and a cell with no room gives half weight toward the
+     * outdoors (Verse/RoomTempTracker.cs:248), unless it touches the room itself (:159-168).
+     */
+    private fun buildHeatLinks() {
+        val a = ArrayList<Int>(); val b = ArrayList<Int>(); val c = ArrayList<Float>(); val door = ArrayList<Int>()
+        val doors = ArrayList<Int>()
+        val doorIdOf = IntArray(size) { -1 }
+        for (cell in 0 until size) {
+            val r = roomId[cell]
+            if (r < 0 || !roomIndoor[r]) continue
+            val cx = xOf(cell); val cy = yOf(cell)
+            for (d in 0 until 4) {
+                val nx = cx + DX4[d]; val ny = cy + DY4[d]
+                if (!inB(nx, ny)) continue
+                val n = idx(nx, ny)
+                val bd = building[n]
+                val isDoor = bd != null && bd.built && bd.def.isDoor
+                if (!isDoor && !separates(n) && terrain[n] != Terrain.WATER_DEEP) continue
+                val fx = nx + DX4[d]; val fy = ny + DY4[d]
+                if (!inB(fx, fy)) continue
+                val q = roomId[idx(fx, fy)]
+                if (isDoor) {
+                    if (q < 0 || q == r) continue
+                    if (doorIdOf[n] < 0) { doorIdOf[n] = doors.size; doors.add(n) }
+                    a.add(r); b.add(q); c.add(1f); door.add(doorIdOf[n])
+                    continue
+                }
+                if (q == r) continue
+                if (q >= 0) { a.add(r); b.add(q); c.add(Thermal.wallConductance(bd?.material)); door.add(-1); continue }
+                if (touchesRoom(fx, fy, r)) continue
+                a.add(r); b.add(Thermal.OUTDOORS); c.add(Thermal.HALF_OUTDOOR_WEIGHT); door.add(-1)
+            }
+        }
+        linkA = a.toIntArray(); linkB = b.toIntArray(); linkC = c.toFloatArray(); linkDoor = door.toIntArray()
+        doorCell = doors.toIntArray()
+    }
+
+    /** Is one of the four cardinal neighbours of ([x], [y]) a cell of room [r]? */
+    private fun touchesRoom(x: Int, y: Int, r: Int): Boolean {
+        for (d in 0 until 4) {
+            val nx = x + DX4[d]; val ny = y + DY4[d]
+            if (inB(nx, ny) && roomId[idx(nx, ny)] == r) return true
+        }
+        return false
+    }
+
+    /** A non-animal pawn stepped onto cell [i]. A swing door stays open for at least [Thermal.DOOR_HOLD_OPEN] ticks (vanilla applies that minimum on approach, RimWorld/Building_Door.cs:411; Stillmere applies it on entry). */
+    fun doorEntered(i: Int) {
+        val b = building[i] ?: return
+        if (b.built && b.def.isDoor && b.def != BuildDef.SHUTTER_DOOR) b.doorHold = Thermal.holdAfterEntry(b.doorHold)
+    }
+
+    /**
+     * The first cell of each room (in cell order; -1 for a room with none), so the save can key each room's temperature to a cell that
+     * the rebuilt rooms will share.
+     */
+    fun firstCellOfRoom(): IntArray {
+        val first = IntArray(roomSize.size) { -1 }
+        // A map that has never been rebuilt has no rooms: its room ids are all zero, and there is no room 0 to index.
+        if (first.isEmpty()) return first
+        for (c in 0 until size) {
+            val r = roomId[c]
+            if (r >= 0 && r < first.size && first[r] < 0) first[r] = c
+        }
+        return first
+    }
+
+    /** Sets the temperature of the indoor room that holds [cell], after the rooms are rebuilt (a save restores its rooms this way). */
+    fun restoreRoomTemp(cell: Int, t: Float) {
+        if (cell < 0 || cell >= size) return
+        val r = roomId[cell]
+        if (r >= 0 && roomIndoor[r]) roomTemp[r] = t
+    }
+
+    fun roomIndoorAt(i: Int): Boolean {
+        if (roomDirty) return false
+        val r = roomId[i]
+        return r >= 0 && roomIndoor[r]
+    }
+
+    /** Roofed means a built roof or a natural roof. A room is indoor only when most of it is roofed (see [roomIsIndoor]). */
+    fun roofed(i: Int): Boolean = natRoof[i] || roof[i]
+
+    /** Sets or clears a built roof, and marks the rooms for a rebuild. */
+    fun setRoof(i: Int, on: Boolean) {
+        if (roof[i] == on) return
+        roof[i] = on
+        roomDirty = true
+    }
+
+    fun tempAt(i: Int, outdoor: Float): Float {
+        if (roomDirty) return outdoor
+        val r = roomId[i]
+        if (r >= 0) return if (roomIndoor[r]) roomTemp[r] else outdoor
+        val b = building[i]
+        return if (b != null && b.built && b.def.isDoor) doorTemp(i, outdoor) else outdoor
+    }
+
+    /**
+     * A door belongs to no room, so it reads the mean temperature of the distinct rooms on its sides, outdoor rooms counting as
+     * outdoors (Verse/GenTemperature.cs:408, 414). With no room beside it, the outdoor temperature.
+     */
+    private fun doorTemp(i: Int, outdoor: Float): Float {
+        val x = xOf(i); val y = yOf(i)
+        var sum = 0f
+        var count = 0
+        val seen = IntArray(4) { -2 }
+        for (d in 0 until 4) {
+            val nx = x + DX4[d]; val ny = y + DY4[d]
+            if (!inB(nx, ny)) continue
+            val q = roomId[idx(nx, ny)]
+            if (q < 0 || seen.contains(q)) continue
+            seen[count] = q
+            sum += if (roomIndoor[q]) roomTemp[q] else outdoor
+            count++
+        }
+        return if (count == 0) outdoor else sum / count
+    }
+
+    // ---------------------------------------------------------------- items
+    private var nextItemId = 1
+    fun nextId() = nextItemId++
+    fun setNextId(n: Int) { nextItemId = n }
+
+    fun dropCell(i: Int): Boolean {
+        if (!terrain[i].passable || terrain[i] == Terrain.WATER_SHALLOW) return false
+        val b = building[i]
+        if (b != null && b.built && b.def.blocksMove) return false
+        if (b != null && !b.built && b.def.blocksMove) return false
+        return true
+    }
+
+    /** Drops items on or near (x, y), merging with matching stacks. Returns what could not be placed. */
+    /** Drops goods on the nearest free cells. [condition] is the percentage of full hit points the goods keep. */
+    fun drop(type: ItemType, count: Int, x: Int, y: Int, quality: Quality = Quality.NORMAL, rot: Float = 0f, forbid: Boolean = false, condition: Int = 100): Int {
+        var left = count
+        var radius = 0
+        while (left > 0 && radius < 14) {
+            for (yy in y - radius..y + radius) for (xx in x - radius..x + radius) {
+                if (max(abs(xx - x), abs(yy - y)) != radius || !inB(xx, yy)) continue
+                val i = idx(xx, yy)
+                if (!dropCell(i)) continue
+                val s = items[i]
+                if (s == null) {
+                    val n = min(left, type.stack)
+                    val ns = ItemStack(nextId(), type, n, xx, yy)
+                    ns.quality = quality; ns.rot = rot; ns.forbidden = forbid; ns.hp = condition / 100f
+                    items[i] = ns
+                    left -= n
+                } else if (s.type == type && s.count < type.stack && s.quality == quality && conditionPercent(s.hp) == condition) {
+                    val n = min(left, type.stack - s.count)
+                    // Mixing fresh with old food ages the whole pile a bit.
+                    s.rot = (s.rot * s.count + rot * n) / (s.count + n)
+                    s.count += n
+                    left -= n
+                }
+                if (left <= 0) return 0
+            }
+            radius++
+        }
+        return left
+    }
+
+    /** Drops the goods of [lot] with their quality and condition. */
+    fun drop(lot: Lot, count: Int, x: Int, y: Int, forbid: Boolean = false): Int =
+        drop(lot.type, count, x, y, lot.quality, 0f, forbid, lot.condition)
+
+    fun take(i: Int, n: Int): Int {
+        val s = items[i] ?: return 0
+        val t = min(n, s.count)
+        s.count -= t
+        if (s.count <= 0) items.remove(i)
+        return t
+    }
+
+    /** Counts of every kind of item in one pass, indexed by [ItemType.ordinal]. Corpses are not counted. */
+    fun itemTotals(): IntArray {
+        val out = IntArray(ItemType.entries.size)
+        for (s in items.values) if (s.corpseOf == null) out[s.type.ordinal] += s.count
+        return out
+    }
+
+    fun countItems(type: ItemType): Int {
+        var n = 0
+        for (s in items.values) if (s.type == type && s.corpseOf == null) n += s.count
+        return n
+    }
+
+    fun countItems(pred: (ItemType) -> Boolean): Int {
+        var n = 0
+        for (s in items.values) if (pred(s.type) && s.corpseOf == null) n += s.count
+        return n
+    }
+
+    fun wealth(): Float {
+        var v = 0f
+        for (s in items.values) v += s.type.value * s.count * (if (s.type.isGear) s.quality.mult else 1f)
+        for (b in buildings()) if (b.built) v += b.def.totalCost * b.quality.mult
+        return v
+    }
+
+    /** Cells of [side] (0 west, 1 east, 2 north, 3 south) that a raider, wanderer or trader can enter from. Corners are left out. */
+    fun sideCells(side: Int): IntArray {
+        val out = ArrayList<Int>()
+        if (side < 2) for (y in 3 until h - 3) out.add(idx(if (side == 0) 1 else w - 2, y))
+        else for (x in 3 until w - 3) out.add(idx(x, if (side == 2) 1 else h - 2))
+        return out.toIntArray()
+    }
+
+    /**
+     * Cells reachable from [from] over the terrain alone, with the same moves as [Pathfinder] (eight directions, no cutting
+     * corners). Buildings are ignored: this is the map's shape, not what the player has walled off.
+     */
+    fun reachableFrom(from: Int): BooleanArray {
+        val seen = BooleanArray(size)
+        if (!terrain[from].passable) return seen
+        val queue = IntArray(size)
+        var head = 0; var tail = 0
+        seen[from] = true; queue[tail++] = from
+        while (head < tail) {
+            val c = queue[head++]
+            val cx = xOf(c); val cy = yOf(c)
+            for (d in 0 until 8) {
+                val nx = cx + DX8[d]; val ny = cy + DY8[d]
+                if (!inB(nx, ny)) continue
+                val n = idx(nx, ny)
+                if (seen[n] || !terrain[n].passable) continue
+                if (d >= 4 && (!terrain[idx(cx + DX8[d], cy)].passable || !terrain[idx(cx, cy + DY8[d])].passable)) continue
+                seen[n] = true; queue[tail++] = n
+            }
+        }
+        return seen
+    }
+
+    /**
+     * The first open 7x7 pad (every cell passable and not shallow water), searched outward from the middle of the map.
+     * Soil is preferred to other ground. Null when the map has no such pad.
+     */
+    fun findOpenPad(): Pair<Int, Int>? {
+        val cx = w / 2; val cy = h / 2
+        val desertLike = biome == Biome.DESERT || biome == Biome.ARID
+        fun open(x: Int, y: Int): Boolean {
+            for (yy in y - 3..y + 3) for (xx in x - 3..x + 3) {
+                if (!inB(xx, yy)) return false
+                val t = terrain[idx(xx, yy)]
+                if (!t.passable || t == Terrain.WATER_SHALLOW) return false
+            }
+            return true
+        }
+        for (soilOnly in listOf(true, false)) for (r in 0 until max(w, h)) for (y in cy - r..cy + r) for (x in cx - r..cx + r) {
+            if (!inB(x, y)) continue
+            val t = terrain[idx(x, y)]
+            // Grass ground counts as soil here, so the start spot is the same cell as it was before grass existed.
+            if (soilOnly && !(t == Terrain.SOIL || t == Terrain.GRASS || t == Terrain.RICH_SOIL || (desertLike && t == Terrain.SAND))) continue
+            if (open(x, y)) return x to y
+        }
+        return null
+    }
+
+    /**
+     * Every side of the map gets at least one entry the colony can walk to. Where water or rock cuts the start off from a side,
+     * the cheapest crossing is cut: deep water becomes a ford (shallow) and rock becomes a pass (gravel) up to the edge.
+     */
+    private fun connectSides(sx: Int, sy: Int) {
+        val start = idx(sx, sy)
+        for (side in 0 until 4) {
+            val reach = reachableFrom(start)
+            if (sideCells(side).any { reach[it] && terrain[it] != Terrain.WATER_SHALLOW }) continue
+            val route = crossing(start, side)
+            if (route.isEmpty()) continue
+            for (i in route) when (terrain[i]) {
+                Terrain.WATER_DEEP -> terrain[i] = Terrain.WATER_SHALLOW
+                Terrain.ROCK -> { terrain[i] = Terrain.GRAVEL; natRoof[i] = false }
+                else -> {}
+            }
+            // The entry cell itself must be dry, passable ground.
+            val entry = route.last()
+            if (terrain[entry] == Terrain.WATER_SHALLOW || terrain[entry] == Terrain.WATER_DEEP || terrain[entry] == Terrain.ROCK) {
+                terrain[entry] = Terrain.GRAVEL; natRoof[entry] = false
+            }
+        }
+    }
+
+    /** Cheapest route from [start] to any cell of [side], as cells after the start. Rock costs most, then deep water, then shallows. */
+    private fun crossing(start: Int, side: Int): List<Int> {
+        val goals = sideCells(side).toHashSet()
+        val dist = IntArray(size) { Int.MAX_VALUE }
+        val prev = IntArray(size) { -1 }
+        val queue = PriorityQueue<Pair<Int, Int>>(compareBy { it.first })
+        dist[start] = 0; queue.add(0 to start)
+        var goal = -1
+        while (queue.isNotEmpty()) {
+            val (d, c) = queue.poll()
+            if (d > dist[c]) continue
+            if (c in goals) { goal = c; break }
+            val cx = xOf(c); val cy = yOf(c)
+            for (k in 0 until 4) {
+                val nx = cx + DX4[k]; val ny = cy + DY4[k]
+                if (!inB(nx, ny)) continue
+                val n = idx(nx, ny)
+                val step = when (terrain[n]) { Terrain.ROCK -> 10; Terrain.WATER_DEEP -> 6; Terrain.WATER_SHALLOW -> 2; else -> 1 }
+                val nd = d + step
+                if (nd < dist[n]) { dist[n] = nd; prev[n] = c; queue.add(nd to n) }
+            }
+        }
+        val out = ArrayList<Int>()
+        if (goal < 0) return out
+        var c = goal
+        while (c != start) { out.add(c); c = prev[c] }
+        out.reverse()
+        return out
+    }
+
+    companion object {
+        /**
+         * Scale of the noise that patches rock types, and the cut points that split it over the rock tiles of generated maps:
+         * granite 40%, then slate, limestone and sandstone 15% each, marble 15%.
+         */
+        const val ROCK_PATCH = 40f
+        val ROCK_CUTS = floatArrayOf(0.451f, 0.518f, 0.586f, 0.669f)
+        /** Scale and threshold of the tundra gravel patches: about 30% of the soil. */
+        const val GRAVEL_PATCH = 12f
+        const val GRAVEL_SHARE = 0.58f
+        /**
+         * Grass ground: soil on a non-desert map where the grass patch noise is above [GRASS_PATCH_SHARE] (Stillmere's own rule, C;
+         * the reference has no grass terrain). The cover on grass ground: where the cover noise is above [GRASS_COVER_SHARE]. Both are
+         * their own noises, so they draw nothing from the RNG (docs/fidelity/grass.md).
+         */
+        const val GRASS_PATCH_SCALE = 14f
+        const val GRASS_PATCH_SHARE = 0.55f
+        const val GRASS_COVER_SCALE = 6f
+        const val GRASS_COVER_SHARE = 0.35f
+
+        val DX4 = intArrayOf(1, -1, 0, 0)
+        val DY4 = intArrayOf(0, 0, 1, -1)
+        val DX8 = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)
+        val DY8 = intArrayOf(0, 0, 1, -1, 1, -1, 1, -1)
+
+        /**
+         * Ore blotches per 10,000 cells by hilliness: flat 4, small hills 8, large hills 11, impassable 16 (RimWorld/GenStep_RocksFromGrid.cs
+         * lines 131, 134, 137, 143). The switch's default, 10 (line 127), is used for [null], a map with no world tile. Using that default
+         * for [null] is Stillmere's choice (C), not the reference's. [Hills.MOUNTAIN] is the impassable kind, as its label says (WorldMap.kt).
+         * See docs/fidelity/map.md for that mapping.
+         */
+        fun oreBlotchesPer10k(hills: Hills?): Float = when (hills) {
+            Hills.FLAT -> 4f
+            Hills.SMALL -> 8f
+            Hills.LARGE -> 11f
+            Hills.MOUNTAIN -> 16f
+            null -> 10f
+        }
+
+        /**
+         * Ore blotches on a [w] by [h] map. As in the reference (Verse/GenStep_Scatterer.cs lines 266-274), one blotch covers
+         * round(10,000 / density) cells, and the count is the area over that, rounded. The source rounds to the nearest integer (D). The
+         * tie mode is V: the legacy Unity page for Mathf.RoundToInt says an exact half goes to the even integer
+         * (https://docs.unity3d.com/450/Documentation/ScriptReference/Mathf.RoundToInt.html, search snippet; the current page was not
+         * read), and kotlin.math.round is half to even. See docs/fidelity/map.md.
+         */
+        fun oreBlotchCount(w: Int, h: Int, hills: Hills?): Int {
+            val cellsPerBlotch = round(10000f / oreBlotchesPer10k(hills))
+            return round(w.toFloat() * h / cellsPerBlotch).toInt()
+        }
+
+        /**
+         * The old fixed vein counts: 8 steel, 3 silver, 2 gold, 2 hardalloy, 3 components (18 veins on every map before the map-size
+         * change). They are the shares the blotches are split into (see [oreVeinPlan]), and the plan of battle maps (see [generate]).
+         */
+        internal val FIXED_ORE_VEINS: List<Pair<Ore, Int>> = listOf(Ore.STEEL to 8, Ore.SILVER to 3, Ore.GOLD to 2, Ore.HARDALLOY to 2, Ore.COMPONENTS to 3)
+
+        /** Cells in one vein: steel 7, components 3, the others 4. */
+        internal fun oreLumpSize(ore: Ore): Int = if (ore == Ore.STEEL) 7 else if (ore == Ore.COMPONENTS) 3 else 4
+
+        /**
+         * The veins of each ore on a [w] by [h] map. The blotches are shared out by the [FIXED_ORE_VEINS] weights with cumulative
+         * rounding, so the veins always add up to [oreBlotchCount].
+         */
+        internal fun oreVeinPlan(w: Int, h: Int, hills: Hills?): List<Pair<Ore, Int>> {
+            val total = oreBlotchCount(w, h, hills)
+            val weight = FIXED_ORE_VEINS.sumOf { it.second }
+            var cumulative = 0
+            var given = 0
+            return FIXED_ORE_VEINS.map { (ore, share) ->
+                cumulative += share
+                val upTo = round(total * cumulative / weight.toFloat()).toInt()
+                (ore to upTo - given).also { given = upTo }
+            }
+        }
+
+        /**
+         * The colony's map. The planet picks the home tile: the nearest tile of [biome] to the middle, or of any land when [biome]
+         * is null. The map takes that tile's biome, and its river, lake and ruggedness.
+         */
+        fun generateFor(w: Int, h: Int, seed: Long, biome: Biome? = null): GameMap {
+            val world = World.generate(seed, biome)
+            return generate(w, h, seed, world.biome[world.homeTile], world.localTerrain())
+        }
+
+        /**
+         * A map of [w] by [h] cells. The ore veins follow [oreVeinPlan] for the hilliness of [local], unless [veins] gives the plan
+         * (battle maps pass [FIXED_ORE_VEINS], so a fight keeps the 18 veins it had before the map-size change).
+         * A colony map (one with a world tile, [local] not null) also gets its ruins, unless [ruins] is false (docs/fidelity/ruins.md).
+         */
+        fun generate(
+            w: Int, h: Int, seed: Long, biome: Biome = Biome.TEMPERATE, local: World.LocalTerrain? = null,
+            veins: List<Pair<Ore, Int>>? = null, ruins: Boolean = true,
+        ): GameMap {
+            val m = GameMap(w, h)
+            m.biome = biome
+            val rng = Rng(seed)
+            val elev = Noise(seed.toInt() xor 0x1234)
+            val fert = Noise(seed.toInt() xor 0x5678)
+            val wet = Noise(seed.toInt() xor 0x9abc)
+            val tree = Noise(seed.toInt() xor 0xdef0)
+            val rockN = Noise(seed.toInt() xor 0x2468)
+            val gravelN = Noise(seed.toInt() xor 0x3579)
+            val grassN = Noise(seed.toInt() xor 0x4c1f)
+            val coverN = Noise(seed.toInt() xor 0x7e21)
+            val cx = w / 2
+            val cy = h / 2
+            val desert = biome == Biome.DESERT || biome == Biome.ARID
+            val cold = biome == Biome.TUNDRA || biome == Biome.BOREAL
+            val tundra = biome == Biome.TUNDRA
+            // A river meanders across the map for most seeds. Its direction and the lake's side come from the world tile when it has them.
+            val riverY = FloatArray(w)
+            val riverNoise = Noise(seed.toInt() xor 0x77)
+            val riverRoll = rng.chance(0.65f) && !desert
+            val riverOn = if (local != null) local.river else riverRoll
+            val rockThr = when (local?.hills) { Hills.FLAT -> 0.70f; Hills.SMALL -> 0.64f; Hills.LARGE -> 0.58f; Hills.MOUNTAIN -> 0.5f; null -> 0.62f }
+            // A lake when the world tile borders water.
+            val lakeRoll = rng.float() * 6.283f
+            val lakeR = 8f + rng.float() * 5f
+            val lakeAng = local?.lakeAngle ?: lakeRoll
+            val lakeX = cx + (StrictMath.cos(lakeAng.toDouble()) * (w * 0.3)).toFloat()
+            val lakeY = cy + (StrictMath.sin(lakeAng.toDouble()) * (h * 0.3)).toFloat()
+            val lakeOn = local?.lake == true
+            val horizontalRoll = rng.chance(0.5f)
+            val horizontal = local?.riverHorizontal ?: horizontalRoll
+            for (x in 0 until w) riverY[x] = (if (horizontal) h * 0.22f else w * 0.22f) + (riverNoise.fractal(x.toFloat(), 0f, 24f) - 0.5f) * 30f
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = m.idx(x, y)
+                val e = elev.fractal(x.toFloat(), y.toFloat(), 26f)
+                val wt = wet.fractal(x.toFloat(), y.toFloat(), 20f)
+                val f = fert.fractal(x.toFloat(), y.toFloat(), 11f) + biome.soilBias
+                val d = max(abs(x - cx), abs(y - cy))
+                val calm = if (d < 14) (14 - d) / 14f * 0.35f else 0f
+                val ee = e - calm
+                val ww = wt + calm
+                var t = when {
+                    ee > rockThr -> Terrain.ROCK
+                    !desert && ww < 0.22f -> Terrain.WATER_DEEP
+                    !desert && ww < 0.29f -> Terrain.WATER_SHALLOW
+                    ww < 0.32f -> if (cold) Terrain.MUD else Terrain.SAND
+                    ee > 0.55f -> Terrain.GRAVEL
+                    desert -> if (f > 0.55f) Terrain.SOIL else if (f > 0.35f) Terrain.SAND else Terrain.GRAVEL
+                    f > 0.64f -> Terrain.RICH_SOIL
+                    f < 0.28f -> Terrain.MARSH
+                    else -> Terrain.SOIL
+                }
+                if (riverOn && t != Terrain.ROCK) {
+                    val along = if (horizontal) x else y
+                    val across = if (horizontal) y else x
+                    val dist = abs(across - riverY[along])
+                    if (dist < 1.6f && d > 6) t = Terrain.WATER_DEEP
+                    else if (dist < 3.2f && d > 6) t = Terrain.WATER_SHALLOW
+                }
+                if (lakeOn && t != Terrain.ROCK) {
+                    val dl = StrictMath.hypot((x - lakeX).toDouble(), (y - lakeY).toDouble()).toFloat() + (e - 0.5f) * 8f
+                    if (dl < lakeR * 0.6f) t = Terrain.WATER_DEEP else if (dl < lakeR) t = Terrain.WATER_SHALLOW
+                }
+                // Frozen shallows in the tundra are walkable ice; deep water stays open.
+                if (tundra && t == Terrain.WATER_SHALLOW) t = Terrain.ICE
+                // Gravel in the tundra comes in patches from its own noise, not as scattered single tiles.
+                if (tundra && (t == Terrain.SOIL || t == Terrain.RICH_SOIL) && gravelN.fractal(x.toFloat(), y.toFloat(), GRAVEL_PATCH) > GRAVEL_SHARE) t = Terrain.GRAVEL
+                // Grass ground: soil in grass patches, outside the desert. Its own noise, so no RNG draw changes (docs/fidelity/grass.md).
+                if (t == Terrain.SOIL && !desert && grassN.fractal(x.toFloat(), y.toFloat(), GRASS_PATCH_SCALE) > GRASS_PATCH_SHARE) t = Terrain.GRASS
+                m.terrain[i] = t
+                if (t == Terrain.ROCK) {
+                    m.natRoof[i] = true
+                    val r = rockN.fractal(x.toFloat(), y.toFloat(), ROCK_PATCH)
+                    m.rockType[i] = when {
+                        r < ROCK_CUTS[0] -> RockType.GRANITE
+                        r < ROCK_CUTS[1] -> RockType.SLATE
+                        r < ROCK_CUTS[2] -> RockType.LIMESTONE
+                        r < ROCK_CUTS[3] -> RockType.SANDSTONE
+                        else -> RockType.MARBLE
+                    }
+                }
+            }
+            // Thick mountain interior stays roofed after mining; thin edges are open sky.
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = m.idx(x, y)
+                if (m.terrain[i] == Terrain.ROCK) continue
+                var rockNb = 0
+                for (dy in -2..2) for (dx in -2..2) {
+                    val nx = x + dx; val ny = y + dy
+                    if (m.inB(nx, ny) && m.terrain[m.idx(nx, ny)] == Terrain.ROCK) rockNb++
+                }
+                if (rockNb >= 14) m.natRoof[i] = true
+            }
+            // The colony's start: an open pad near the middle, with a walkable way from it to every side of the map. The pad is
+            // made outright when the terrain has none, so the start is always open ground.
+            val (sx, sy) = m.findOpenPad() ?: run {
+                for (y in cy - 3..cy + 3) for (x in cx - 3..cx + 3) { val i = m.idx(x, y); m.terrain[i] = Terrain.SOIL; m.natRoof[i] = false }
+                cx to cy
+            }
+            m.spawnX = sx; m.spawnY = sy
+            // Caves on a hill tile: tunnels are cut from the rock as it stands now (docs/fidelity/caves.md). Carved cells become gravel
+            // floor and keep their natural roof, and the rock that stays is the cave's wall. This runs before the sides are connected,
+            // so a crossing can use a cave. Caves draw from their own generator, so a map without caves is unchanged.
+            if (local?.caves == true) {
+                val rockCells = BooleanArray(m.size) { m.terrain[it] == Terrain.ROCK }
+                val carved = Caves.carve(w, h, rockCells, seed)
+                for (i in carved.indices) if (carved[i]) m.terrain[i] = Terrain.GRAVEL
+            }
+            m.connectSides(sx, sy)
+            // Ore veins: each one is a lump grown through rock from a random rock cell, so it stays one connected blob. The number of
+            // veins of each kind follows the map's area and hilliness (see [oreVeinPlan]), unless the caller gave the plan.
+            for ((ore, count) in veins ?: oreVeinPlan(w, h, local?.hills)) {
+                val lump = oreLumpSize(ore)
+                repeat(count) {
+                    for (attempt in 0 until 80) {
+                        val ox = rng.int(w); val oy = rng.int(h)
+                        val start = m.idx(ox, oy)
+                        if (m.terrain[start] != Terrain.ROCK || m.ore[start] != Ore.NONE) continue
+                        val cells = arrayListOf(start)
+                        m.ore[start] = ore
+                        var tries = 0
+                        while (cells.size < lump && tries++ < lump * 12) {
+                            val c = cells[rng.int(cells.size)]
+                            val k = rng.int(4)
+                            val nx = m.xOf(c) + DX4[k]; val ny = m.yOf(c) + DY4[k]
+                            if (!m.inB(nx, ny)) continue
+                            val n = m.idx(nx, ny)
+                            if (m.terrain[n] != Terrain.ROCK || m.ore[n] != Ore.NONE) continue
+                            m.ore[n] = ore; cells.add(n)
+                        }
+                        break
+                    }
+                }
+            }
+            // Ruins on a colony map: walls and floors now, before the plants, which the ruins' footprints clear afterwards. They draw from
+            // their own generator, so the terrain, ore and plant rolls above and below are the same as on a map without ruins.
+            val ruinGen = if (ruins && local != null) Ruins.place(m, seed) else null
+            // Plants.
+            val trees = when (biome) {
+                Biome.TEMPERATE -> listOf(PlantType.OAK, PlantType.POPLAR, PlantType.OAK, PlantType.BIRCH, PlantType.MAPLE)
+                Biome.BOREAL -> listOf(PlantType.PINE, PlantType.PINE, PlantType.POPLAR, PlantType.BIRCH)
+                Biome.TUNDRA -> listOf(PlantType.PINE)
+                Biome.DESERT -> listOf(PlantType.SAGUARO, PlantType.PALM)
+                Biome.ARID -> listOf(PlantType.PALM, PlantType.SAGUARO, PlantType.PALM)
+                Biome.TROPICAL -> listOf(PlantType.PALM, PlantType.TEAK, PlantType.TEAK, PlantType.POPLAR)
+            }
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = m.idx(x, y)
+                val t = m.terrain[i]
+                if (!t.passable || t == Terrain.WATER_SHALLOW || t == Terrain.ICE) continue
+                val dens = tree.fractal(x.toFloat(), y.toFloat(), 9f)
+                val d = max(abs(x - cx), abs(y - cy))
+                if (d < 4) continue
+                val fertile = t.fertility > 0.1f
+                val threshold = 0.62f - 0.12f * (biome.treeDensity - 0.6f)
+                if (fertile && dens > threshold && rng.chance(0.55f * min(1.2f, biome.treeDensity))) {
+                    m.plant[i] = Plant(rng.pick(trees), x, y, 1f).also { it.age = rng.int(30) }
+                } else if (fertile && rng.chance(0.006f * biome.treeDensity)) {
+                    m.plant[i] = Plant(PlantType.BERRY, x, y, 1f)
+                } else if (fertile && rng.chance(0.004f)) {
+                    m.plant[i] = Plant(PlantType.FERAL_MIREWORT, x, y, 1f)
+                } else if (rng.chance(0.004f)) {
+                    m.plant[i] = Plant(PlantType.BRAMBLE, x, y, 1f)
+                }
+            }
+            // Grass cover: a fully grown grass plant on each grass cell that has no other plant and passes the cover noise. It is
+            // placed after the plants above and draws nothing from the RNG, so those plants are the same as before grass existed.
+            for (y in 0 until h) for (x in 0 until w) {
+                val i = m.idx(x, y)
+                if (m.terrain[i] != Terrain.GRASS || m.plant[i] != null) continue
+                if (coverN.fractal(x.toFloat(), y.toFloat(), GRASS_COVER_SCALE) > GRASS_COVER_SHARE) m.plant[i] = Plant(PlantType.GRASS, x, y, 1f)
+            }
+            // Ruin footprints lose their plants, then get their rubble and loot (docs/fidelity/ruins.md).
+            ruinGen?.finish()
+            return m
+        }
+    }
+}
