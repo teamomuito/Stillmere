@@ -50,8 +50,8 @@ cache of the health inputs, refreshed on read), `Game.kt` (`newHuman`, `drawTrai
 | Learning factor, minor passion | 1.0 | 1.4 | D, RimWorld/SkillRecord.cs:380 (constant at :41) | Learning rate, minor passion |
 | Learning factor, major passion | 1.5 | 2.0 | D, RimWorld/SkillRecord.cs:381 (constant at :43) | Learning rate, major passion |
 | Order of learning factors | passion, then trait factors, then the daily cap | the same order | D, RimWorld/SkillRecord.cs:371-397 (passion switch :377-383; global factor :386; saturation :391-393) | Learning rate |
-| Eager pupil factor | 1.4 | 1.4 | C, **UNVERIFIED** (XML global learning factor). Kept. | Trait skill modifiers |
-| Late bloomer (slow study) factor | 0.6 | 0.6 | C, **UNVERIFIED** (XML global learning factor). Kept. | Trait skill modifiers |
+| Eager pupil factor | 1.4 | 1.4 | C, **UNVERIFIED** (XML global learning factor; the rate multiplies the `GlobalLearningFactor` stat, D, `RimWorld/SkillRecord.cs:386`). Kept. | Trait skill modifiers |
+| Late bloomer (slow study) factor | 0.6 | 0.6 | C, **UNVERIFIED** (XML global learning factor; the rate multiplies the `GlobalLearningFactor` stat, D, `RimWorld/SkillRecord.cs:386`). Kept. | Trait skill modifiers |
 | Daily full-rate XP threshold | 4000 | none | D, RimWorld/SkillRecord.cs:33 (constant), :139 (`LearningSaturatedToday`) | Daily learning cap |
 | Daily factor above the threshold | 0.2 | none | D, RimWorld/SkillRecord.cs:37 (constant), :391-393 | Daily learning cap |
 | Daily counter | per skill and per pawn, saved from version 33, reset at each midnight (hour 0) | none | D, RimWorld/SkillRecord.cs:19 (field), :204 (saved), :270 (added to on non-direct XP); RimWorld/Pawn_SkillTracker.cs:103-112 (reset at hour 0). Stillmere resets at the hour-0 boundary for all pawns, in battle maps too. Vanilla resets at the first 200-tick interval of hour 0, so a gain in the first 200 ticks of a day counts to that day here. | Daily learning cap |
@@ -70,7 +70,7 @@ cache of the health inputs, refreshed on read), `Game.kt` (`newHuman`, `drawTrai
 | Age factor, random part | uniform from 1 up to a curve of age (0 at 0, 0.7 at 10, 1.0 at 35, 1.6 at 60); below 1 the range is 1 | none | D, Verse/PawnGenerator.cs:83-89 (curve), :1995 (`Rand.Range(1f, ...)`), Verse/Rand.cs:180-185 (a maximum at or below the minimum returns the minimum) | Age and final level adjustments |
 | Age factor, young | 0.2 at age 3 rising to 1.0 at 18; 1.0 from 18 up | none | D, Verse/PawnGenerator.cs:91-95 (curve), :1996 | Age and final level adjustments |
 | Final level compression | 0 to 0, 10 to 10, 20 to 16, 27 to 20; flat at 20 beyond 27; linear between | none | D, Verse/PawnGenerator.cs:97-103 (curve), :1997 | Age and final level adjustments |
-| Final level rounding and clamp | round half to even, clamp 0 to 20 | none | D, Verse/PawnGenerator.cs:2016 (clamp). The half-to-even rule of `Mathf.RoundToInt` is Unity runtime behaviour, not in the decompile (**UNVERIFIED**). | Age and final level adjustments |
+| Final level rounding and clamp | round half to even, clamp 0 to 20 | none | D, Verse/PawnGenerator.cs:2016 (clamp). The half-to-even rule is V, as in map.md: the legacy Unity page for `Mathf.RoundToInt` says an exact half goes to the even integer (https://docs.unity3d.com/450/Documentation/ScriptReference/Mathf.RoundToInt.html, search snippet). It is not in the decompile. | Age and final level adjustments |
 | Passion budget | 5 + Gaussian clamped to +/-4; a unit of budget buys a minor passion; a major passion costs 1.5 and is taken half the time when the budget is at least 1.5 | 1 or 2 rolls, 30% major, each adds 2 levels | D, Verse/PawnGenerator.cs:1857-1870 (budget and loop; the coin is `Rand.Bool`, Verse/Rand.cs:37) | Passion at generation: count and budget |
 | Gaussian draw | standard normal from two uniform draws (Box-Muller form) | none | D, Verse/Rand.cs:137-142. Implemented with `StrictMath` log and sine on the sim RNG. | Passion at generation |
 | Gaussian guard | the first uniform draw is floored at `GAUSSIAN_FLOOR = 1e-7` before the log, so the log is finite (`Skills.kt`, `SkillRules.gaussian`) | none | **C**: Stillmere's own guard. The reference draw at Verse/Rand.cs:139 has no floor. The floor changes only a first draw below 1e-7, which is rare; an exact zero, which would give an infinite log, is the case it exists for. | Passion at generation |
@@ -93,7 +93,7 @@ cache of the health inputs, refreshed on read), `Game.kt` (`newHuman`, `drawTrai
 | Fishing XP | not in Stillmere | none | D, RimWorld/JobDriver_Fish.cs:35 (0.025 per call). Stillmere has no fishing job. | XP per work tick, gathering animal resources |
 | Medicine XP per tend (human) | 500 x medicine factor | 220 flat | D, RimWorld/Toils_Tend.cs:68 (500 for humans), :70 (`Learn`) | Medicine XP per tend (ambiguous row) |
 | Medicine XP per tend (animal) | 175 x medicine factor | 220 flat | D, RimWorld/Toils_Tend.cs:68 (175 for animals) | Medicine XP per tend (ambiguous row) |
-| Medicine XP factor | 0.5 for every medicine | none | D, RimWorld/Toils_Tend.cs:69 (`?? 0.5f` without medicine). Per-medicine factors are XML data (`MedicineTendXpGainFactor`, not in the decompile), so every medicine uses the default: **UNVERIFIED** for herbal and industrial medicine. | Medicine XP per tend (ambiguous row) |
+| Medicine XP factor | With no medicine, 0.5. With medicine, the medicine's potency x 0.7, clamped to 0.5 to 1 | none (0.5 for every medicine) | D, RimWorld/Toils_Tend.cs:69 (the default without medicine, 0.5) and Verse/ThingDef.cs:712 (the medicine XP gain property: potency x 0.7, clamped to 0.5 to 1). The formula is D. Its input, each medicine's potency, is secondary or XML data: sterile dressing 1.0 and leaf poultice 0.6 are the values in health.md section 4. The formula gives the two values of a wiki XP table, 0.5 for herbal and 0.7 for industrial (V, a search snippet only, not a read page: https://rimworldwiki.com/wiki/Medicine). Adopted in the round 23 review fixes: sterile dressing gives 0.7 (350 XP for a human), leaf poultice 0.5. | Medicine XP per tend (ambiguous row) |
 | Per-tick tending XP | removed | 0.07 legacy per tick while tending | D, RimWorld/Toils_Tend.cs:70 is the only `Learn` in the tend toil; vanilla gives tending XP only at completion | XP per work tick, medicine |
 | Shooting XP | at each burst, for a standing target that is not a colony mechanoid: 170 if hostile to the shooter, else 20, times the full cycle in seconds | 4 x burst per shot | D, Verse/Verb_Shoot.cs:14-16. The "not downed" and "not colony mechanoid" test is at :12. The hostile test and the amounts (170 or 20) are both at :14, the full cycle time at :15, and the learn at :16 (at warm-up completion). Full cycle: warm-up + cooldown + (burst - 1) x burst spacing (D, Verse/VerbProperties.cs:579-581). Seconds are ticks / 60 (D, Verse/GenTicks.cs:67-70). Stillmere's burst shots are spaced tk(2), the spacing its shot list uses (**C**). The "standing" test is "not downed" (Stillmere has no posture). | XP per shot (shooting) |
 | Melee XP | per attack that is not against a downed pawn or a colony mechanoid: 200 x the full cycle in seconds (warm-up + cooldown, as for shooting) | 4 per attack | D, RimWorld/Verb_MeleeAttack.cs:31 (the learn, before the hit roll), :200-208 (immobile target: not standing; Stillmere uses downed as the approximation, **C**). The full cycle is from Verse/VerbProperties.cs:579-581 (warm-up, cooldown, burst spacing). Melee weapons carry no warm-up in Stillmere's data and fire one shot, so the cycle is the cooldown and the value is unchanged. | XP per melee attack |
@@ -142,10 +142,10 @@ Two version-32 fixtures are read by `LegacySkillsMigrationTest`:
 ## Tests
 
 New:
-* `SkillsTraitsTest.kt` (42 tests): the XP curve, level-up and drop, the cap at 20, learning factors and trait factors,
+* `SkillsTraitsTest.kt` (44 tests, round 23 run): the XP curve, level-up and drop, the cap at 20, learning factors and trait factors,
   the daily cap, decay and its phase, the passion budget, forced passions, the base levels, backstory gains and the final
   compression, the trait count and conflicts, backstory traits (a clashing pair is kept, a repeat is added once, and the
-  backstory traits count toward the target), shooting and melee XP, medicine XP, the daily reset, and the decay tick.
+  backstory traits count toward the target), shooting and melee XP, medicine XP (the potency factor, its floor and cap, and the XP of a tend with and without medicine), the daily reset, and the decay tick.
 * `LegacySkillsMigrationTest.kt` (10 tests): the two version-32 fixtures, the counter, and the version-33 round trip.
 * `HealthCacheTest.kt` (3 tests): every read of `cap` and `pain` equals a fresh computation from the same inputs, checked
   at every tick of a colony run with blasts, a hediff and toxic fallout, and a loaded game reads the same values. A bruise
@@ -205,5 +205,5 @@ earlier temperatures to carry over, so every room starts at the outdoor temperat
 * Growth moments are DLC; their flagging stays in the gap report (3.12).
 * Child passions before age 13 (`PawnGenerator.cs:1886-1904`) and the kind extra levels and ranges (`PawnGenerator.cs:1998-2015`) are not modelled. See the rows above.
 * Per-skill `usuallyDefinedInBackstories` overrides (Scholarship may be one in vanilla; **UNVERIFIED**).
-* Per-medicine XP factors (**UNVERIFIED**).
+* Per-medicine XP factors: the formula is D (Verse/ThingDef.cs:712) and is adopted. Each medicine's potency is secondary or XML data (health.md section 4), so each factor is only as good as its potency.
 * Room cache window and the unsaved room temperatures (see the caveat above; open).

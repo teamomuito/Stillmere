@@ -64,7 +64,7 @@ confirmed by any source here.
 |---|---|---|---|---|
 | Grass terrain fertility | 1.0 | UNVERIFIED (vanilla XML; `TerrainDef.cs:530` says the value is required). Set to soil's value | `Terrain.GRASS` (Defs.kt) | new |
 | Grass terrain passable, path cost | true, 1 | C (same as soil) | `Terrain.GRASS` | new |
-| Grass cover grow days | 3.5 | UNVERIFIED (vanilla XML). Set to Stillmere's sward, the nearest existing grass-type value | `PlantType.GRASS` | new |
+| Grass cover grow days | 3.5 | UNVERIFIED (vanilla XML). V: the wiki Grass page snippet gives a base growth of 2.5 days, with 4.62 days in parentheses (https://rimworldwiki.com/wiki/Grass), so 3.5 matches neither reading; kept. Set to Stillmere's sward, the nearest existing grass-type value | `PlantType.GRASS` | new |
 | Grass cover yield (hay) | 4 per full plant | UNVERIFIED (vanilla grass has no hay yield; the yield is XML, `PlantProperties.cs:48`). Stillmere's choice so that harvest gives something | `PlantType.GRASS` | new, C |
 | Grass cover harvest work | 90 | C (Stillmere's sward cut work, the nearest existing value) | `PlantType.GRASS` | new |
 | Grass cover flammability | 0.5 (default) | UNVERIFIED (vanilla XML). Stillmere's default | `PlantType` default | new |

@@ -23,7 +23,11 @@ fun tk(legacyTicks: Long): Long = Math.round(legacyTicks * TIME_SCALE.toDouble()
 // Production and economy: construction, power, plants, food and research. Each value and its source is in
 // docs/fidelity/economy.md. "D" values are read from the decompiled reference; the file and line are cited beside each.
 
-/** Capacity of one battery in watt-days (RimWorld/CompProperties_Battery.cs:5, the code default). */
+/**
+ * Capacity of one battery in watt-days: the code default (RimWorld/CompProperties_Battery.cs:5, D). The battery def's XML value
+ * may override it and is not in the tree (UNVERIFIED). A wiki search snippet gives 600 (V, not adopted: a snippet does not
+ * override a D value). See docs/fidelity/economy.md.
+ */
 const val BATTERY_CAPACITY_WD = 1000f
 /** Each battery drains this many watts every tick (RimWorld/CompPowerBattery.cs:70, in CompTick). */
 const val BATTERY_SELF_DISCHARGE_W = 5f

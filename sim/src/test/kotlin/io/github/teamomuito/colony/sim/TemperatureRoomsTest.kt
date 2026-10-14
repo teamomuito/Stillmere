@@ -65,10 +65,11 @@ class TemperatureRoomsTest {
 
     @Test fun outdoorTemperatureFollowsDayAndNight() {
         val hours = (0 until 24).map { it to temp(22, it.toFloat()) }
-        assertEquals("coldest at 03:00", 3, hours.minByOrNull { it.second }!!.first)
-        assertEquals("warmest at 15:00", 15, hours.maxByOrNull { it.second }!!.first)
-        assertEquals("swing of +/-7 C", 14.0, (temp(22, 15f) - temp(22, 3f)).toDouble(), 0.001)
-        assertEquals("dry biomes swing +/-10 C", 20.0, (temp(22, 15f, Biome.DESERT) - temp(22, 3f, Biome.DESERT)).toDouble(), 0.001)
+        assertEquals("coldest at 04:19 (round 22, was 03:00): the base game coolest point is day fraction 0.18, 4.32 h at longitude 0", 4, hours.minByOrNull { it.second }!!.first)
+        assertEquals("warmest at 16:19 (round 22, was 15:00): 12 hours after the coolest point", 16, hours.maxByOrNull { it.second }!!.first)
+        assertEquals("swing of +/-7 C", 14.0, (temp(22, 16.32f) - temp(22, 4.32f)).toDouble(), 0.001)
+        assertEquals("desert swings +/-7 C too: one daily amplitude for every biome (D)", 14.0, (temp(22, 16.32f, Biome.DESERT) - temp(22, 4.32f, Biome.DESERT)).toDouble(), 0.001)
+        assertEquals("arid swings +/-7 C too: one daily amplitude for every biome (D)", 14.0, (temp(22, 16.32f, Biome.ARID) - temp(22, 4.32f, Biome.ARID)).toDouble(), 0.001)
         // The cycle repeats every day.
         assertEquals(temp(22, 6f), temp(23, 6f) - (Climate.seasonalBase(Biome.TEMPERATE, 23) - Climate.seasonalBase(Biome.TEMPERATE, 22)), 0.001f)
     }
@@ -154,8 +155,8 @@ class TemperatureRoomsTest {
     /*
      * Hand numbers for the 3 by 3 room with a door (docs/fidelity/heat-exchange.md). Eleven wall edges give 11 x 0.00017 x 625 / 9 =
      * 0.1299 of exponent per slow tick. The closed door gives -ln(1 - 0.5 / 9) x 625 / 375 = 0.0953, and the built (thin) roof
-     * 0.00005 x 625 = 0.0313. Together 0.2565, so the room closes 22.6 percent of its gap to the outdoors per slow tick. The heater adds
-     * 14 x 1.2 / 9 = 1.87 degrees per slow tick below the setpoint, so the room swings between about 19.4 and 21.3 C.
+     * 0.00005 x 625 = 0.0313. Together 0.2564, so the room closes 22.6 percent of its gap to the outdoors per slow tick. The heater adds
+     * 35.62 x 1.2 / 9 = 4.75 degrees per slow tick below the setpoint, so at 14 C outdoors the room swings between about 19.5 and 24.1 C.
      */
     @Test fun anEnclosedRoomWithAHeaterHoldsItsTargetTemperature() {
         val (g, o) = heatedRoomGame(11)
@@ -166,23 +167,37 @@ class TemperatureRoomsTest {
         assertTrue(m.roomIndoor[r]); assertEquals(9, m.roomSize[r])
         val seen = ArrayList<Float>()
         repeat(300) { g.roomClimate(14f); if (it >= 250) seen.add(m.roomTemp[r]) }
-        for (t in seen) assertTrue("room at $t C should stay near ${Thermal.SETPOINT}", t in 19f..23f)
+        // Control acts once per slow step, so each pulse is a whole 4.75 degrees and the swing is about one pulse: the band allows for it.
+        for (t in seen) assertTrue("room at $t C should stay between 19 and 25 C around ${Thermal.SETPOINT}", t in 19f..25f)
         // The same room without power sinks to the outdoor temperature.
         m.building[m.idx(o[0] + 1, o[1] + 1)]!!.powered = false
         repeat(300) { g.roomClimate(14f) }
         assertEquals(14f, m.roomTemp[r], 0.5f)
     }
 
-    /** The limit of the heater output (Stillmere's own, row 105 of the reference): at 0 C outdoors the heater runs all the time. */
-    @Test fun aHeaterCannotHoldTheSetpointAtZeroDegreesOutdoors() {
+    /**
+     * The heater output at 0 C outdoors (Stillmere's choice, 35.62; docs/fidelity/heat-exchange.md, "Heater output"). With the heater
+     * always on the room would settle at 35.62 x 1.2 / 9 / 0.2261 = 21.001 C, so the room reaches 21 and the thermostat cuts out there.
+     * Control acts once per slow step: the room then falls to 16.25 C and climbs back under the pulses. So it cycles between about 16.3
+     * and 21.0 C with a mean near 20.4 C. It reaches the setpoint but is not held there.
+     */
+    @Test fun aHeaterReachesTheSetpointAtZeroDegreesOutdoors() {
         val (g, o) = heatedRoomGame(14)
         val m = g.map
         m.put(BuildDef.HEATER, o[0] + 1, o[1] + 1)
         m.rebuildRooms(0f)
         val r = m.roomAt(o[0] + 1, o[1] + 2)
-        repeat(300) { g.roomClimate(0f) }
-        // The heater runs all the time: 1.87 per slow tick against an exchange of 0.2262 of the gap, so it settles near 8.3 C.
-        assertTrue("a sealed room settles well below the setpoint: ${m.roomTemp[r]}", m.roomTemp[r] in 7.5f..9f)
+        val seen = ArrayList<Float>()
+        repeat(300) { g.roomClimate(0f); if (it >= 250) seen.add(m.roomTemp[r]) }
+        val peak = seen.maxOrNull()!!; val trough = seen.minOrNull()!!
+        assertTrue("the room reaches the setpoint at 0 C outdoors: peak $peak", peak >= Thermal.SETPOINT)
+        // The thermostat cuts out at the setpoint, so the peak is just above it (about 0.0002 with this output).
+        assertTrue("the room does not run far past the setpoint: peak $peak", peak < Thermal.SETPOINT + 0.5f)
+        // Between pulses the room loses 22.6 percent of its temperature per slow step: 21 x 0.774 = 16.3 C.
+        assertTrue("the room cools between pulses: trough $trough", trough in 15f..18f)
+        // The room is not held at the setpoint: on average it sits about half a degree or more below it.
+        val mean = seen.average()
+        assertTrue("the room cycles below the setpoint on average: mean $mean", mean < Thermal.SETPOINT - 0.5)
     }
 
     @Test fun aCoolerHoldsAHotRoomAtItsTarget() {

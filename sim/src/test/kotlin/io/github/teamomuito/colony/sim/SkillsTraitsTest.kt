@@ -289,9 +289,33 @@ class SkillsTraitsTest {
 
     // ---- Work, attacks and medicine
 
-    @Test fun medicineXpIsHalfOfTheReferenceFigure() {
-        assertEquals(250f, SkillRules.tendXp(false), 0f)
-        assertEquals(87.5f, SkillRules.tendXp(true), 0f)
+    @Test fun medicineXpFactorFollowsPotencyWithAFloorAndACap() {
+        // clamp(potency x 0.7, 0.5, 1) (Verse/ThingDef.cs:712); no medicine is 0.5 (RimWorld/Toils_Tend.cs:69).
+        assertEquals(0.5f, SkillRules.medicineXpFactor(0f), 0f)        // no medicine: the default
+        assertEquals(0.5f, SkillRules.medicineXpFactor(0.6f), 1e-6f)   // leaf poultice: 0.42, raised to the floor
+        assertEquals(0.7f, SkillRules.medicineXpFactor(1f), 1e-6f)     // sterile dressing: 1.0 x 0.7
+        assertEquals(1f, SkillRules.medicineXpFactor(2f), 0f)          // capped at 1
+    }
+
+    @Test fun medicineXpIsTheReferenceFigureTimesTheFactor() {
+        assertEquals(250f, SkillRules.tendXp(false, 0f), 0f)           // no medicine: 500 x 0.5
+        assertEquals(87.5f, SkillRules.tendXp(true, 0f), 0f)           // no medicine, animal: 175 x 0.5
+        assertEquals(350f, SkillRules.tendXp(false, 1f), 1e-3f)        // sterile dressing: 500 x 0.7
+        assertEquals(122.5f, SkillRules.tendXp(true, 1f), 1e-3f)       // sterile dressing, animal: 175 x 0.7
+    }
+
+    @Test fun tendingLearnsTheXpOfTheMedicineUsed() {
+        val g = Game(91L)
+        val doc = g.newHuman(0, 0)
+        val patient = g.newHuman(0, 0)
+        doc.traits.clear()                                  // no trait changes the learning rate
+        doc.passion[SkillType.HEALING.ordinal] = 1          // minor passion: learning factor 1.0
+        doc.xpToday[SkillType.HEALING.ordinal] = 0f
+        g.tendPawn(doc, patient, ItemType.MEDS_STERILE_DRESSING)
+        assertEquals(350f, doc.xpToday[SkillType.HEALING.ordinal], 1e-3f)
+        doc.xpToday[SkillType.HEALING.ordinal] = 0f
+        g.tendPawn(doc, patient, null)
+        assertEquals(250f, doc.xpToday[SkillType.HEALING.ordinal], 0f)
     }
 
     @Test fun cycleSecondsAreTicksOverSixty() {

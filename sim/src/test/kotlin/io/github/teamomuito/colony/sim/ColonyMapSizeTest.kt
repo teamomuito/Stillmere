@@ -1,15 +1,18 @@
 package io.github.teamomuito.colony.sim
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.ByteBuffer
 
 /**
- * New colonies use a 250 by 250 map. Saves store their own width and height and keep them when read, so a save written before
- * the change (100 by 100) is never resized onto a different map.
+ * New colonies use a 250 by 250 map by default, and the wizard offers six sides ([Game.SELECTABLE_MAP_SIZES]). Saves store their own
+ * width and height and keep them when read, so a save written before the change (100 by 100) is never resized onto a different map.
  */
 class ColonyMapSizeTest {
     /**
@@ -46,6 +49,39 @@ class ColonyMapSizeTest {
         val back = SaveGame.read(SaveGame.write(g))
         assertEquals(250, back.map.w)
         assertEquals(250, back.map.h)
+    }
+
+    /** The wizard's sides are the reference's six, 200 to 325 in steps of 25. 350 and 400 are test sizes there, so they are not offered. */
+    @Test fun theOfferedSizesAreTheSixReferenceSizesAndTheDefaultIsOneOfThem() {
+        assertEquals(listOf(200, 225, 250, 275, 300, 325), Game.SELECTABLE_MAP_SIZES)
+        assertEquals(250, Game.MAP_SIZE)
+        assertTrue(Game.MAP_SIZE in Game.SELECTABLE_MAP_SIZES)
+        assertFalse(350 in Game.SELECTABLE_MAP_SIZES)
+        assertFalse(400 in Game.SELECTABLE_MAP_SIZES)
+    }
+
+    /**
+     * A colony of each offered size, made as the wizard makes it: the map is generated at that side, then the colony starts on it.
+     * The colony starts inside its map, runs for two in-game hours of steps, and round-trips through a save at the same size. Writing
+     * the loaded colony again gives the same bytes.
+     */
+    @Test fun aColonyOfEachOfferedSizeStartsStepsAndRoundTrips() {
+        for (side in Game.SELECTABLE_MAP_SIZES) {
+            val seed = 1000L + side
+            val g = Game(seed, GameMap.generateFor(side, side, seed, Biome.TEMPERATE))
+            g.startNewColony(Scenario.QUIET_ENCLAVE)
+            assertEquals("$side: width after the start", side, g.map.w)
+            assertEquals("$side: height after the start", side, g.map.h)
+            assertTrue("$side: the home cell is on the map", g.map.inB(g.homeX, g.homeY))
+            assertEquals("$side: colonists", 5, g.colonists.size)
+            repeat(TICKS_PER_HOUR * 2) { g.step() }
+            assertTrue("$side: colonists stay on the map", g.colonists.all { g.map.inB(it.x, it.y) })
+            val bytes = SaveGame.write(g)
+            val back = SaveGame.read(bytes)
+            assertEquals("$side: saved width", side, back.map.w)
+            assertEquals("$side: saved height", side, back.map.h)
+            assertArrayEquals("$side: a second write of the loaded colony is the same save", bytes, SaveGame.write(back))
+        }
     }
 
     @Test fun aNewColonyHasA250ByAn250Map() {

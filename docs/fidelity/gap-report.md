@@ -123,7 +123,7 @@ See `docs/fidelity/time.md` (migration section) and `LegacySaveMigrationTest`, w
 
 | Constant | Stillmere | Vanilla | Diff | Conf |
 |---|---|---|---|---|
-| Colony map size | 250 x 250 for new colonies (`Game.MAP_SIZE`, owner's decision). Saves store their width and height and keep them when read: 100 x 100 for 10 committed fixtures, 250 x 250 for 9 (round 17, `docs/fidelity/map.md`, "Saves on disk") | Selectable sizes 200, 225, 250, 275, 300, 325 (D, decompiled 1.6.9438.38202, `RimWorld/Dialog_AdvancedGameConfig.cs:12`; 350 and 400 are test-only). The pinned build is 1.6.9438.38202, the same as the source | Only 250 is offered (round 17). The other five sizes are open for the owner | C for 250 x 250; D for the selectable list, from the pinned build (the same version as the source) |
+| Colony map size | 250 x 250 default (`Game.MAP_SIZE`, owner's decision). The new-colony wizard offers 200, 225, 250, 275, 300 and 325 (`Game.SELECTABLE_MAP_SIZES`, round 21). Saves store their width and height and keep them when read: 100 x 100 for 10 committed fixtures, 250 x 250 for 12 (`docs/fidelity/map.md`, "Saves on disk") | Selectable sizes 200, 225, 250, 275, 300, 325 (D, decompiled 1.6.9438.38202, `RimWorld/Dialog_AdvancedGameConfig.cs:12`; 350 and 400 are test-only). The pinned build is 1.6.9438.38202, the same as the source | Matches the list (round 21): all six sizes are offered, and 350 and 400 are not. Default 250. The larger sides are unmeasured on a phone (map.md, open item 8) | C for 250 x 250 as the default; D for the selectable list, from the pinned build (the same version as the source) |
 | Battle map size | 44 x 44 | ? | | ? |
 | Biomes | 6 | Core has more (12 recalled, including swamps, ice sheet, extreme desert, sea ice) | 6 missing | M |
 | Rock types | 5 (granite, marble, limestone, sandstone, slate) | 5 | none | M |
@@ -142,7 +142,7 @@ berry bushes, feral mirewort, brambles, wildlife herds, a flat start area.
 * **Grass ground and grass cover** are in (round 18, `grass.md`): grass ground is a terrain with fertility 1.0 (UNVERIFIED), and the cover grows, is harvested for hay from 65 percent growth, and regrows. Still missing: animals grazing it (3.10), grass spread, flowers, bushes, most wild plants.
 * **Caves** are generated on hill tiles (round 19, `caves.md`): tunnels through the rock, with natural roofs, gravel floor and openings onto the surface. Only colonies on large hills can have them (about 4 percent of starts). Still missing: the cave floor's water and gravel patches, cave hives, and cave-ins (`JobDrivers.kt:444` states cave-ins are not modelled). The base game's pocket-map exits and other cave content are DLC and excluded. Steam geysers and map-edge features are still missing.
 * **Ruins** are generated on colony maps (round 20, `ruins.md`): square ruins of stone or steel walls with a stone floor, walls damaged by the vanilla destroy rule, rough rock where walls fell, and 3 to 10 loot stacks per ruin from a Stillmere loot table. Battle maps get none. Terrain, ore and roofs are unchanged; plants are cleared only inside the footprints. The save format is unchanged (version 39). Still missing: the monument shapes, furniture and doors, filth rubble (rough rock stands in), and the ruin count and loot table, which are UNVERIFIED (vanilla values are XML).
-* **Roofs.** Only a natural roof flag exists. There is no roof designation, no building of roofs, and no roof collapse.
+* **Roofs.** Built roofs, roof collapse and roofless rooms are in the sim (3.3, `roofs.md`). The app has Build roof and Remove roof tools (removal is a simple designation, C; vanilla's removal area is not adopted).
 * **Ore as vanilla places it:** the subsoil auger reads the ore under its own cell, but ore only exists inside rock, which cannot be built on. See 3.9 (defect).
 * Rock chunks on the surface, mining yields and mine work are custom (`Ore.work` 1000 to 2200, plain rock 1000).
 
@@ -155,26 +155,28 @@ berry bushes, feral mirewort, brambles, wildlife herds, a flat start area.
 |---|---|---|---|---|
 | Comfortable range | 16 to 26 C, shifted by apparel insulation | 16 to 26 C | none | M |
 | Temperature granularity | per room, with heat links to neighbouring rooms and the outdoors | per room (every cell of a room shares one temperature) | **none** (a per-cell grid was not built: it would be less faithful) | M, UNVERIFIED (search summary, no URL recorded) |
-| Day/night swing | +/-7 C (+/-10 in desert, arid), coldest 03:00, warmest 15:00 | ? | | UNVERIFIED |
+| Day/night swing | +/-7 C in every biome (round 25: the +/-10 C for desert and arid was C and is removed), coldest 04:19, warmest 16:19 (round 22; was 03:00 and 15:00) | D, `Verse/TemperatureTuning.cs:20`, `Verse/GenTemperature.cs:194-202` (amplitude 7 for every biome; coldest at day fraction 0.18 at longitude 0) | | D |
 | Scorching spell / deep chill offset (vanilla event names: names.md section 6.3) | +16 / -17 C | ? (recalled near +17 / -20) | | UNVERIFIED |
 | Smoke pall offset (vanilla event name: names.md section 6.3) | -13 C for 6 days | ? | | UNVERIFIED |
 | Heat exchange | Vanilla rates in the exponent form per slow step: walls 0.00017 per tick per unit weight per cell; a rock edge with no room behind it at half weight toward the outdoors (deep water, C, not checked against vanilla); a door closes `1/cells` of the gap per pass (34 ticks open, 375 closed), toward the mean of its sides between rooms and at half a share toward the outdoors; unroofed cells 0.0007 per tick and a thin roof 0.00005 toward the outdoors, amplified above 100 degrees; a thick roof pulls a room above 15 down to 15; a door cell reads the mean of its sides; room temperatures clamped to -273.15 to 1000 | Walls, far-side rule, roof, deep ground, door and door cell mean all adopted (D: `Verse/RoomTempTracker.cs:22, 28, 30, 248, 251, 254-262, 272, 281, 290-296, 56`; `RimWorld/BuildingProperties.cs:256, 258, 260`; `RimWorld/Building_Door.cs:411, 470`; `Verse/GenTemperature.cs:408, 414, 427-453`). Not adopted: vent (no building), doorway as a room, the underground rate, the thick and thin natural roof split (natural roof is thick, C, **?**) | **Matches for the rules above, with differences**: the sample of far cells is taken whole each slow step (not 20 percent per pass), the door passes are their expected count, a door opens on entry (vanilla on approach), and the heater output is C. See `heat-exchange.md` | D for the rates and rules above; C for the integration and the door timing; **?** for the door def's XML intervals and the natural roof thickness |
 | Open doors | Swing doors open 300 ticks after a pawn steps in and 110 while one stands in them (saved, `Building.doorHold`, version 40); a slide hatch is open while powered | Door open for 300 at approach (min), 110 close delay; powered doors (`RimWorld/Building_Door.cs:411, 470, 47`) | Partial: no opening time (the speed stat is definition data), and the approach is taken as the step onto the door | D for 300 and 110; C for the entry rule and the hatch; **?** for the opening time |
-| Heater and cooler output (heat per unit) | 14 heat units, no falloff; with the vanilla rates above a sealed 3 by 3 room with one heater holds 21 only at about 13 C outdoors or warmer, and a cooler holds 21 up to about 29 C | Built heater's output is definition data; the code default energy is 12 (`RimWorld/CompProperties_TempControl.cs:7`) | **Decision needed**: the heat per unit was tuned to the old exchange; it was not changed here (row 105 is ambiguous) | C, **?** |
+| Heater and cooler output (heat per unit) | Heater 35.62 heat units (was 14), no falloff; cooler -14, unchanged. With the vanilla rates above, a sealed 3 by 3 room with one heater reaches 21 at 0 C outdoors (threshold 35.618; 35.61 never reaches 21), and a cooler holds 21 up to about 29 C | Built heater's output is definition data; the code default energy is 12 (`RimWorld/CompProperties_TempControl.cs:7`) | **Stillmere's choice** (C): the smallest value to two decimals that reaches 21 C at 0 C. At 0 C the room cycles 16.3 to 21 C (mean 20.4) because control acts once per slow step (vanilla's swing not checked). The owner may change it (game value, no save change). See `heat-exchange.md`, "Heater output" | C, **?** |
 | Room temperature across a save | Saved from version 40 (per indoor room, keyed by its first cell); before, a load reset every indoor room to the outdoor temperature | Vanilla's save of room temperatures: not checked in the decompiled tree this round | not compared; the layout is rebuilt from the saved map, so a save taken while rooms are dirty keeps the stale layout's temperatures | C |
 | Wall material insulation | none (all materials equal) | none recalled | | M |
-| Heater / cooler | +14 / -14 heat units, only below / above 21 C | ? | | UNVERIFIED |
+| Heater / cooler | +35.62 / -14 heat units, only below / above 21 C (the heater's 35.62 is Stillmere's choice, C; the cooler is unchanged) | ? (definition data; the code default energy is 12) | | UNVERIFIED |
 | Rooms | flood fill; walls, doors and rock separate; a door splits rooms and belongs to none; indoor when it does not touch the map edge and fewer than a quarter of its cells are open (unroofed), `open * 4 < cells` | a room that is 75% roofed or less is outdoors (Verse/Room.cs:103-108, quarter rule at :105) | **Matches**. The old 700-cell rule is gone, kept only to migrate saves | D, `Verse/Room.cs:105` (see `roofs.md`) |
 | Roofs and roof collapse | built roof grid (saved, version 38); designation and build job (65 work, progress 1.7 x work speed per tick); a roof needs a holder (wall, door or rock) within 6.9 cells through roofed cells; removing a holder drops the roofs it held; crush roll 15 to 30 per colonist under a falling roof | the same rules, from RoofCollapseUtility, RoofCollapseCellsFinder, JobDriver_BuildRoof, JobDriver_AffectRoof, RoofCollapserImmediate | **Partial**: no remove-roof designation, trees are not cut first, the collapse does not destroy buildings or plants, no app command yet | D for the 6.9-cell radius (`Verse/RoofCollapseUtility.cs:5`) and the quarter rule (`Verse/Room.cs:103-108`, `:105`), both rows of the reference table; D for the 65 work (`RimWorld/JobDriver_AffectRoof.cs:15`, `:43`), the 1.7 rate (`:47`) and the 15 to 30 crush roll (`Verse/RoofCollapserImmediate.cs:10`), cited to the decompiled source with no reference row (the pinned build is 1.6.9438.38202, the same as the source); C for the work speed used in place of the construction stat, the collapse steps and the holder test; the 3 by 3 block is roofed to a fixed point (C), and vanilla's single pass is not adopted; the other vanilla rules are C or not adopted for the same reason (`roofs.md`, Tags and "Corrections in this round"); C (work speed mapping; no material cost charged); UNVERIFIED (which defs hold roofs, natural rock holding a roof, the built roof's thin flag) |
 | Room stats | beauty, cleanliness, wealth, impressiveness, role (9 roles); constants in `RoomRules` | impressiveness from wealth, beauty, space, cleanliness with named stages | structure matches, all numbers custom | M, UNVERIFIED (structure, from a search summary with no URL recorded); C (numbers) |
 
 **Heat exchange round (version 40):** walls, rock, doors, roofs and open doors use the vanilla rates (see `heat-exchange.md`); door cells read the mean of their sides; room temperatures are saved. Tests: `HeatExchangeTest` (25) and `LegacyHeatMigrationTest`; `TemperatureRoomsTest` values changed (heater at 14 C, cooler at 30 C, a new heater-at-0 test). Not committed.
 
+**Heater output round (no save change):** the heater's heat per unit goes from 14 to 35.62 (`Buildings.kt`), Stillmere's choice (C), the smallest value to two decimals that reaches 21 C at 0 C outdoors in a sealed 3 by 3 room (threshold 35.618; 35.61 settles at 20.995 and never reaches 21). The cooler (-14) is unchanged. `TemperatureRoomsTest`: the 14 C band is 19 to 25 (the old 19 to 23 cannot hold for any output that reaches 21 at 0 C), and `aHeaterCannotHoldTheSetpointAtZeroDegreesOutdoors` is renamed `aHeaterReachesTheSetpointAtZeroDegreesOutdoors`, which checks that the room reaches 21 and sits below it on average (it does not claim the room is held). The heat-doc citation for the thermostat is `Climate.kt:102` (was `:71`, a door comment). Full suite: 826 tests, 0 failures, 0 errors, 0 skipped. Open: the swing of a heated room is one pulse wide (16 to 21 C at 0 C) because control acts once per slow step; vanilla's swing is not checked (?). Not committed.
+
 **Done in phase 4:** outdoor temperature moved into a pure `Climate` object (`StrictMath`, fixing R3 for this curve); heat now flows
 between neighbouring rooms through doors, walls and rock instead of only to the outdoors; heater and cooler thermostat extracted;
 room stats moved out of `Game` into `computeRoomStats` with named constants. 18 tests in `TemperatureRoomsTest`.
 
-**Could not be verified** (no direct wiki access; see the doc): heater and cooler output (now a decision: see the row above), the vent rate (no vent building), the natural roof thickness, the door def's XML intervals, the day/night curve,
+**Could not be verified** (no direct wiki access; see the doc): heater and cooler output (the heater's 35.62 is Stillmere's choice: see the row above), the vent rate (no vent building), the natural roof thickness, the door def's XML intervals, the day/night curve,
 the impressiveness formula and thresholds, and which buildings and terrain contribute to beauty and cleanliness and by how much.
 All are marked UNVERIFIED and are Stillmere's own numbers.
 
@@ -184,10 +186,11 @@ get roofs on each cell of the rooms that were indoor under the old rule, so no r
 `Desig.ROOF` and `JobType.BUILD_ROOF` are new (appended, so saved job types keep their ordinals). Crush damage goes through the sim RNG.
 Tests: `RoofsTest.kt` (rule, support radius, collapse, crush, building, save) and `LegacyRoofMigrationTest.kt`; the room tests in
 `TemperatureRoomsTest.kt`, `GameTest.kt` and `ColonyMapSizeTest.kt` now roof their rooms or check version 38 (listed in `roofs.md`).
-All 750 sim tests pass with 0 failures (22 in `RoofsTest`, 6 in `LegacyRoofMigrationTest`), confirmed by one `./gradlew :sim:test --console=plain` run (`roofs.md`, Status).
+All 826 sim tests pass with 0 failures (23 in `RoofsTest`, 6 in `LegacyRoofMigrationTest`), confirmed by one `./gradlew :sim:test --console=plain` run (`roofs.md`, Status).
 
-**Still open for roofs:** the app has no build-roof command yet (the sim accepts `designate(x, y, Desig.ROOF)`), so rooms built by
-players are outdoors until roofed; the remove-roof designation; trees that block a roof are skipped, not cut first; the 3 by 3 block is roofed to a fixed point, not vanilla's single pass (not adopted); the crush does not
+**App (this round):** the Orders menu has a Build roof tool. Tap or drag marks cells with `Desig.ROOF` through the same `designate` call as the other order tools, a marked cell reads "Marked: roof", and built roofs are drawn with a faint tint apart from natural roof (`roofs.md`, "The app"). Not built here: CI must confirm.
+
+**Still open for roofs:** vanilla's removal area and removal-mode collapse (a simple remove-roof designation exists, C); trees that block a roof are skipped, not cut first; the 3 by 3 block is roofed to a fixed point, not vanilla's single pass (not adopted); the crush does not
 destroy buildings or plants; natural roof is kept when its group loses support, where vanilla drops a natural roof that is not thick (not
 adopted, a decision recorded in `roofs.md`); the built roof's cost, thin or thick flag, and which defs hold a roof are `UNVERIFIED`.
 
@@ -210,7 +213,7 @@ Phase 5. Code in `sim/`, tests in `HealthFidelityTest.kt` (65 new tests; `./grad
 | Body parts and hierarchy | Partial | 29 human parts with correct parents and vital set. Vanilla's bones, tongue and extra digits are not modelled. Finger and toe HP is 12 where I recall 8 (`UNVERIFIED`). |
 | Part health | Matches | Per-part HP times health scale, with no body total. Torso, heart, lungs, kidneys, liver and brain agree with `SECONDARY`; the other parts are `UNVERIFIED`. |
 | Hit locations | UNVERIFIED | Outer parts by coverage, organs only through their parent (`SECONDARY` agrees). Coverage values and the penetration rule are the author's tuning. |
-| Consciousness | Partial | Pumping weight 0.2 agrees; breathing and filtration weights and the pain and blood-loss terms are `UNVERIFIED`. |
+| Consciousness | Partial | Pumping weight 0.2 agrees; breathing 0.2 and filtration 0.1 weights are D; the pain term is D in form, with the sim's form differing and not changed; the blood-loss term is `UNVERIFIED`. |
 | Moving, manipulation | Partial | Structure is the author's. Consciousness does not multiply either directly (`SECONDARY`). |
 | Sight, hearing | Matches | Mean of the eyes or ears; one eye lost halves sight. |
 | Eating | Matches (changed) | Now jaw only; the stomach moved to Metabolism. |
@@ -221,11 +224,11 @@ Phase 5. Code in `sim/`, tests in `HealthFidelityTest.kt` (65 new tests; `./grad
 | Bleeding and clotting | UNVERIFIED | Death at 100% bloodLoss agrees. Rates, tended residual, clotting and the staged blood-loss hediff are unconfirmed or absent. |
 | Wound infection | UNVERIFIED | Qualitatively consistent with wiki anecdotes. No figures confirmed. |
 | Illness speed | Gap | The chest cough illness (vanilla flu) runs about 3.5 times faster than the wiki's figures (`SECONDARY`). Left alone; illness tuning was out of scope. |
-| Scars, lost limbs | UNVERIFIED | Scars are free and permanent (I recall vanilla scars keeping some severity). |
+| Scars, lost limbs | Partial | Scar chance and permanence are D (health.md, Scars). The sim's 18% chance and no-pain scar differ and are kept. Lost-limb detail is `UNVERIFIED`. |
 | Implants (limb crafting research) | UNVERIFIED | Efficiencies unconfirmed. "Gaff grip" may not be a base-game item. |
-| Tend quality | Matches (changed) | Doctor-stat curve, ×0.7 self-tend, ±25% luck, clamp to the medicine's cap. Leaf poultice potency, the leaf poultice cap, the no-medicine values and the +0.10 bed offset are `UNVERIFIED`. About double the old tend quality for skilled doctors. |
-| Medicine items | Partial | The strongest item (sterile dressing, `MEDS_INDUSTRIAL`) agrees. Leaf poultice is `UNVERIFIED`. Glitterworld medicine is missing. |
-| Healing rates, beds | UNVERIFIED | Kept as the author's tuning. Infirmary-cot healing, infection and tend bonuses are all unconfirmed. |
+| Tend quality | Matches (changed) | Doctor-stat curve, ×0.7 self-tend, ±25% luck, clamp to the medicine's cap. The no-medicine values are D (`RimWorld/TendUtility.cs:10-12`). Leaf poultice potency and cap are V (a wiki snippet). The +0.10 bed offset is `UNVERIFIED`. About double the old tend quality for skilled doctors. |
+| Medicine items | Partial | The strongest item (sterile dressing, `MEDS_STERILE_DRESSING`) agrees. Leaf poultice is `UNVERIFIED`. Glitterworld medicine is missing. |
+| Healing rates, beds | D for the formulas; values differ (round 22) | Kept as the author's tuning, with one change: the tended base is 0.5, not 0.55 (`Verse/Pawn_HealthTracker.cs:1158-1159`). The untended 3.2 per wound differs from vanilla's pawn-wide 8 a day, and the bed's x1.35 differs from vanilla's added +4 and the bed's XML heal (`Verse/Pawn_HealthTracker.cs:1123-1161`). Infirmary-cot healing, infection and tend bonuses are XML or unconfirmed. |
 | Surgery | Partial | Amputation and prosthetic or engineered-part installation. Success ignores medicine potency and no medicine is consumed (both `SECONDARY`/`UNVERIFIED` gaps). No operations on injuries. |
 | Downed enemies dying from pain shock | Gap | `SECONDARY`; not implemented. |
 | Death at consciousness 0% | Gap | `SECONDARY`; not a separate rule. |
@@ -288,7 +291,7 @@ not vanilla thoughts as far as I know (**UNVERIFIED**) and look invented.
 | Base level | uniform 0 to 4, then backstory gains x 1.0 to 1.4, the age factor and the final compression | same, for skills whose flag is the default | per-skill flags are XML (UNVERIFIED) | D (PawnGenerator.cs:1963-2016) |
 | XP per work tick | mining 0.07, plant sowing and harvest 0.085, construction and deconstruction 0.25, repair 0.05, research 0.1, bills 0.1, animal gathering 0.13 | same | none for these jobs | D (JobDriver_*.cs, Toils_Recipe.cs:188) |
 | Combat XP | shooting 170 (hostile) or 20 x cycle seconds per burst; melee 200 x cycle seconds per attack | same | none | D (Verb_Shoot.cs:14-16; Verb_MeleeAttack.cs:31) |
-| Medicine XP per tend | 500 (animal 175) x 0.5 | 500 (175) x medicine factor; default 0.5 | per-medicine factors are XML (UNVERIFIED) | D (Toils_Tend.cs:68-70) |
+| Medicine XP per tend | 500 (animal 175) x 0.5 | 500 (175) x medicine factor, the factor being potency x 0.7 clamped to 0.5 to 1; default 0.5 (round 23) | the factor formula is D; the potencies are secondary (health.md section 4) | D (Toils_Tend.cs:68-70; Verse/ThingDef.cs:712) |
 | Eager pupil / late bloomer learning | 1.4 / 0.6 | XML stat | values UNVERIFIED | UNVERIFIED |
 | Traits | 42, no degrees, 1 to 3 drawn (a clash is redrawn) | around 50, with degrees (for example two levels of work speed) | degrees and commonality missing | M |
 | Backstories | 33 (11 childhood, 22 adulthood) | hundreds | tiny set; titles are original | M |
@@ -332,7 +335,7 @@ order; a 24-hour schedule of anything / work / joy / sleep; reservations and unr
 | Breeze mill | 1,500 W x wind; wind used capped at 1.5 (round 16; D `CompPowerPlantWind.cs:32`); wind walk 0.15 to 1.35 | cap 1.5 in source; walk is noise (XML) | cap matches; walk UNVERIFIED | M |
 | Battery capacity | 1,000 Wd per battery (round 16; D `CompProperties_Battery.cs:5`, code default) | 1,000 recalled | matches; battery XML may override (UNVERIFIED) | M |
 | Battery self-discharge | 5 W per battery per tick, capped by stored energy (round 16; D `CompPowerBattery.cs:70`) | 5 W per tick | matches | high |
-| Battery charge efficiency | Lossless | code default 0.5 (`CompProperties_Battery.cs:7`); XML may override | not adopted (UNVERIFIED) | M |
+| Battery charge efficiency | Lossless | code default 0.5 (D, `CompProperties_Battery.cs:7`); XML may override (UNVERIFIED) | not adopted (D; XML UNVERIFIED) | M |
 | Glow panel draw | 400 W | 2,900 recalled; no reference row (XML) | UNVERIFIED | M |
 | Hotplate, picture box, grow tray | 350, 200, 70 W | same recalled | UNVERIFIED | M |
 | Construction learning | 0.25 XP per tick in the work stage, after all materials are in | 0.25 per tick while the frame holds resources | **Matches** (reference row was stale) | high |
@@ -346,7 +349,7 @@ areas exist), a hit-point filter on zones.
 
 **Open (power, round 16):** the power shortage shedding (every 20 ticks, 5% of consumers) and the battery restart reserve need a
 finer power step than the 625-tick network step, so they are deferred. Also open: the breeze mill's 250-tick wind read and its
-blocked wind path, the battery charge efficiency (UNVERIFIED), and the sun output curve (depends on the time model in 3.1).
+blocked wind path, the battery charge efficiency (D for the code default; the XML value is UNVERIFIED), and the sun output curve (depends on the time model in 3.1).
 Building costs and power ratings are XML in vanilla and stay UNVERIFIED (see `economy.md`).
 
 ### 3.9 Plants, food, cooking, spoilage
@@ -640,7 +643,7 @@ Per `CLAUDE.md`: flagged, not deleted.
 ## 7. Top 10 gaps
 
 1. ~~**Time base (24,000 vs 60,000 ticks per day)**~~ **Done** (`7e402c9`): 60,000 ticks per day. (3.1)
-2. **Map: new colonies are 250 x 250 (round 6); grass ground and covers are in (round 18, `grass.md`); caves are generated on hill tiles (round 19, `caves.md`); ruins are generated on colony maps (round 20, `ruins.md`).** Roofs and roof collapse are in (3.3, `roofs.md`); the app has no roof command yet. (3.2, 3.3, 3.9)
+2. **Map: new colonies default to 250 x 250 (round 6), and the new-colony wizard offers the six reference sizes from 200 to 325 (round 21); grass ground and covers are in (round 18, `grass.md`); caves are generated on hill tiles (round 19, `caves.md`); ruins are generated on colony maps (round 20, `ruins.md`).** Roofs and roof collapse are in (3.3, `roofs.md`); the app has a Build roof tool but no remove-roof command yet. (3.2, 3.3, 3.9)
 3. **Needs and mood model:** the drains, hunger categories, break timing, drug tolerance and the four added needs now follow the decompiled reference (round 13, `needs-mood.md`). The thought catalogue, mood smoothing and the chemical interest need are still missing. (3.5)
 4. **Combat model** (3.11): band accuracy, the shooter factor, the cover pass, the layered armour roll, melee dodge and stagger, and burning are done from the reference (combat round, `combat.md`). Still open: the weapon stat values, the intercept and stray-miss model, minimum range, stun, EMP, shields, and the fire growth rows of 3.8.
 5. **Threat generation:** raid points formula, caps, storyteller cycles. (3.13)
@@ -766,7 +769,7 @@ Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, 
 * **Two assertions relaxed, and one masked:** `JobAiTest` (the haul and build tests) used to require no reservation at all. The colonist now equips a bow, which holds one key, so the check now requires the held keys to be exactly the current job's key. That allows that one key. A haul reservation on another tile still fails it. A leftover on the same key as the current job would not be told apart from the job's own key; no case here shares a key. `SaveRestoreTest` (the blast-on-save test) flushes the health caches before saving. That **masks** the save and load divergence in 3.17 and does not fix it.
 * **Review fixes in this round:** the citations to `Verse/GenTicks.cs:67-70` and `Verse/Verb_Shoot.cs:14-16` (were `RimWorld/`); the shooting amounts are at :14 (not :15, the cycle); the growth birthday gate is at `Verse/Pawn_AgeTracker.cs:703` (`:371` gates growth points); the recipe factor is `Verse/RecipeDef.cs:65`; the decay hash phase is in the decompile (`Verse/Gen.cs:214-217, 254-257`), and Stillmere keeps its id stagger (C); backstory traits count toward the trait target (`PawnGenerator.cs:1495-1510`), with a test; child passions before 13 (`PawnGenerator.cs:1886-1904`, ungated) and the kind extra levels and ranges (`PawnGenerator.cs:1998-2015`) are recorded as not modelled, with the unreachable path explained; the melee cycle includes the warm-up term; the Gaussian floor 1e-7 is recorded as Stillmere's guard (C); the version 33 note is in `SaveGame.kt`; the non-zero XP fixture is new.
 * **Tests:** 601 pass, 0 failures, 0 errors, 0 skipped (`./gradlew :sim:test --console=plain`). New: `SkillsTraitsTest` (40, two of them for the trait count), `LegacySkillsMigrationTest` (10, four of them for the non-zero XP fixture).
-* **Open:** the save caveat for derived caches (3.17); trait data (3.6); the per-skill backstory flags and per-medicine factors (UNVERIFIED); the work-speed curve (3.6 and 3.7, no reference row).
+* **Open:** the save caveat for derived caches (3.17); trait data (3.6); the per-skill backstory flags (UNVERIFIED), and per-medicine factors (closed in round 23, section 23); the work-speed curve (3.6 and 3.7, no reference row).
 * **Nothing is committed.**
 
 ## 14. Review fixes to section 13
@@ -883,3 +886,156 @@ Made on branch `ccr-41984ede-stlmp4`. The plan, every constant with its source, 
 * **Code.** The only code change is a comment: `Ruins.RUBBLE_CHANCE` is now described as C. The generator and its numbers are unchanged, so the measurements in `ruins.md` still hold. The save format is unchanged and `VERSION` stays 39.
 * **Tests.** `./gradlew :sim:test --console=plain` does not finish within the 600-second limit, so it ran as six foreground calls, with `--tests` filters that together name every test class. The calls ran 42, 58, 45, 171, 184 and 288 tests. The totals add to 788, the number of `@Test` methods. All passed, with 0 failures and 0 errors. The 58-test call took 578 seconds, close to the limit, so its heavy classes are in that call alone.
 * **Open:** the owner confirms the mental break test's change from one seed to twelve (a test change, not a ruin change). The count per 10,000 cells (0.5 to 1.0), the loot table and the rubble choice remain C and UNVERIFIED, and the owner decides the rubble pile count (the open items in `ruins.md`).
+
+## 21. Selectable map sizes (3.2), round 21
+
+Made on branch `ccr-41984ede-stlmp4`. The plan, the constants and their sources, the tests and the open items are in [map.md](map.md), "Decisions" items 1 and 8. Nothing is committed.
+
+* **Adopted (D, `RimWorld/Dialog_AdvancedGameConfig.cs:12`):** the new-colony wizard offers 200, 225, 250, 275, 300 and 325, held in `Game.SELECTABLE_MAP_SIZES` (`sim/.../Game.kt`). This closes round 17's open item on which sizes are offered. 350 and 400 are the reference's test sizes and are not offered. The default is `Game.MAP_SIZE`, 250 (C, owner's decision).
+* **App, not built:** the size row of the new-colony wizard (`app/.../Dialogs.kt`, `renderSize`) now makes one button per offered side, labelled with the side (for example "200 × 200") and "(standard)" on 250, which is selected by default. Choosing a side makes a new map at that side with the same seed and biome, and resets the crew, as choosing a biome does. `:app` was not compiled: there is no Android SDK here, so CI must confirm the build.
+* **Sim:** `Game.SELECTABLE_MAP_SIZES` is new. `Game.startNewColony` takes its size from the map it starts on, and its doc comment says so. The generator, the ore count and the save already take any width and height, so no generation code changed.
+* **Save format: unchanged, `VERSION` stays 40.** The sizes are a game value and a UI option. A save already stores width and height on every version, so no field and no reader changed.
+* **Tests (new, in `ColonyMapSizeTest`):** `theOfferedSizesAreTheSixReferenceSizesAndTheDefaultIsOneOfThem`, and `aColonyOfEachOfferedSizeStartsStepsAndRoundTrips`. The second runs for each of the six sides: a colony starts inside its map, runs two in-game hours of steps, and round-trips through a save at its own size, with the same bytes written again.
+* **Docs corrected (stale before this round):** `map.md` said `VERSION` was 37 and listed 19 fixtures. The code has `VERSION` 40 and 22 fixtures (10 at 100 by 100, 12 at 250 by 250). The map-size rows of this file and of `decompiled-reference.md` said that only 250 was offered; they now say the list is offered. The `Game.kt` line cited in `decompiled-reference.md` row 614 is updated.
+* **Tests run:** `./gradlew :sim:test --console=plain`, in the background with a log file, read from the JUnit XML: 828 tests in 79 suites, 0 failures, 0 errors, 0 skipped (14 min 31 s). `ColonyMapSizeTest` passes all 9 tests.
+* **Not measured:** the phone cost of the larger sides. A 325 by 325 map has 1.7 times the cells of a 250 by 250 map. `PerfBenchTest` measures only 100 and 250, and no phone is available here (`map.md`, open item 8).
+* **Open:** the owner confirms the six sizes and the 250 default. The version 37 marker (`map.md`, open item 5) is still open. Battle maps keep their 44 by 44 size and fixed veins, as before.
+
+## 22. Re-check of UNVERIFIED values (round 22)
+
+Made on branch `ccr-41984ede-stlmp4`. Nothing is committed. Scope: every value tagged UNVERIFIED in `docs/fidelity/*.md`, except `names.md`: its UNVERIFIED marks say whether a label is RimWorld wording, which is not a game value, so they are not re-checked here. Method: each value was searched in the decompiled tree (`/home/user/chillu1/rimworlddecompiled`, C# only, no XML defs). Web searches were run for values the tree cannot give, and only the search snippets were read (the wiki host does not resolve). A value is tagged D only where the tree gives it for the same mechanic, and V only with a URL.
+
+**Counts, UNVERIFIED lines before and after the round:** health 72 to 57; temperature-rooms 17 to 9; roofs 12 to 11; ruins 8 to 7; caves 8 to 6; skills-traits 16 to 13; decompiled-reference 7 to 2; map 3 to 2. Unchanged: combat 14, grass 9, needs-mood 15, threats 12, heat-exchange 1, economy 15 (its battery row stays UNVERIFIED). A row that is still UNVERIFIED is one whose value is XML data, or whose tree evidence conflicts; the settling source is listed below.
+
+**Sim values changed (three), all with tests updated:**
+
+* `HealthRules.HEAL_TEND_BASE` 0.55 to 0.5. D `Verse/Pawn_HealthTracker.cs:1158-1159` (tended heal is 8 x (0.5 + quality) a day). `HealthFidelityTest` now asserts 8 x 0.5 and 8 x 1.5.
+* `HealthRules.bloodRecoveryPerDay`: 0.36 when fed and 0.10 when unfed (C) become 1/3 a day for both, and the food gate is removed. D `Verse/HediffGiver_Bleeding.cs:14` (0.00033333333 per 60 ticks, with no food gate). `Health.kt` no longer passes food, and `HealthFidelityTest` asserts 1/3 with no food argument.
+* `Climate.COLDEST_HOUR` 3 to 4.32. D `Verse/GenTemperature.cs:194-202` (the cosine's minimum is at day fraction 0.18, and `RimWorld/GenDate.cs:145-147` gives longitude 0 no offset). Coldest hour 04:19, warmest 16:19. The amplitude 7 (`Verse/TemperatureTuning.cs:20`) already matched. Tests updated for the new hour: `TemperatureRoomsTest` (coldest 4, warmest 16 on whole hours; swing measured at 4.32 and 16.32), and the version 39 fixture expectation `colony_v39_expect.txt`, outdoor 8.111009 to 6.3693705 at tick 16875. That change equals the diurnal difference to 1e-6, so only the expectation moved; the save file is unchanged.
+* Battery capacity is not changed: it stays 1000 Wd (`BATTERY_CAPACITY_WD`, D `RimWorld/CompProperties_Battery.cs:5`, the code default). A wiki search snippet gives 600 Wd (V, https://rimworldwiki.com/wiki/Battery), but a snippet does not override a D value, and the battery XML is not in the tree, so the row stays UNVERIFIED. `EconomyFidelityTest` asserts 1000.
+
+Save format: unchanged, `VERSION` stays 40. These are game values, not a save layout.
+
+**Tagged D this round (value in the tree, sim unchanged, or already matching):** mental break mean days 0.5, 0.8, 4 and the 4/7 and 1/7 threshold fractions (`Verse.AI/MentalBreaker.cs:24-28, 34, 40-44`); the breathing and filtration consciousness weights 0.2 and 0.1 (`RimWorld/PawnCapacityWorker_Consciousness.cs:18-20`); tend quality constants (`RimWorld/TendUtility.cs:10-12`, no medicine 0.3 and cap 0.7, which the sim already uses); the injury pain and bleed formulas and the 90000-tick bleed stop (`Verse/Hediff_Injury.cs:137, 158-188`); the infection curves and delay (`Verse/HediffComp_Infecter.cs`, `Verse/HealthTuning.cs:74`); the permanent-injury chance (`Verse/HediffComp_GetsPermanent.cs:63-77`); the roof work 65 and rate 1.7 (`RimWorld/JobDriver_AffectRoof.cs:43, 47`); roof flags (`Verse/RoofDef.cs`); the cave water and gravel thresholds (`RimWorld/TileMutatorWorker_Caves.cs:15-21`); the hilliness bands (`RimWorld.Planet/WorldGenStep_Terrain.cs:221, 239, 257`); the settlement refusal of impassable tiles (`RimWorld.Planet/TileFinder.cs:82-85`); the curve evaluation (`Verse/SimpleCurve.cs:139-170`); the wall, roof, door and vent rates and intervals (`Verse/RoomTempTracker.cs:22, 30`, `Verse/TemperatureTuning.cs:28-36`), which the sim's `Climate.kt` already matches; the outdoor-room rule (`Verse/Room.cs:99-105`); the impressiveness inputs (`RimWorld/RoomStatWorker_Impressiveness.cs:8-23`); the heater and cooler formulas (`RimWorld/Building_Heater.cs`, `RimWorld/Building_Cooler.cs`); the skill XP calls (`RimWorld/SkillRecord.cs:37, 386`, `RimWorld/Toils_Tend.cs:69-70`); the need base 0.5 (`RimWorld/NeedDef.cs:45`); the ship part list (`RimWorld/ShipUtility.cs:18-27`); the fermenting barrel constants (`RimWorld/Building_FermentingBarrel.cs:17, 19`); the shot hit factor (`Verse/ShotReport.cs:160-172`); the cover fill (`Verse/CoverUtility.cs:104-108`); and the count rounding (`Verse/GenStep_Scatterer.cs:266-274`).
+
+**V tags added (search snippets, URL inline; none is a Stillmere value that a snippet clearly contradicts; the battery's 600 Wd conflicts with a D value and is kept at 1000, see above):**
+
+* Battery capacity 600 Wd per battery (https://rimworldwiki.com/wiki/Battery). Not adopted; see above.
+* Herbal medicine potency 0.6 and maximum tend quality 0.7, which the sim already uses (https://rimworldwiki.com/wiki/Herbal_medicine).
+* Mental break base stat 35%, giving thresholds 35%, 20% and 5% (https://rimworldwiki.com/wiki/Mental_break). The break frequencies on other mirrors conflict with the tree, and the tree's values are kept.
+* Solar generator 1,700 W at full light (https://rimworldwiki.com/wiki/Solar_generator). The sim matches.
+* Battery charging at 50% efficiency and 5 Wd a day self-discharge (https://rimworldwiki.com/wiki/Battery). The sim's self-discharge matches; the charge efficiency is not modelled.
+* `Mathf.RoundToInt` sends an exact half to the even integer, per the legacy Unity pages (https://docs.unity3d.com/450/Documentation/ScriptReference/Mathf.RoundToInt.html, 4.5 to 2017.4). The current page was not read. The sim's `kotlin.math.round` is half to even, so `map.md` and `ruins.md` now say V.
+* Heater 175 W and 21 heat per second (https://rimworldwiki.com/wiki/Heater). The sim has 200 W and 35.62 (the round recorded in `heat-exchange.md`, "Heater output"). Not changed: the heat figure is a Stillmere tuning, and the snippet does not give units that map onto it. Owner decision.
+* Medicine XP factor: a wiki XP table reads 0.5 for herbal and 0.7 for industrial (V, a search snippet only, not a read page: https://rimworldwiki.com/wiki/Medicine). The sim used 0.5 for every medicine. Changed in round 23 (section 23): the factor is now potency x 0.7 clamped to 0.5 to 1 (D, Verse/ThingDef.cs:712), which gives the same two values.
+* Grass base growth 2.5 days, with 4.62 days in parentheses (https://rimworldwiki.com/wiki/Grass). Neither reading is 3.5, the sim's value, so the row stays UNVERIFIED.
+* Biome extremes 35 C to -25 C (https://rimworldwiki.com/wiki/Biome) conflict with the temperate forest minimum of -10 C (https://rimworldwiki.com/wiki/Temperate_forest). The row stays UNVERIFIED.
+* Surgery success by skill: 10% at 0, 80% at 8, 100% at 15, 110% at 20 (https://rimworldwiki.com/wiki/Medical_Surgery_Success_Chance). A mirror of the same page gives 20% at 0 and 99% at 20. The sim's 0.5 + 0.03 x skill is kept, UNVERIFIED.
+* Rusted bed heals +5 a day, and a sleeping spot +4 (https://rimworldwiki.com/wiki/Rusted_bed). A forum reply quoting the bed page says +8 for a regular bed (https://steamcommunity.com/app/294100/discussions/0/2969524118002585015, a user summary, weak). Both support an added heal, not the sim's x1.35. Not changed.
+
+**Found different from the sim and not changed (owner decision):**
+
+* Untended healing: vanilla heals 8 a day for the pawn, one random injury per 600 ticks, plus 4 when not standing. The sim gives 3.2 per wound. Matching it would be a 2.5x balance change, and the structures differ.
+* Bed rest: vanilla adds +4 and the bed's XML heal; the sim multiplies by 1.35.
+* Starvation: vanilla stops all healing at food 0 (`RimWorld/Need_Food.cs:19, 35`). The sim scales by 0.3 below 0.05.
+* Consciousness pain: vanilla subtracts up to 0.4 for pain from 0.1 to 1.0 (`RimWorld/PawnCapacityWorker_Consciousness.cs:12`). The sim multiplies by 1 - 0.55 x pain.
+* Bleeding: vanilla tended wounds do not bleed, and wounds stop bleeding at age 90000 ticks or more. The sim clots and leaves a 0.06 trickle when tended.
+* Infection: vanilla rolls once when the wound is added and after 15000 to 45000 ticks; its curves differ from the sim's start rule.
+* Scars: vanilla's chance is 0.02 times factors times a severity curve, and a permanent wound keeps its pain and a floor. The sim uses 18% for sharp wounds with no pain.
+* Impressiveness and the seasonal curve: the weights and the latitude amplitude differ in form.
+* Inner-part damage: `ChanceToAdditionallyDamageInnerSolidPart` 0.2 is declared, but its use is not in the tree, so the sim's 0.55 and 35% gate are not checked against vanilla.
+
+**What would settle the rows still UNVERIFIED (XML data, not in the tree):**
+
+* Body part coverage, hit points and child parts (health 45 to 62, 72 to 76): `Core/Defs/BodyDefs` (Body_Human).
+* Injury and disease values: `painPerSeverity`, `bleedRate`, `infectionChance`, per-stage `naturalHealingFactor`, immunity: `Core/Defs/HediffDefs`.
+* Power draws, the heater and cooler `energyPerSecond`, the bed's `bed_healPerDay`, the `MedicalTendQualityOffset` and `SurgerySuccessChanceFactor` of beds, and the glow panel's wattage: `Core/Defs/ThingDefs` (buildings), and the full wiki `Property:Power_Consumption` page.
+* Stat base values (`ShootingAccuracyPawn`, `MedicalSurgerySuccessChance`, `MedicalTendQuality`, `MentalBreakThreshold` base, `GlobalLearningFactor` per trait, `InjuryHealingFactor`): `Core/Defs/StatDefs` and `TraitDefs`.
+* Medicine potency and quality cap other than herbal: the medicine `ThingDefs`.
+* Built roof flags, leaving things, filth, and the rock holder flag: `Core/Defs/TerrainDefs` (roofs) and the rock `ThingDefs`.
+* Grass and crop values (grow days, fertility sensitivity, minimum light, yield, terrain fertility): `ThingDefs` (plants) and `TerrainDefs`.
+* Biome temperatures and variation, including the temperate forest: `BiomeDefs`.
+* Cave and ruin gates and counts: `TileMutatorDefs`, `GenStepDefs`, `ThingSetMakerDefs`.
+* Raid cycles, the points curve, threat scales and floor ceiling per difficulty: `StorytellerDefs`, `DifficultyDefs`, `IncidentDefs`.
+* Need base overrides, drug tolerance, addiction and chemical fall per drug: `NeedDefs` and drug `ThingDefs`.
+* Room stat thresholds and beauty and cleanliness per building: `RoomStatDefs` and building `ThingDefs`.
+* Research project costs: `ResearchProjectDefs`.
+* Surgery outcome chances and failure damage: `RecipeDefs` and `SurgeryOutcomeEffectDefs`.
+* The rounding tie rule for the current engine: the current Unity Scripting API page for `Mathf.RoundToInt` (only the legacy pages were read).
+
+**Tests:** `./gradlew :sim:test --console=plain`, run in the background with the log at `scratchpad/sim-test.log` and read from the JUnit XML. 828 tests in 79 suites, 0 failures, 0 errors, 0 skipped (`./gradlew :sim:test --console=plain --rerun-tasks`, 11 min 23 s, after the re-check fixes listed above). Earlier in the round, two tests failed on the first run, both from the coldest-hour change, and were updated as described above.
+
+## 23. Review fixes to section 22 (round 23)
+
+Made on branch `ccr-41984ede-stlmp4`. Nothing is committed. A review rejected section 22 on the points below. Each one is fixed in the working tree, and each tag or comment now matches its source. One game value changes: the medicine XP factor.
+
+**Tags and comments (no game value changed):**
+
+* `Climate.DIURNAL_SWING` (7): tagged D, `Verse/TemperatureTuning.cs:20` (the daily amplitude). It was tagged UNVERIFIED (custom), which the cited source does not support.
+* `Climate.DIURNAL_SWING_DRY` (10): tagged C, Stillmere's own value. The reference's sun cycle has one amplitude for every biome (`Verse/GenTemperature.cs:194-202`). Its temperature code does have biome terms (a constant outdoor temperature, `Verse/MapTemperature.cs:29-31, 45-47`; the vacuum factor, `Verse/GenTemperature.cs:451`), but neither is a daily swing. It had no tag.
+* `GameMap.oreBlotchCount`, tie mode: V, as `map.md` says (the legacy Unity page for `Mathf.RoundToInt`, a search snippet). The comment said UNVERIFIED. The final level rounding row in `skills-traits.md` was UNVERIFIED for the same rule; it is now V with the same URL.
+* `NeedRules.beautyLevel`, base 0.5: D as the code default (`RimWorld/NeedDef.cs:45`). The beauty need's XML override stays UNVERIFIED, as `needs-mood.md` says. The beauty thoughts row in `needs-mood.md` said the base was UNVERIFIED; it now says D with the XML override UNVERIFIED.
+* `TimeModelTest`, `outdoorTemperatureSwingsThroughTheDay`: the comments said the curve bottoms out at 03:00 and peaks at 15:00. The test now uses 04:19 (tick 10,800) and 16:19 (tick 40,800), the minimum and maximum for `COLDEST_HOUR` 4.32 at 2,500 ticks an hour.
+
+**Medicine XP factor (game value changed):**
+
+* The claim that the factor is not in the decompiled source was false for the factor. `Verse/ThingDef.cs:712` gives it: the medicine's potency x 0.7, clamped to 0.5 to 1. The default without medicine, 0.5, is at `RimWorld/Toils_Tend.cs:69`. Corrected in: `skills-traits.md` (the medicine XP factor row, and the open list); this file's section 3.6 medicine XP row, which is at line 294 here (`skills-traits.md` has 209 lines, so the reviewer's line 294 was in this file); `decompiled-reference.md` (the medicine XP row, now "matches", medium, because the potencies are secondary); `health.md` (a note under the medicine table); and section 22's medicine line, marked as changed.
+* Sim: `SkillRules.medicineXpFactor(potency)` and `SkillRules.tendXp(animal, potency)`. `Health.kt` passes the medicine's potency, or 0 with no medicine. Effects: sterile dressing (potency 1.0) gives 0.7, so 350 XP to a human (was 250) and 122.5 to an animal (was 87.5). Leaf poultice (potency 0.6, giving 0.42) is raised to the floor of 0.5, unchanged. No medicine gives 0.5, unchanged. The potencies are the sim's existing values (`health.md`, section 4, secondary sources).
+* Tests in `SkillsTraitsTest`: the factor at potencies 0, 0.6, 1 and 2 (floor and cap); the XP for a human and an animal with and without medicine; and a tend through `tendPawn` that teaches 350 XP with sterile dressing and 250 with none.
+
+**Found, not changed:**
+
+* Vanilla adds a random daily offset to the outdoor temperature: a per-tile Perlin value scaled by 7 (`RimWorld.Planet/TileTemperaturesComp.cs:53-56`, used at :50 and :87, which feed the map's outdoor temperature). The sim has no such term. `decompiled-reference.md` already lists it as a missing row ("Random daily term"); `temperature-rooms.md` now marks it not modelled as well. The amplitude 7 in section 22 is the sun cycle alone.
+
+**Save format:** unchanged, `VERSION` stays 40. These are game values, comments and tests, not a save layout.
+
+**App:** no file under `app/` changed, and nothing under `app/` refers to the changed functions, so this round does not touch the Android build.
+
+**Tests:** `./gradlew :sim:test --console=plain`, run in the background with the log at `scratchpad/sim-test.log` and read from the JUnit XML in `sim/build/test-results/test`. 830 tests in 79 suites, 0 failures, 0 errors, 0 skipped; BUILD SUCCESSFUL in 11 min 28 s. Section 22 reported 828. The change is `SkillsTraitsTest` going from 42 to 44 (one medicine test replaced by three), so 830 is the count the run confirms.
+
+## 24. Review fixes to sections 22 and 23 (round 24)
+
+Made on branch `ccr-41984ede-stlmp4`. Nothing is committed. A review rejected the work on the four points below. Each one is fixed in the working tree. No game value changes, so `VERSION` stays 40 and the save layout is unchanged.
+
+**Source path (tag source mismatch):**
+
+* The medicine XP factor is at `Verse/ThingDef.cs:712`. The reference tree has no `RimWorld/ThingDef.cs`. Fixed in `Skills.kt` (three comments), `SkillsTraitsTest.kt` (one comment), `health.md`, `skills-traits.md` (two places), `decompiled-reference.md` (the medicine XP row), and this file: section 3.6 at line 294 and section 22 at line 930. Section 23 at line 982 already had the right path.
+
+**UNVERIFIED count:**
+
+* Section 22 said `skills-traits.md` kept 16 UNVERIFIED lines. The file has 13 (16 at HEAD). The count line in section 22 now reads "16 to 13", and skills-traits has moved out of the unchanged list. The other counts in that line match the files, checked with `grep -c UNVERIFIED` at HEAD and in the working tree.
+
+**Biome terms in the reference temperature code:**
+
+* The claim that the reference's temperature code has no biome term was wrong. `Verse/MapTemperature.cs:29-31` and `45-47` return the biome's constant outdoor temperature in place of the outdoor and seasonal temperatures, and `Verse/GenTemperature.cs:451` applies a vacuum factor of 0.1 to room heat exchange when the room is colder. Neither is a daily swing. The sun cycle (`Verse/GenTemperature.cs:194-202`, amplitude 7 from `Verse/TemperatureTuning.cs:20`) has one amplitude for every biome, so the +10 for desert and arid stays C, with its reason now stated correctly.
+* Corrected in `Climate.kt` (the `DIURNAL_SWING_DRY` comment), `temperature-rooms.md` (the day/night swing row), and the `DIURNAL_SWING_DRY` bullet in section 23 (line 975), which repeated the same claim.
+* Stillmere models neither term: its six biomes set no constant outdoor temperature and have no vacuum. No behaviour changes.
+
+**Tests:** `./gradlew :sim:test --console=plain`, run in the background with the log at `scratchpad/sim-test.log` and read from the JUnit XML in `sim/build/test-results/test`. 830 tests in 79 suites, 0 failures, 0 errors, 0 skipped; BUILD SUCCESSFUL in 11 min 12 s. The change is comments and docs only, so the count matches section 23.
+
+**App:** no file under `app/` changed. The Android app cannot be built here, and nothing under `app/` was touched.
+
+## 25. Review fixes to sections 22 to 24 (round 25)
+
+Made on branch `ccr-41984ede-stlmp4`. Nothing is committed. A review rejected the re-check of the UNVERIFIED values on four points. Each one is fixed in the working tree. One game value changes: the desert and arid day/night swing. No saved field changes, so `VERSION` stays 40 (`SaveGame.kt:55`).
+
+**Game value changed:**
+
+* Desert and arid day/night swing: 10 C to 7 C, the same as every other biome. `Climate.DIURNAL_SWING_DRY` (C, Stillmere's own value) is removed. `Climate.diurnal` takes no biome and uses `DIURNAL_SWING` (D, `Verse/TemperatureTuning.cs:20`), the amplitude of the sun cycle at `Verse/GenTemperature.cs:194-202`, which has no biome term. Sections 22 to 24 kept the +10 as C. The same-mechanic rule takes the source's 7 for desert and arid too. The desert and arid day peak and night trough each move 3 C toward the mean, so the day-to-night range falls from 20 C to 14 C.
+* `TemperatureRoomsTest`, `outdoorTemperatureFollowsDayAndNight`: desert and arid are checked at 14 C from 04:19 to 16:19 (desert was 20 C).
+
+**Tags and comments (no game value changed):**
+
+* `Caves.WIDTH_CURVE` (`Caves.kt:41`): the code tagged the flat ends C, while `caves.md` tagged them D. The comment now gives D: the three points at `RimWorld/MapGenCavesUtility.cs:55-60`, and the flat-and-straight evaluation at `Verse/SimpleCurve.cs:139-170`. `caves.md` also listed the width curve among its C deviations in the Results section, which contradicted its own table. That item is removed and the curve is listed as D.
+* Medicine XP factor, wiki table (V): `skills-traits.md` (the medicine XP factor row) and section 22 above called the source "scraped, read with caution". The V tag allows search snippets only, so both now say "a search snippet only, not a read page". The formula stays D (`Verse/ThingDef.cs:712`, `RimWorld/Toils_Tend.cs:69`).
+* Battery charge efficiency: the code default 0.5 (D, `RimWorld/CompProperties_Battery.cs:7`, applied to charge at `RimWorld/CompPowerBattery.cs:85`) is now tagged D, with the same XML caveat as the capacity row. This is recorded in `economy.md` (the bullet and the open-items entry) and in section 3.8 of this file (the table row at line 338 and the open list at line 352). The status stays "not adopted": Stillmere still stores charge losslessly. Taking the 0.5 would halve what every battery stores, which changes the power balance on every map with batteries. That is a gameplay decision for the owner and is not made here.
+* `decompiled-reference.md`: the desert and arid swing row changes from "differs" to "matches", and the temperate row now reads "every biome".
+* `temperature-rooms.md` and section 3.3 of this file (line 158): the day/night swing reads +/-7 C in every biome, and the tag is D.
+
+**UNVERIFIED counts** (`grep -c UNVERIFIED`, taken at the end of this round): `economy.md` 15, `gap-report.md` 106, `skills-traits.md` 13, `caves.md` 6, `temperature-rooms.md` 9, `decompiled-reference.md` 2. These were not compared before and after each edit, so an earlier 'unchanged' claim is withdrawn. The battery and medicine lines still carry UNVERIFIED on their XML and wiki parts.
+
+**Save format:** unchanged, `VERSION` stays 40. These are game values, comments and docs, not a save layout.
+
+**Tests:** `./gradlew :sim:test --console=plain`, run in the background with the log at the scratchpad (`sim-test.log`) and read from the JUnit XML in `sim/build/test-results/test`. 830 tests in 79 suites, 0 failures, 0 errors, 0 skipped; BUILD SUCCESSFUL in 11 min 14 s.
+
+**App:** no file under `app/` changed. Nothing under `app/src` refers to `DIURNAL_SWING_DRY` or to `Climate.diurnal`, so the Android build is not touched by this round.

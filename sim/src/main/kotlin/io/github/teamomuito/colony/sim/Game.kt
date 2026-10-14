@@ -305,6 +305,10 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
         return map.findOpenPad() ?: (map.w / 2 to map.h / 2)
     }
 
+    /**
+     * Starts the colony on this map. The colony takes the map's own size: the wizard makes the map at the chosen side
+     * ([GameMap.generateFor] with the same side), and the start spot is found on that map. Any side in [SELECTABLE_MAP_SIZES] works.
+     */
     fun startNewColony(sc: Scenario = scenario, supplied: List<Pawn>? = null) {
         scenario = sc
         val (sx, sy) = findStartSpot()
@@ -423,6 +427,8 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
             Desig.HARVEST -> if (map.plant[i] != null && map.plant[i]!!.mature && !map.plant[i]!!.type.isTree) map.desig[i] = kind.toByte() else return false
             Desig.REPAIR -> if (map.building[i]?.built == true) map.desig[i] = kind.toByte() else return false
             Desig.ROOF -> if (map.terrain[i].passable && !map.roofed(i)) map.desig[i] = kind.toByte() else return false
+            // Only a built roof can be taken down. Natural roof (rock cover) cannot.
+            Desig.UNROOF -> if (map.roof[i]) map.desig[i] = kind.toByte() else return false
             Desig.DECON -> {
                 val b = map.building[i]
                 if (b != null) {
@@ -730,6 +736,12 @@ class Game(val seed: Long, val map: GameMap = GameMap.generateFor(MAP_SIZE, MAP_
          * the size it stores. Some committed fixtures are 100 by 100 and others 250 by 250 (docs/fidelity/map.md, "Saves on disk").
          */
         const val MAP_SIZE = 250
+        /**
+         * The sides the new-colony wizard offers, in order (the app's Dialogs.kt). The reference lists these six sizes
+         * (RimWorld/Dialog_AdvancedGameConfig.cs line 12, tag D). The same file also lists 350 and 400 as test sizes only, so they
+         * are not offered. [MAP_SIZE] is the default and is one of them. Any side works for the generator and for a save.
+         */
+        val SELECTABLE_MAP_SIZES: List<Int> = listOf(200, 225, 250, 275, 300, 325)
         /** Ticks between slow updates (weather, power, climate, plants, spoilage, mood). */
         val SLOW_TICK = tk(250).toLong()
         /** Ticks between a pawn's health and need-interrupt checks; also the elapsed time each health update covers. */

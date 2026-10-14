@@ -215,9 +215,12 @@ class Dialogs(val a: MainActivity) {
             }
             fun renderSize() {
                 sizeBox.removeAllViews()
-                for ((label, n) in listOf("Standard ${Game.MAP_SIZE}" to Game.MAP_SIZE)) sizeBox.addView(ui.button(label, 11f, selected = size == n) {
-                    size = n; g = Game(seed, GameMap.generateFor(size, size, seed, biome)); resetCrew(); renderSize(); renderCrew()
-                }, ui.lin(-2, -2, 0f, 0, 3, 4, 0))
+                for (n in Game.SELECTABLE_MAP_SIZES) {
+                    val label = "$n × $n" + if (n == Game.MAP_SIZE) " (standard)" else ""
+                    sizeBox.addView(ui.button(label, 11f, selected = size == n) {
+                        size = n; g = Game(seed, GameMap.generateFor(size, size, seed, biome)); resetCrew(); renderSize(); renderCrew()
+                    }, ui.lin(-2, -2, 0f, 0, 3, 4, 0))
+                }
             }
             fun renderStory() {
                 storyBox.removeAllViews()

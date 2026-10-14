@@ -95,13 +95,17 @@ object HealthRules {
     fun clot(bleed: Float, tended: Boolean, ldt: Float): Float =
         bleed * (1f - ldt / (if (tended) BLEED_CLOT_TICKS_TENDED else BLEED_CLOT_TICKS_UNTENDED)).coerceAtLeast(0.5f)
 
-    /** Blood regained per day once nothing is bleeding. */
-    fun bloodRecoveryPerDay(wellFed: Boolean): Float = if (wellFed) 0.36f else 0.1f
+    /**
+     * Blood regained per day once nothing is bleeding: 1/3 a day, with no food gate (D: Verse/HediffGiver_Bleeding.cs:14,
+     * 0.00033333333 per 60 ticks). Round 22; was 0.36 when fed and 0.10 when unfed.
+     */
+    fun bloodRecoveryPerDay(): Float = 1f / 3f
 
     // ------------------------------------------------------------------ healing
     const val HEAL_UNTENDED_PER_DAY = 3.2f
     const val HEAL_TENDED_PER_DAY = 8f
-    const val HEAL_TEND_BASE = 0.55f
+    /** Tended healing is 8 x (base + quality) a day. D: Verse/Pawn_HealthTracker.cs:1158-1159 (LerpDouble 0.5 to 1.5 of quality), round 22; was 0.55. */
+    const val HEAL_TEND_BASE = 0.5f
     const val HEAL_BED_FACTOR = 1.35f
     const val HEAL_HOSPITAL_FACTOR = 1.15f
     const val HEAL_BRUISE_FACTOR = 1.5f

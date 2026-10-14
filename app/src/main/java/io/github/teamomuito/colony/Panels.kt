@@ -111,7 +111,7 @@ class Panels(private val a: MainActivity) {
     // ------------------------------------------------------------------ architect
     private val orderTools: List<Pair<String, Tool>> get() = listOf(
         "Mine rock" to Tool.Mine, "Chop trees" to Tool.Cut, "Harvest plants" to Tool.Harvest, "Deconstruct" to Tool.Deconstruct,
-        "Repair" to Tool.Repair, "Cancel orders" to Tool.CancelOrders, "Hunt animals" to Tool.Hunt, "Tame animals" to Tool.Tame,
+        "Repair" to Tool.Repair, "Build roof" to Tool.Roof, "Remove roof" to Tool.Unroof, "Cancel orders" to Tool.CancelOrders, "Hunt animals" to Tool.Hunt, "Tame animals" to Tool.Tame,
         "Slaughter" to Tool.Slaughter, "Forbid / allow" to Tool.Forbid,
     )
 

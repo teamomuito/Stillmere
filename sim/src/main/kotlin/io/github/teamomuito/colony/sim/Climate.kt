@@ -10,11 +10,15 @@ import kotlin.math.sign
  * with no randomness and no clock. Constants and their sources are recorded in `docs/fidelity/temperature-rooms.md`.
  */
 object Climate {
-    /** Peak swing of the day/night curve in degrees C. UNVERIFIED (custom). */
+    /**
+     * Peak swing of the day/night curve in degrees C, the same for every biome. D: Verse/TemperatureTuning.cs:20 (the daily
+     * amplitude, 7), the same amplitude as the cosine at Verse/GenTemperature.cs:194-202, which has no biome term. The reference's
+     * temperature code does have biome terms: a constant outdoor temperature (Verse/MapTemperature.cs:29-31, 45-47) and the vacuum
+     * factor (Verse/GenTemperature.cs:451). Neither is a daily swing, and Stillmere models neither.
+     */
     const val DIURNAL_SWING = 7f
-    const val DIURNAL_SWING_DRY = 10f
-    /** The hour of the coolest temperature. The curve is a sine, so the peak is 12 hours later. UNVERIFIED (custom). */
-    const val COLDEST_HOUR = 3f
+    /** The hour of the coolest temperature. The curve is a sine, so the peak is 12 hours later. D: the coolest point of the base game's cosine is at day fraction 0.18 (Verse/GenTemperature.cs:194-202, phase 0.32), which is 4.32 h at longitude 0 (RimWorld/GenDate.cs:145-147). Round 22; was 3. */
+    const val COLDEST_HOUR = 4.32f
 
     fun weatherOffset(w: Weather): Float = when (w) {
         Weather.RAIN -> -2f; Weather.SNOW -> -3f; Weather.THUNDER -> -3f; Weather.CLOUDY -> -1f; else -> 0f
@@ -32,17 +36,16 @@ object Climate {
         return seasonTemp(b, s) + (seasonTemp(b, next) - seasonTemp(b, s)) * blend * 0.5f
     }
 
-    /** Day/night swing at an hour of the day (0 to 24). `StrictMath` so every JVM and Android give the same bits. */
-    fun diurnal(b: Biome, hourOfDay: Float): Float {
-        val swing = if (b == Biome.DESERT || b == Biome.ARID) DIURNAL_SWING_DRY else DIURNAL_SWING
+    /** Day/night swing at an hour of the day (0 to 24), the same in every biome. `StrictMath` so every JVM and Android give the same bits. */
+    fun diurnal(hourOfDay: Float): Float {
         val phase = ((hourOfDay - COLDEST_HOUR - 6f) / 24f) * 2.0 * StrictMath.PI
-        return (StrictMath.sin(phase) * swing).toFloat()
+        return (StrictMath.sin(phase) * DIURNAL_SWING).toFloat()
     }
 
     fun outdoorTemp(b: Biome, tick: Long, tempOffset: Float, weather: Weather): Float {
         val hour = (tick % TICKS_PER_DAY) / TICKS_PER_HOUR.toFloat()
         val day = (tick / TICKS_PER_DAY).toInt()
-        return seasonalBase(b, day) + diurnal(b, hour) + tempOffset + weatherOffset(weather)
+        return seasonalBase(b, day) + diurnal(hour) + tempOffset + weatherOffset(weather)
     }
 }
 

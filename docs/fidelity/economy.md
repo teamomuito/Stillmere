@@ -67,7 +67,7 @@ section 3.8 and are not changed here (see the not-adopted list).
 
 | Constant | Old | New | Source | Note |
 |---|---|---|---|---|
-| Battery capacity per battery | 600 Wd (`World.kt` `powerTick`) | 1000 Wd (`BATTERY_CAPACITY_WD`) | D `RimWorld/CompProperties_Battery.cs:5` (code default) | UNVERIFIED for the battery XML def, which can override it. The gap report recalls 1,000 too. |
+| Battery capacity per battery | 600 Wd (`World.kt` `powerTick`) | 1000 Wd (`BATTERY_CAPACITY_WD`) | D `RimWorld/CompProperties_Battery.cs:5` (code default) | **UNVERIFIED** for the battery XML def, which can override it. The gap report recalls 1,000 too. A wiki search snippet gives 600 Wd per battery (V, https://rimworldwiki.com/wiki/Battery). A snippet does not override a D value, so the sim keeps 1000 (round 22 checked this and did not change it). |
 | Battery self-discharge | none | 5 W per battery per tick, capped by stored energy, applied each slow tick as 5 x 625 / 60000 Wd per battery (`BATTERY_SELF_DISCHARGE_W`) | D `RimWorld/CompPowerBattery.cs:70` (`CompTick`); `CompPower.cs:20` for the per-tick conversion | Stillmere's power steps once per slow tick (625 ticks), so the drain is applied per slow tick. |
 | Breeze mill output cap | none (wind factor 0.15 to 1.35 used directly) | output uses `min(windFactor, 1.5)` (`BREEZE_OUTPUT_WIND_CAP`) | D `RimWorld/CompPowerPlantWind.cs:32` (`MaxUsableWindIntensity`) | Not binding while the wind walk in `worldSlowTick` is bounded at 1.35. The cap is in place for when the walk changes. |
 | Sun array roof factor | none | output x (unroofed cells / footprint cells) | D `RimWorld/CompPowerPlantSolar.cs:17, 19` | An array inside a room (or under natural roof) makes nothing, as in vanilla. |
@@ -77,11 +77,13 @@ Kept as Stillmere values (C or UNVERIFIED, no reference value):
 * Building costs and work amounts. The reference has no building cost rows; vanilla costs and work are XML. Kept.
 * Power draws and ratings: sun array 1,700 W, breeze mill 1,500 W, log-burning engine 1,000 W, glow panel 400 W, hotplate
   350 W, picture box 200 W, grow tray 70 W (`Buildings.kt`). The reference has no rows for these (they are XML). The
-  gap report recalls 2,900 W for the glow panel, which differs from the 400 W here. Neither is confirmed by source
+  gap report recalls 2,900 W for the glow panel, which differs from the 400 W here. The solar generator's 1,700 W matches a wiki snippet (V, https://rimworldwiki.com/wiki/Solar_generator); no snippet gave the glow panel's wattage. Neither figure is confirmed by source
   (**UNVERIFIED**). Kept.
-* Battery charge efficiency. The reference gives the code default 0.5 (`CompProperties_Battery.cs:7`, used in
-  `CompPowerBattery.cs:85`), but the battery def can override it and the gap report has no value for it. Stillmere stores
-  charge losslessly. Not adopted; UNVERIFIED.
+* Battery charge efficiency. The code default is 0.5 (D, `RimWorld/CompProperties_Battery.cs:7`, applied to charge at
+  `RimWorld/CompPowerBattery.cs:85`). It is the same mechanic with the same caveat as the capacity row: the battery def's XML
+  value can override it, so that value is UNVERIFIED. Stillmere stores charge losslessly. Not adopted yet: halving every charge
+  changes the power balance on every map with batteries, a gameplay change for the owner to decide, so it is a separate change.
+  V: the wiki says batteries charge at 50% efficiency (https://rimworldwiki.com/wiki/Battery, search snippet), which agrees with the code default.
 * The builder's construction speed (0.4 + 0.075 x skill, `Pawn.kt`). The reference gives the stat as XML. Kept (ambiguous).
 
 ## Constants adopted (plants and food)
@@ -141,7 +143,7 @@ Construction and power:
 * **Breeze mill blocked wind path** (reference: each blocked cell in front removes 20%). Needs the turbine's facing
   geometry. Deferred.
 * **Breeze mill wind range** (reference: base noise 0.04 to 2.0, times the weather factor, XML). The walk stays as it is.
-* **Battery charge efficiency** (see above). UNVERIFIED.
+* **Battery charge efficiency** (see above). The code default 0.5 is D; the battery XML value is UNVERIFIED. Not modelled.
 * **Builder progress rate** (reference: stat and per-material factors are XML). Kept.
 * **Construction learning and research learning** (already matched, see discrepancies).
 * **Out of this round's scope (section 3.8)**: fire model, zone priorities and filters, roof collapse, live-wire-free

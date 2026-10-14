@@ -291,6 +291,71 @@ class RoofsTest {
         assertTrue("the rest of the block is roofed", (11..12).all { x -> (19..21).all { y -> (x to y) == (12 to 21) || m.roof[m.idx(x, y)] } })
     }
 
+    // ------------------------------------------------------------------ the designation the app makes (Game.designate, Desig.ROOF)
+
+    @Test fun aRoofDesignationIsKeptOnOpenGroundAndRefusedOnRockAndOnARoofedCell() {
+        // The app's roof tool calls Game.designate(x, y, Desig.ROOF) for each tapped or dragged cell, as the other tools do. Open ground
+        // takes the mark, and the status text reads Desig.ROOF from it. Rock and an already roofed cell are refused, so they keep no mark.
+        val g = Game(2025L)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
+        val m = g.map
+        val x0 = g.homeX; val y0 = g.homeY - 6
+        val open = m.idx(x0, y0); val rock = m.idx(x0 + 1, y0); val roofed = m.idx(x0 + 2, y0)
+        m.terrain[open] = Terrain.SOIL; m.building[open] = null; m.natRoof[open] = false; m.roof[open] = false
+        m.terrain[rock] = Terrain.ROCK; m.building[rock] = null; m.natRoof[rock] = false; m.roof[rock] = false
+        m.terrain[roofed] = Terrain.SOIL; m.building[roofed] = null; m.natRoof[roofed] = false; m.roof[roofed] = true
+        assertTrue("open ground takes a roof designation", g.designate(x0, y0, Desig.ROOF))
+        assertEquals("the open cell is marked for a roof", Desig.ROOF, m.desig[open].toInt())
+        assertFalse("rock cannot be roofed, so it is refused", g.designate(x0 + 1, y0, Desig.ROOF))
+        assertEquals("the rock keeps no mark", Desig.NONE, m.desig[rock].toInt())
+        assertFalse("a cell that is already roofed is refused", g.designate(x0 + 2, y0, Desig.ROOF))
+        assertEquals("the roofed cell keeps no mark", Desig.NONE, m.desig[roofed].toInt())
+        g.clearDesignation(x0, y0)
+        assertEquals("cancelling clears the roof mark", Desig.NONE, m.desig[open].toInt())
+    }
+
+    // ------------------------------------------------------------------ taking a roof down (Desig.UNROOF)
+
+    @Test fun onlyABuiltRoofCanBeMarkedForRemoval() {
+        val g = Game(2025L)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
+        val m = g.map
+        val x0 = g.homeX; val y0 = g.homeY - 6
+        val built = m.idx(x0, y0); val natural = m.idx(x0 + 1, y0); val none = m.idx(x0 + 2, y0)
+        for (i in intArrayOf(built, natural, none)) { m.terrain[i] = Terrain.SOIL; m.building[i] = null; m.roof[i] = false; m.natRoof[i] = false }
+        m.roof[built] = true
+        m.natRoof[natural] = true
+        assertTrue("a built roof can be marked", g.designate(x0, y0, Desig.UNROOF))
+        assertEquals(Desig.UNROOF, m.desig[built].toInt())
+        assertFalse("natural roof cannot be taken down", g.designate(x0 + 1, y0, Desig.UNROOF))
+        assertFalse("an unroofed cell cannot be marked", g.designate(x0 + 2, y0, Desig.UNROOF))
+    }
+
+    @Test fun aColonistTakesDownAMarkedRoofAndOnlyThatCell() {
+        val g = Game(2024L)
+        g.startNewColony(Scenario.QUIET_ENCLAVE)
+        g.mentalBreaksEnabled = false
+        g.nextRaid = Long.MAX_VALUE; g.nextMisc = Long.MAX_VALUE; g.nextWanderer = Long.MAX_VALUE; g.nextTrader = Long.MAX_VALUE
+        val m = g.map
+        val x0 = g.homeX; val y0 = g.homeY - 6
+        for (y in y0 - 9..y0 + 12) for (x in x0 - 9..x0 + 12) {
+            val i = m.idx(x, y)
+            m.terrain[i] = Terrain.SOIL; m.plant[i] = null; m.building[i] = null; m.items.remove(i); m.natRoof[i] = false; m.roof[i] = false
+        }
+        m.walls(x0, y0, 6, 6)
+        m.roofRect(x0 + 1, y0 + 1, 4, 4)
+        m.rebuildRooms(g.outdoorTemp())
+        val target = m.idx(x0 + 2, y0 + 2); val other = m.idx(x0 + 3, y0 + 2)
+        assertTrue(g.designate(x0 + 2, y0 + 2, Desig.UNROOF))
+        val colonist = g.colonists.first()
+        colonist.x = x0 + 1; colonist.y = y0 + 1
+        var steps = 0
+        while (steps < 40000 && m.roof[target]) { g.step(); steps++ }
+        assertFalse("the marked roof is gone", m.roof[target])
+        assertEquals("the mark is cleared", Desig.NONE, m.desig[target].toInt())
+        assertTrue("the next cell keeps its roof", m.roof[other])
+    }
+
     // ------------------------------------------------------------------ save format (SaveGame.kt, version 38)
 
     @Test fun theRoofGridRoundTripsThroughASave() {

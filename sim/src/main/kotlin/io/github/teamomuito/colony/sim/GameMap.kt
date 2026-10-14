@@ -97,7 +97,7 @@ class ItemStack(val id: Int, val type: ItemType, var count: Int, var x: Int, var
 
 class Fire(var intensity: Float) { var age = 0 }
 
-object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5; const val ROOF = 6 }
+object Desig { const val NONE = 0; const val MINE = 1; const val CUT = 2; const val DECON = 3; const val HARVEST = 4; const val REPAIR = 5; const val ROOF = 6; const val UNROOF = 7 }
 /** The indoor rule before version 38 (GameMap.kt, rooms): at most this many cells, or a natural-roof majority. Used only to migrate saves. */
 const val LEGACY_INDOOR_MAX_CELLS = 700
 object ZoneKind { const val NONE = 0; const val STOCKPILE = 1; const val GROWING = 2; const val DUMPING = 3 }
@@ -786,8 +786,10 @@ class GameMap(val w: Int, val h: Int) {
 
         /**
          * Ore blotches on a [w] by [h] map. As in the reference (Verse/GenStep_Scatterer.cs lines 266-274), one blotch covers
-         * round(10,000 / density) cells, and the count is the area over that, rounded. The source rounds to the nearest integer, and the
-         * tie mode of that rounding is not in the tree, so the half-to-even rounding used here is UNVERIFIED (see docs/fidelity/map.md).
+         * round(10,000 / density) cells, and the count is the area over that, rounded. The source rounds to the nearest integer (D). The
+         * tie mode is V: the legacy Unity page for Mathf.RoundToInt says an exact half goes to the even integer
+         * (https://docs.unity3d.com/450/Documentation/ScriptReference/Mathf.RoundToInt.html, search snippet; the current page was not
+         * read), and kotlin.math.round is half to even. See docs/fidelity/map.md.
          */
         fun oreBlotchCount(w: Int, h: Int, hills: Hills?): Int {
             val cellsPerBlotch = round(10000f / oreBlotchesPer10k(hills))

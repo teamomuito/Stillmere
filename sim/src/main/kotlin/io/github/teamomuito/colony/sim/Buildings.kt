@@ -81,7 +81,9 @@ enum class BuildDef(
     QUENCH_VENT("Quench vent", listOf(c(ItemType.STEEL, 20), c(ItemType.COMPONENT, 1)), 200, 30f, "Security", research = Research.VENTILATION, flam = 0f),
 
     // Temperature
-    HEATER("Heater", listOf(c(ItemType.STEEL, 30), c(ItemType.COMPONENT, 1)), 250, 50f, "Temperature", blocksMove = true, power = -200f, heat = 14f, research = Research.GALVANICS),
+    // Heater heat 35.62 is Stillmere's choice (C), not a vanilla value: the smallest value to two decimals that reaches 21 C at 0 C outdoors
+    // in a sealed 3 by 3 room (threshold 35.618). The cooler (-14) is unchanged. See docs/fidelity/heat-exchange.md, "Heater output".
+    HEATER("Heater", listOf(c(ItemType.STEEL, 30), c(ItemType.COMPONENT, 1)), 250, 50f, "Temperature", blocksMove = true, power = -200f, heat = 35.62f, research = Research.GALVANICS),
     COOLER("Cooler", listOf(c(ItemType.STEEL, 40), c(ItemType.COMPONENT, 2)), 300, 50f, "Temperature", blocksMove = true, power = -200f, heat = -14f, research = Research.GALVANICS, w = 2, h = 1),
 
     // Security

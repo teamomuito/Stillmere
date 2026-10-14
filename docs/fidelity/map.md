@@ -6,17 +6,21 @@ holds the audit. The vanilla values come from the decompiled source at version 1
 
 ## Decisions
 
-1. **New colonies are 250 by 250.** Owner decision (tag **C**). `Game.MAP_SIZE` is 250, and the new-colony wizard and the
-   start of a new game both use it.
+1. **New colonies default to 250 by 250, and the wizard offers six sides.** The default is the owner's decision (tag **C**).
+   `Game.MAP_SIZE` is 250: it is the wizard's selected size and the size of a new game. The wizard offers 200, 225, 250, 275,
+   300 and 325 (`Game.SELECTABLE_MAP_SIZES`, tag **D**, see item 8). It does not offer 350 or 400, which the reference lists as
+   test sizes.
 2. **Saves keep the size they store.** A save records its width and height, and the reader uses them. No save is resized onto
    a different map. Saves written before this decision keep their 100 by 100 map; saves that store 250 by 250 keep that size
    (see "Saves on disk" below).
-3. **`VERSION` is bumped from 36 to 37, with no change to any saved field.** The owner's goal asks for a bump with this change.
-   The width and height were already written and read for every readable version (14 and up), so no field was added and no
-   reader was gated. Version 37 is a marker: it is the first version written after new colonies moved to 250 by 250. Every
-   version 36 save still loads and keeps its size. The bump is checked by `ColonyMapSizeTest.aVersion36SaveLoadsAndANewSaveIsVersion37`
-   against the new fixture `colony_v36.sav`, which was written by the code before the bump, as the save rules require for a
-   version change. Owner to confirm the bump is wanted (open item 5).
+3. **`VERSION` was bumped from 36 to 37 in round 17, with no change to any saved field.** The owner's goal asked for a bump with
+   that change. The width and height were already written and read for every readable version (14 and up), so no field was added
+   and no reader was gated. Version 37 is a marker: it is the first version written after new colonies moved to 250 by 250. Every
+   version 36 save still loads and keeps its size. The bump is checked by `ColonyMapSizeTest.aVersion36SaveLoadsAndANewSaveIsTheCurrentVersion`
+   against the fixture `colony_v36.sav`, which was written by the code before the bump, as the save rules require for a version
+   change. Owner to confirm the bump is wanted (open item 5). The current `VERSION` is **40**: versions 38, 39 and 40 were set by the
+   roofs, grass and heat-exchange rounds for their own fields (`SaveGame.kt`). The selectable sizes of round 21 change no saved
+   field, so they do not bump `VERSION` again.
 4. **Ore veins scale with the map's area and hilliness.** The old fixed 18 veins were the count on a 100 by 100 map. On a 250
    by 250 map that is 6.25 times too sparse. The count now follows the reference's blotches per 10,000 cells (see the table).
    The kinds and lump sizes are kept (C).
@@ -27,6 +31,15 @@ holds the audit. The vanilla values come from the decompiled source at version 1
    model row changes the terrain of every map and the random sequence after it. Those rows are a separate change, not part of
    the map-size change.
 7. **Settling founds a colony at the new size.** `Game.settle` (Caravans.kt) used to copy the old colony's map size, so a colony founded from a 100 by 100 save was 100 by 100. It now uses `Game.MAP_SIZE`, as a new game does. The archived old colony keeps the size it stores. Test: `ColonyMapSizeTest.aColonyFoundedFromAHundredByHundredSaveIsTwoFiftyByTwoFifty`.
+8. **The wizard offers the six reference sizes (round 21).** `Game.SELECTABLE_MAP_SIZES` holds 200, 225, 250, 275, 300 and 325,
+   in the order the reference lists them (tag **D**, `RimWorld/Dialog_AdvancedGameConfig.cs:12`). The size row of the new-colony
+   wizard (`Dialogs.kt`) has one button per side, labelled with the side and "(standard)" on 250, which is selected by default.
+   Choosing a side makes a new map at that side with the same seed and biome, and resets the crew, as choosing a biome does.
+   The size reaches the colony through the map: `Game.startNewColony` starts the colony on the map it is given, and the map's
+   width and height are the side the wizard chose (`GameMap.generateFor`). A save already stores width and height, so a colony at
+   any offered side round-trips with no change to the save format. Tests: `ColonyMapSizeTest.theOfferedSizesAreTheSixReferenceSizesAndTheDefaultIsOneOfThem`
+   and `ColonyMapSizeTest.aColonyOfEachOfferedSizeStartsStepsAndRoundTrips` (each side from 200 to 325 generates, runs two
+   in-game hours of steps, and round-trips at its own size).
 
 ## Constants
 
@@ -35,16 +48,17 @@ marked UNVERIFIED.
 
 | Constant | Value | Source | Where in sim/ | Status |
 |---|---|---|---|---|
-| New colony map side | 250 | C (owner decision). The reference list of selectable sizes includes 250: D `RimWorld/Dialog_AdvancedGameConfig.cs:12` (200, 225, 250, 275, 300, 325) | `Game.MAP_SIZE` (Game.kt) | adopted |
-| Saved map width and height | two integers at the start of the map record, before the biome | C. Read unconditionally for every readable version (14 and up); written at the same offset by version 37 | `SaveGame.write` (`o.writeInt(m.w); o.writeInt(m.h)`), `SaveGame.read` (`val w = i.readInt(); val h = i.readInt()`) | no change |
-| Save version | 37 (from 36) | C (owner's goal). No field changed; see Decisions, item 3 | `SaveGame.VERSION` | bumped |
+| New colony map side (the default) | 250 | C (owner decision). It is one of the reference's selectable sizes (next row) | `Game.MAP_SIZE` (Game.kt) | adopted |
+| Selectable colony map sides | 200, 225, 250, 275, 300, 325 (step 25) | D `RimWorld/Dialog_AdvancedGameConfig.cs:12` (the list on that line). The same file's 350 and 400 are test sizes and are not offered | `Game.SELECTABLE_MAP_SIZES` (Game.kt), offered by the size row of the new-colony wizard (`Dialogs.kt`) | adopted (round 21) |
+| Saved map width and height | two integers at the start of the map record, before the biome | C. Read unconditionally for every readable version (14 and up); written unconditionally at the same place by the current version | `SaveGame.write` (`o.writeInt(m.w); o.writeInt(m.h)`), `SaveGame.read` (`val w = i.readInt(); val h = i.readInt()`) | no change |
+| Save version | 40 now. 37 was this map's marker (round 17); 38 to 40 belong to roofs, grass and heat exchange | C (owner's goal for 37). No field changed for 37; see Decisions, item 3 | `SaveGame.VERSION` | 37 bumped in round 17; round 21 does not bump it |
 | Ore blotches per 10,000 cells: flat | 4 | D `RimWorld/GenStep_RocksFromGrid.cs:131` | `GameMap.oreBlotchesPer10k` | adopted |
 | Ore blotches per 10,000 cells: small hills | 8 | D `RimWorld/GenStep_RocksFromGrid.cs:134` | `GameMap.oreBlotchesPer10k` | adopted |
 | Ore blotches per 10,000 cells: large hills | 11 | D `RimWorld/GenStep_RocksFromGrid.cs:137` | `GameMap.oreBlotchesPer10k` | adopted |
 | Ore blotches per 10,000 cells: impassable | 16 | D `RimWorld/GenStep_RocksFromGrid.cs:143` | `GameMap.oreBlotchesPer10k` (for `Hills.MOUNTAIN`) | adopted; mapping **?** UNVERIFIED (see below) |
 | Ore blotches per 10,000 cells: default (switch default) | 10 | D `RimWorld/GenStep_RocksFromGrid.cs:127` (the switch's default value) | `GameMap.oreBlotchesPer10k` (for `null`, a map with no world tile) | adopted; using the default for `null` is C |
 | Mountainous (not used for ore) | 15 | D `RimWorld/GenStep_RocksFromGrid.cs:140` | not used: `Hills.MOUNTAIN` maps to impassable for ore | not adopted (reason below) |
-| Blotch count | one blotch per `round(10,000 / density)` cells; count = `round(w x h / that)` | D `Verse/GenStep_Scatterer.cs:266-274`: the cell size is the nearest whole number of 10,000 over the density, and the count is the nearest whole number of the area over that cell size. The source uses a square side. Stillmere uses `kotlin.math.round` (half to even) and `w x h`, which is the same for square maps | `GameMap.oreBlotchCount` | adopted. **Tie mode UNVERIFIED**: the engine's rounding helper is not in the source tree, so the half-to-even mode is not confirmed. It changes one value: density 10 on 250 gives 62.5, which is 62 here and 63 if ties round up |
+| Blotch count | one blotch per `round(10,000 / density)` cells; count = `round(w x h / that)` | D `Verse/GenStep_Scatterer.cs:266-274`: the cell size is the nearest whole number of 10,000 over the density, and the count is the nearest whole number of the area over that cell size. The source uses a square side. Stillmere uses `kotlin.math.round` (half to even) and `w x h`, which is the same for square maps | `GameMap.oreBlotchCount` | adopted. **Tie mode V**: the engine's rounding helper is not in the source tree. The Unity documentation for `Mathf.RoundToInt` (legacy pages for 4.5 to 2017.4, e.g. https://docs.unity3d.com/450/Documentation/ScriptReference/Mathf.RoundToInt.html, search snippet) says an exact half goes to the even integer. The current Unity page was not read, so the tie mode stays a V with that caveat; the sim's `kotlin.math.round` is half to even. It changes one value: density 10 on 250 gives 62.5, which is 62 here and 63 if ties round up |
 | Kind shares of the blotches (and the battle plan) | steel 8, silver 3, gold 2, hardalloy 2, components 3 (total 18): `GameMap.FIXED_ORE_VEINS` | C: the old fixed vein counts, kept as weights and as the battle plan. Vanilla kind choice is weighted by XML commonality; the source does not give the numbers (reference row 64, ambiguous) | `GameMap.FIXED_ORE_VEINS` | kept |
 | Share rounding | cumulative: each kind gets `round(total x cumulative share / 18)` minus the previous kinds, so the veins add up to the blotch count | C | `GameMap.oreVeinPlan` | new |
 | Lump size per vein | steel 7 cells, components 3, others 4 | C (unchanged) | `GameMap.oreLumpSize` | kept |
@@ -68,7 +82,7 @@ Each row of `decompiled-reference.md` section 3.2 is listed. "Size" means the va
 
 | Reference row | Status | Reason |
 |---|---|---|
-| Selectable colony map sizes (200 to 325) | adopted in part | 250 is kept as the only size offered, which the owner's decision requires. The other sizes (200, 225, 275, 300, 325) are not offered, since offering them would contradict "new colonies use 250". Open for the owner (see Open items) |
+| Selectable colony map sizes (200 to 325) | adopted (round 21) | The six sizes are offered in the new-colony wizard (`Game.SELECTABLE_MAP_SIZES`), with 250 selected by default (the owner's decision for the default). 350 and 400 are the reference's test sizes and are not offered (see Decisions, item 8) |
 | Ore blotch count per map | **adopted** | Size-dependent. Values and formula above |
 | Ore kinds | not adopted | Ambiguous in the reference (kind weights come from XML, row 64). Stillmere keeps its five kinds and weights |
 | Terrain type count | not adopted | Ambiguous: the count comes from XML (row 65) |
@@ -98,28 +112,35 @@ Each row of `decompiled-reference.md` section 3.2 is listed. "Size" means the va
 
 ## Saves on disk
 
-The 19 committed fixtures in `sim/src/test/resources/legacy/` store these sizes (measured on the current code):
+The 22 committed fixtures in `sim/src/test/resources/legacy/` store these sizes (measured on the current code; the table in
+`ColonyMapSizeTest.everyLegacySaveKeepsTheSideItStores` checks every `.sav` file against it):
 
 | Size stored | Fixtures |
 |---|---|
 | 100 by 100 | colony_v24, colony_v25, colony_v25_graves, colony_v25_head, colony_v25_thoughts, colony_v26, colony_v27, colony_v28, colony_v34, colony_v35 |
-| 250 by 250 | colony_v25_adults, colony_v27_sites, colony_v29, colony_v30, colony_v31, colony_v32, colony_v32_xp, colony_v33, colony_v36 |
+| 250 by 250 | colony_v25_adults, colony_v27_sites, colony_v29, colony_v30, colony_v31, colony_v32, colony_v32_xp, colony_v33, colony_v36, colony_v37, colony_v38, colony_v39 |
 
-The premise that every older save is 100 by 100 does not hold for these fixtures: eight of the older ones, and the new `colony_v36`, store 250 by 250. The
+The premise that every older save is 100 by 100 does not hold for these fixtures: eight of the older ones, and the newer `colony_v36` to `colony_v39`, store 250 by 250. The
 `names.md` note on `colony_v29.sav` says its map is the version 29 default of 250 by 250, but the git history of `MAP_SIZE` shows
 100 from the first commit until `eb9784c`. The fixtures do not record the code that wrote them, so which of the 250 saves were written after `eb9784c` is open (open item 3). Each save keeps
 the size it stores, so none of them is resized. The test checks each fixture against its stored size.
 
-`colony_v36.sav` is new. It is a new colony at 250 by 250 (seed 7, quiet enclave, half a day of steps), written by the code
-before the bump to version 37, as the save rules require for a version change. It is 1.2 MB, the same as the other 250 by 250
-fixtures.
+`colony_v36.sav` was added in round 17. It is a new colony at 250 by 250 (seed 7, quiet enclave, half a day of steps), written by
+the code before the bump to version 37, as the save rules require for a version change. It is 1.2 MB, the same as the other 250 by
+250 fixtures. `colony_v37.sav` to `colony_v39.sav` were added by later rounds for their own saved fields; each stores 250 by 250.
 
 ## Tests
 
 * `ColonyMapSizeTest`: a new colony is 250 by 250; `colony_v28` (100 by 100) keeps 100 by 100; every legacy fixture keeps the
-  size it stores (`everyLegacySaveKeepsTheSideItStores`, a table of all 19 fixtures, with a check that the table covers every
-  `.sav` in `legacy/`); a rewrite keeps it too; a 250 by 250 colony round-trips; `aVersion36SaveLoadsAndANewSaveIsVersion37`; `aColonyFoundedFromAHundredByHundredSaveIsTwoFiftyByTwoFifty` (a colony founded from a 100 by 100 colony is 250 by 250).
-* The nine legacy migration tests that check "the current version" compare with `SaveGame.VERSION` (37). Before, they had
+  size it stores (`everyLegacySaveKeepsTheSideItStores`, a table of all 22 fixtures, with a check that the table covers every
+  `.sav` in `legacy/`); a rewrite keeps it too; a 250 by 250 colony round-trips; `aVersion36SaveLoadsAndANewSaveIsTheCurrentVersion`; `aColonyFoundedFromAHundredByHundredSaveIsTwoFiftyByTwoFifty` (a colony founded from a 100 by 100 colony is 250 by 250).
+* `ColonyMapSizeTest` (round 21, new): `theOfferedSizesAreTheSixReferenceSizesAndTheDefaultIsOneOfThem` checks the list
+  (200, 225, 250, 275, 300, 325), the default 250 in it, and that 350 and 400 are not in it. `aColonyOfEachOfferedSizeStartsStepsAndRoundTrips`
+  does the following for each offered side: it generates the map at that side, starts a quiet-enclave colony on it (the start
+  is inside the map and five colonists are placed), runs two in-game hours of steps (`TICKS_PER_HOUR * 2`), and checks that the
+  colonists stay on the map. It writes the colony as a save, reads it back at the same width and height, and writes the loaded
+  colony again: the two saves are the same bytes. Measured in this round: 7.7 s for all six sides in the test JVM.
+* The legacy migration tests that check "the current version" compare with `SaveGame.VERSION` (40 now). Before, they had
   the literal 36, and one test name said "IsVersionThirtySix"; it now says "IsTheCurrentVersion".
 * `MapGenTest` (`oreBlotchesFollowTheAreaAndHilliness`): the counts at 100 and 250, the default value for a map with no world
   tile, and the battle map's density count (2 blotches, which battle maps do not use).
@@ -165,8 +186,10 @@ fixtures.
   | Settle | 2 of 11 (random ambush on) | none | 0 of 11 (events off) |
   | Life | 4 of 11 (first setup) | 6 of 11 (work off, jobs ended), 5 of 11 (adults fed) | 0 of 11 (every colonist fed; old milk removed) |
 
-* **Final run.** `./gradlew :sim:test --console=plain`: 722 tests in 72 suites, 0 failures, 0 errors, 0 skipped (12 min 33 s). An earlier run
+* **Final run (round 17).** `./gradlew :sim:test --console=plain`: 722 tests in 72 suites, 0 failures, 0 errors, 0 skipped (12 min 33 s). An earlier run
   had 9 failures, all the literal 36 in the legacy tests; they now compare with `SaveGame.VERSION`.
+* **Final run (round 21).** `./gradlew :sim:test --console=plain`: 828 tests in 79 suites, 0 failures, 0 errors, 0 skipped (14 min 31 s).
+  `ColonyMapSizeTest` has 9 tests, all passing, including the two new ones (the size loop takes about 7 s).
 * `PerfBenchTest`: two opt-in benchmarks, `benchOneDayHundredByHundred` and `benchOneDayTwoFiftyByTwoFifty`, time one in-game day
   of `Game.step` (`TICKS_PER_DAY` steps). Set `COLONY_BENCH=1` to run them.
 
@@ -197,7 +220,7 @@ timed apart from the steps. Three runs:
 1. The owner should confirm the mapping of `Hills.MOUNTAIN` to impassable (16) for ore, and decide the rock threshold for it. The
    code uses 0.5, which is Stillmere's own value. The reference gives 0.636 for mountainous and 0.583 for impassable. Changing it
    changes the rock on every mountain map, so it is a separate change.
-2. The owner should decide whether the size picker offers any size other than 250. The reference's list is 200 to 325.
+2. Resolved in round 21: the wizard offers 200, 225, 250, 275, 300 and 325 (decision 8). 350 and 400 stay out of the app.
 3. The 250 saves in the fixtures have no traceable origin (see "Saves on disk").
 4. Five test helpers and the `WorldTest` and rock-type checks now build 250 by 250 colonies. The explicit-size generation tests
    still pass 100 (river, lake, determinism). The owner may want those re-checked at 250 as well.
@@ -206,3 +229,6 @@ timed apart from the steps. Three runs:
 6. Battle maps keep the 18 fixed veins. Whether battle ore should follow the map-size rule is the owner's decision; it is not
    changed here.
 7. The river, lake, elevation and other generation-model rows are listed above as not adopted. Each needs its own change.
+8. The cost of the larger sides is unmeasured. A 325 by 325 map has 105,625 cells, which is 1.7 times the 250 by 250 map (62,500),
+   so each step, the map generation and the save are larger. `PerfBenchTest` measures only 100 and 250, and no phone is available
+   here. The owner should decide whether the largest side needs a phone measurement before it stays in the list.

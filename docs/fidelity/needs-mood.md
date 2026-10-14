@@ -53,8 +53,8 @@ Code: `NeedRules.kt` (`NeedRules`, `DrugRules`, `BreakRules`), `Mood.kt` (`moodU
 | Drug tolerance build-up per dose | +0.05, capped at 1 | none (`BREW_RESISTANCE` is defined but unused) | C, **UNVERIFIED** (the build-up is XML) | 219 |
 | Drug tolerance fall per day | 0.025 | none | C, **UNVERIFIED** (the decay is XML) | 219 |
 | Drugs that build tolerance (`DrugRules.ADDICTIVE`, used at JobDrivers.kt:408) | beer, joints, lucid draught, pale dust, white rush, surge tonic. Dawn tablets are not in it: `applyDrug` returns for them before any dose, so they neither build tolerance nor roll for addiction | none: no tolerance; every drug went through the same addiction roll | C, **UNVERIFIED**. The reference reads addictiveness per drug from XML (RimWorld/CompDrug.cs:29 uses the drug's addictiveness and its minimum tolerance), so this list is Stillmere's own classification | 219, 220 |
-| Beauty need level | clamp(0.5 + 0.1 x room beauty) | not modelled | Formula D, RimWorld/Need_Beauty.cs:95. The base 0.5 is **UNVERIFIED**: the code default is at RimWorld/NeedDef.cs:45, but the XML base is not checked and reference row 213 is ambiguous (code at NeedRules.kt:79) | 213 |
-| Beauty thoughts (ugly at level 0.35 or below, pretty above 0.65) | room beauty -1.5 and +1.5 (follows from the UNVERIFIED base 0.5) | -0.6 and +1.6 | Bands D, RimWorld/Need_Beauty.cs:63 (0.65, pretty) and :67 (0.35, ugly); the level formula is at :95. Thought values kept at -0.04 and +0.06 (C) | 213 |
+| Beauty need level | clamp(0.5 + 0.1 x room beauty) | not modelled | Formula D, RimWorld/Need_Beauty.cs:95. The base 0.5 is the code default (D, `RimWorld/NeedDef.cs:45`, `baseLevel`); the beauty need's XML override is not in the tree (**UNVERIFIED** for that), and reference row 213 is ambiguous (code at NeedRules.kt:79) | 213 |
+| Beauty thoughts (ugly at level 0.35 or below, pretty above 0.65) | room beauty -1.5 and +1.5 (follows from the base 0.5: D as the code default, the XML override UNVERIFIED; see the row above) | -0.6 and +1.6 | Bands D, RimWorld/Need_Beauty.cs:63 (0.65, pretty) and :67 (0.35, ugly); the level formula is at :95. Thought values kept at -0.04 and +0.06 (C) | 213 |
 | Comfort need level (instant, from the seat under the pawn) | the seat's comfort while the pawn sits, lies or idles on it, else 0 | not modelled | Bands D, RimWorld/Need_Comfort.cs:41, 45, 49, 53, 57 (0.1, 0.6, 0.7, 0.8, 0.9). Smoothing is XML, so the level is taken directly (C). No mood effect: the thought values are not in the decompile | 214 |
 | Jobs that put the pawn on the seat under it (`SEAT_JOBS`, Mood.kt) | sleep, rest, joy, social, eat, wait. In any other job the seat comfort is 0 | not modelled | C: Stillmere's own set. The reference's level counts only when the seat was used within the last 15 ticks (RimWorld/Need_Comfort.cs:29 window, :31 value). Stillmere keeps no per-tick use record, so the job type stands in for using the seat | 214 |
 | Outdoors need, per 150 ticks | outdoors without roof +0.02; outdoors under rock roof -0.001 (floor 0.2); indoors under roof -0.001125 (floor 0); falls x0.2 in bed | not modelled | D, RimWorld/Need_Outdoors.cs:106-140 (floor at :106, deltas and bed factor at :110-131) | 215 |
@@ -133,7 +133,7 @@ A review checked the citations in this file against the decompiled source. The c
 * The rest multipliers 0.7, 0.3 and 0.6 are at `Need_Rest.cs:57-59`. The band edges are at :38, :42 and :46. The rule that a resting pawn gains and does not fall is at :104-117; line 18 is the gain constant.
 * The hunger factors 0.4 and 0.8 are at `Need_Food.cs:21` and :23. Line 33 is the category switch. The four multipliers are at `HungerLevelUtility.cs:28-31`.
 * The outdoors bands are at `Need_Outdoors.cs:44-60` and their thresholds at :86-90. The indoors band 0.2 is at `Need_Indoors.cs:10, 56`.
-* The beauty bands 0.65 and 0.35 are at `Need_Beauty.cs:63` and :67. Line 95 holds only the level formula. The beauty base 0.5 is **UNVERIFIED**.
+* The beauty bands 0.65 and 0.35 are at `Need_Beauty.cs:63` and :67. Line 95 holds only the level formula. The beauty base 0.5 is the code default (D, `RimWorld/NeedDef.cs:45`); the beauty need's XML override is **UNVERIFIED**.
 * The hot bands are at `ThoughtWorker_Hot.cs:15`. The cold file has the same bands at :16, and the hot values are not in it.
 * `ALCOHOL_TOLERANCE` no longer exists. The hediff is `BREW_RESISTANCE` (`Body.kt:130`), which is still unused.
 * The comfort band names are now `BARE`, `MODEST`, `COSY`, `SNUG`, `PLUSH` and `OPULENT`. The old names echoed the decompiled comfort category identifiers. The enum is not saved, so no save format changes.
@@ -230,8 +230,8 @@ A temporary diagnostic (removed) ran the five-colonist start for three days on s
 ## Round 1 (kept for the record)
 
 Round 1 set the break thresholds to 0.35, 0.20 and 0.05, and the human hunger rate to 1.6 nutrition per day. Both are kept.
-Its sources were secondary (search summaries of the RimWorld Wiki "Mental break" and "Saturation" articles, **M, UNVERIFIED**
-in this file, as no URL was recorded). This round's sources are the decompiled values above.
+Its hunger-rate source was secondary (search summary of the RimWorld Wiki "Saturation" article, **M, UNVERIFIED**
+in this file, as no URL was recorded). The break thresholds are now checked: the code gives 4/7 and 1/7 of the stat (D, `Verse.AI/MentalBreaker.cs:34, 40-44`), and a wiki snippet gives the base stat as 35% (V, https://rimworldwiki.com/wiki/Mental_break). This round's sources are the decompiled values above.
 
 Round 1 scaled each scenario's starting food so the opening lasted as long as before the rate change. The colonists also start
 with 0.8 food each, which does not scale, so the factor keeps `(starting bars + stock) / (colonists × rate)` the same:

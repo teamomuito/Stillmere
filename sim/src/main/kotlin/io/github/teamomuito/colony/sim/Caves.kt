@@ -38,7 +38,10 @@ internal object Caves {
     const val BRANCH_HEADINGS = 6
     const val BRANCH_RAY_LIMIT = 50
     const val BRANCH_MIN_RAY = 18
-    /** Rock width (the curve's x axis) to tunnel width (its y axis), in rock cells of the mass. Flat outside the points (C, see caves.md). */
+    /**
+     * Rock width (the curve's x axis) to tunnel width (its y axis), in rock cells of the mass. The points are D (RimWorld/MapGenCavesUtility.cs:55-60).
+     * The curve is flat outside the points and straight between them, as the base game's SimpleCurve evaluates (D, Verse/SimpleCurve.cs:139-170; see caves.md).
+     */
     val WIDTH_CURVE = arrayOf(100f to 2f, 300f to 4f, 3000f to 5.5f)
     /** Rock groups are opened by this radius before tunnels are dug in them. */
     const val TRIM_RADIUS = 6
